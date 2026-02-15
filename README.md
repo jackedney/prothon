@@ -7,7 +7,7 @@ Copier template for Python projects with docs-first AI workflow. Generated proje
 Requires [uv](https://docs.astral.sh/uv/) and [go-task](https://taskfile.dev/).
 
 ```bash
-uvx prothon my-project
+uvx --from git+https://github.com/jackedney/prothon prothon my-project
 cd my-project
 uv sync
 task check

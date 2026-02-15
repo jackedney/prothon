@@ -101,15 +101,13 @@ def _write_copier_answers(dest: Path, context: dict) -> None:
 
 @app.command()
 def main(
-    destination: str = typer.Argument(help="Directory to create the project in"),
+    destination: str = typer.Argument(
+        default=".",
+        help="Directory to create the project in (defaults to current directory)",
+    ),
 ) -> None:
     """Generate a new Python project with docs-first AI workflow."""
     dest = Path(destination).resolve()
-
-    if dest.exists() and any(dest.iterdir()):
-        typer.echo(f"Error: {dest} already exists and is not empty", err=True)
-        raise typer.Exit(1)
-
     project_name = dest.name
 
     module_name = typer.prompt(

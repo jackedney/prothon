@@ -1,0 +1,50 @@
+_min_copier_version: "9.0.0"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+
+_tasks:
+  - "git init"
+  - "git add ."
+  - 'git commit -m "Initial commit from perfect-python template"'
+
+project_name:
+  type: str
+  help: What is your project name?
+  default: my-project
+
+module_name:
+  type: str
+  help: What is your Python module name?
+  default: "{{ project_name | lower | replace('-', '_') | replace(' ', '_') }}"
+
+description:
+  type: str
+  help: A short description of your project.
+  default: A Python project
+
+author_name:
+  type: str
+  help: Author name
+
+author_email:
+  type: str
+  help: Author email
+
+python_version:
+  type: str
+  help: Minimum Python version
+  choices:
+    - "3.13"
+    - "3.12"
+    - "3.11"
+  default: "3.13"
+
+license:
+  type: str
+  help: Project license
+  choices:
+    - "MIT"
+    - "Apache-2.0"
+    - "None"
+  default: "MIT"

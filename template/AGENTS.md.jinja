@@ -26,7 +26,7 @@ All code changes — features, bug fixes, refactors — MUST follow this workflo
 - Does this change affect **requirements**? → Start at SPEC
 - Does this change affect **architecture or packages**? → Start at DESIGN
 - Does this change affect **code patterns**? → Start at PATTERNS
-- Is this a **code-only change** with no doc impact? → Skip to step 3
+- Is this a **code-only change** with no doc impact? → Skip to step 4
 
 ### 2. Update Docs Top-Down
 
@@ -38,17 +38,23 @@ Starting from the highest affected level, update each document down through the 
 
 Use the corresponding writer skill for each level (see Available Skills below).
 
-### 3. Harmonize
+### 3. Generate Tech Skills
+
+After any DESIGN-level changes, invoke the Tech Researcher to regenerate reference skills for newly chosen technologies.
+
+Invoke with `model: "sonnet"` — see `docs/skills/tech-researcher.md`
+
+### 4. Harmonize
 
 After any doc changes, invoke the Doc Harmonizer to check for conflicts between doc levels.
 
 Invoke with `model: "sonnet"` — see `docs/skills/doc-harmonizer.md`
 
-### 4. Implement
+### 5. Implement
 
 Write the code changes.
 
-### 5. Verify Compliance
+### 6. Verify Compliance
 
 Before considering work complete, invoke the Compliance Checker to verify code matches all docs.
 
@@ -62,6 +68,7 @@ If the compliance check reports failures, fix the code or update docs and re-che
 |-------|------|-------|---------|
 | Spec Writer | `docs/skills/spec-writer.md` | Default | Interactively write/update SPEC.md — deep requirement understanding |
 | Design Writer | `docs/skills/design-writer.md` | Default | Interactively write/update DESIGN.md — research and decision-making |
+| Tech Researcher | `docs/skills/tech-researcher.md` | Sonnet 4.5 | Auto-generate reference skills for chosen technologies |
 | Patterns Writer | `docs/skills/patterns-writer.md` | Default | Interactively write/update PATTERNS.md — implementation craft |
 | Doc Harmonizer | `docs/skills/doc-harmonizer.md` | Sonnet 4.5 | Check and resolve conflicts between doc levels |
 | Compliance Checker | `docs/skills/compliance-checker.md` | Sonnet 4.5 | Verify code matches all documentation |

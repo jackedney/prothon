@@ -1,0 +1,81 @@
+# {{ project_name }}
+
+{{ description }}
+
+## Documentation Hierarchy
+
+This project uses a three-level documentation hierarchy. Documents are listed in order of authority — higher documents override lower ones when in conflict.
+
+| Level | Document | Contains | Authority |
+|-------|----------|----------|-----------|
+| 1 | `docs/SPEC.md` | Requirements, constraints, scope | Highest |
+| 2 | `docs/DESIGN.md` | Architecture, packages, interfaces | Medium |
+| 3 | `docs/PATTERNS.md` | Code patterns, conventions, testing | Lowest |
+
+**Rules:**
+- SPEC.md must exist before DESIGN.md can be written
+- DESIGN.md must exist before PATTERNS.md can be written
+- When documents conflict, the higher-level document wins and lower documents must be amended
+
+## Mandatory Development Workflow
+
+All code changes — features, bug fixes, refactors — MUST follow this workflow:
+
+### 1. Identify the Highest Affected Doc Level
+
+- Does this change affect **requirements**? → Start at SPEC
+- Does this change affect **architecture or packages**? → Start at DESIGN
+- Does this change affect **code patterns**? → Start at PATTERNS
+- Is this a **code-only change** with no doc impact? → Skip to step 3
+
+### 2. Update Docs Top-Down
+
+Starting from the highest affected level, update each document down through the hierarchy:
+
+- SPEC-level change → update SPEC.md, then DESIGN.md, then PATTERNS.md
+- DESIGN-level change → update DESIGN.md, then PATTERNS.md
+- PATTERNS-level change → update PATTERNS.md only
+
+Use the corresponding writer skill for each level (see Available Skills below).
+
+### 3. Harmonize
+
+After any doc changes, invoke the Doc Harmonizer to check for conflicts between doc levels.
+
+Invoke with `model: "sonnet"` — see `docs/skills/doc-harmonizer.md`
+
+### 4. Implement
+
+Write the code changes.
+
+### 5. Verify Compliance
+
+Before considering work complete, invoke the Compliance Checker to verify code matches all docs.
+
+Invoke with `model: "sonnet"` — see `docs/skills/compliance-checker.md`
+
+If the compliance check reports failures, fix the code or update docs and re-check.
+
+## Available Skills
+
+| Skill | File | Model | Purpose |
+|-------|------|-------|---------|
+| Spec Writer | `docs/skills/spec-writer.md` | Default | Interactively write/update SPEC.md — deep requirement understanding |
+| Design Writer | `docs/skills/design-writer.md` | Default | Interactively write/update DESIGN.md — research and decision-making |
+| Patterns Writer | `docs/skills/patterns-writer.md` | Default | Interactively write/update PATTERNS.md — implementation craft |
+| Doc Harmonizer | `docs/skills/doc-harmonizer.md` | Sonnet 4.5 | Check and resolve conflicts between doc levels |
+| Compliance Checker | `docs/skills/compliance-checker.md` | Sonnet 4.5 | Verify code matches all documentation |
+
+## Conventions
+
+- **Package manager:** uv
+- **Task runner:** task (go-task)
+- **Linting:** ruff (linting + formatting)
+- **Type checking:** ty
+- **Testing:** pytest + hypothesis
+- **Security:** bandit
+- **Dead code:** vulture
+- **Complexity:** complexipy
+- **Pre-commit:** hooks enforce all checks on every commit
+
+Run `task check` before committing to verify all quality checks pass.

@@ -5,6 +5,9 @@ _answers_file: .copier-answers.yml
 
 _tasks:
   - "git init"
+  - "ln -s AGENTS.md CLAUDE.md"
+  - "ln -s AGENTS.md GEMINI.md"
+  - "ln -s AGENTS.md AGENT.md"
   - "git add ."
   - 'git commit -m "Initial commit from perfect-python template"'
 

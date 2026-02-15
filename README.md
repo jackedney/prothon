@@ -4,13 +4,19 @@ Copier template for Python projects with docs-first AI workflow. Generated proje
 
 ## Quick Start
 
-Requires [uv](https://docs.astral.sh/uv/), [Copier](https://copier.readthedocs.io/) (`uv tool install copier`), and [go-task](https://taskfile.dev/).
+Requires [uv](https://docs.astral.sh/uv/) and [go-task](https://taskfile.dev/).
 
 ```bash
-copier copy --trust gh:jackedney/perfect-python my-project
+uvx perfect-python my-project
 cd my-project
 uv sync
 task check
+```
+
+Or with [Copier](https://copier.readthedocs.io/) directly:
+
+```bash
+copier copy --trust gh:jackedney/perfect-python my-project
 ```
 
 ## What You Get

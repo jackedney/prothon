@@ -76,7 +76,7 @@ If the compliance check reports failures, fix the code or update docs and re-che
 ## Conventions
 
 - **Package manager:** uv
-- **Task runner:** task (go-task)
+- **Task runner:** poe (poethepoet)
 - **Linting:** ruff (linting + formatting)
 - **Type checking:** ty
 - **Testing:** pytest + hypothesis
@@ -85,4 +85,4 @@ If the compliance check reports failures, fix the code or update docs and re-che
 - **Complexity:** complexipy
 - **Pre-commit:** hooks enforce all checks on every commit
 
-Run `task check` before committing to verify all quality checks pass.
+Run `poe check` before committing to verify all quality checks pass.

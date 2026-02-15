@@ -20,6 +20,7 @@ packages = ["src/{{ module_name }}"]
 
 [dependency-groups]
 dev = [
+    "poethepoet>=0.32",
     "pytest>=8.0",
     "hypothesis>=6.0",
     "mutmut>=3.0",
@@ -62,3 +63,29 @@ targets = ["src"]
 [tool.vulture]
 paths = ["src"]
 min_confidence = 80
+
+[tool.poe.tasks]
+install = { cmd = "uv sync", help = "Install dependencies" }
+fmt = { cmd = "uv run ruff format src/ tests/", help = "Format code" }
+security = { cmd = "uv run bandit -c pyproject.toml -r src/", help = "Run security checks only" }
+test = { cmd = "uv run pytest", help = "Run tests" }
+test-mut = { cmd = "uv run mutmut run", help = "Run mutation testing" }
+check = { sequence = ["lint", "test"], help = "Run all quality checks" }
+
+[tool.poe.tasks.lint]
+help = "Run all linters"
+
+[[tool.poe.tasks.lint.sequence]]
+cmd = "uv run ruff check src/ tests/"
+
+[[tool.poe.tasks.lint.sequence]]
+cmd = "uv run ty check"
+
+[[tool.poe.tasks.lint.sequence]]
+cmd = "uv run bandit -c pyproject.toml -r src/"
+
+[[tool.poe.tasks.lint.sequence]]
+cmd = "uv run vulture src/"
+
+[[tool.poe.tasks.lint.sequence]]
+cmd = "uv run complexipy src/"

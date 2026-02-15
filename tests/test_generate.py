@@ -46,7 +46,6 @@ def test_strips_jinja_suffix(generated_project):
 
 
 def test_copies_plain_files(generated_project):
-    assert (generated_project / "Taskfile.yml").exists()
     assert (generated_project / ".gitignore").exists()
 
 

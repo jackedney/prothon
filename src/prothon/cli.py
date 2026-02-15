@@ -149,4 +149,4 @@ def main(
     typer.echo("Next steps:")
     typer.echo(f"  cd {dest.name}")
     typer.echo("  uv sync")
-    typer.echo("  task check")
+    typer.echo("  poe check")

@@ -4,13 +4,13 @@ Copier template for Python projects with docs-first AI workflow. Generated proje
 
 ## Quick Start
 
-Requires [uv](https://docs.astral.sh/uv/) and [go-task](https://taskfile.dev/).
+Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uvx --from git+https://github.com/jackedney/prothon prothon my-project
 cd my-project
 uv sync
-task check
+poe check
 ```
 
 Or with [Copier](https://copier.readthedocs.io/) directly:
@@ -41,7 +41,6 @@ my-project/
 ├── src/<module>/
 ├── tests/
 ├── pyproject.toml
-├── Taskfile.yml
 ├── .pre-commit-config.yaml
 └── .github/workflows/ci.yml
 ```

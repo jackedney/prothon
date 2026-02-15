@@ -1,0 +1,64 @@
+[project]
+name = "{{ project_name }}"
+version = "0.1.0"
+description = "{{ description }}"
+requires-python = ">={{ python_version }}"
+{% if license != 'None' %}
+license = "{{ license }}"
+{% endif %}
+authors = [
+    { name = "{{ author_name }}", email = "{{ author_email }}" },
+]
+readme = "README.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.backends"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{{ module_name }}"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "hypothesis>=6.0",
+    "mutmut>=3.0",
+    "ruff>=0.15",
+    "ty>=0.0.17",
+    "bandit[toml]>=1.9",
+    "vulture>=2.14",
+    "complexipy>=5.0",
+    "pre-commit>=4.0",
+]
+
+[tool.ruff]
+target-version = "py{{ python_version | replace('.', '') }}"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["I", "E", "F", "W", "UP", "B", "SIM", "N"]
+
+[tool.ty.environment]
+python-version = "{{ python_version }}"
+root = ["src"]
+
+[tool.ty.rules]
+all = "warn"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+strict = true
+xfail_strict = true
+
+[tool.mutmut]
+paths_to_mutate = "src/{{ module_name }}/"
+tests_dir = "tests/"
+
+[tool.bandit]
+targets = ["src"]
+
+[tool.vulture]
+paths = ["src"]
+min_confidence = 80

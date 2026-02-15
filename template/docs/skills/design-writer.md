@@ -69,4 +69,4 @@ A populated `docs/DESIGN.md` with all sections filled in, every choice traced to
 
 ## What Comes Next
 
-After DESIGN.md is written, the user should invoke the Patterns Writer (`docs/skills/patterns-writer.md`) to define implementation patterns based on these design choices.
+After DESIGN.md is written, the user should invoke the Tech Researcher (`docs/skills/tech-researcher.md`) to generate practical reference skills for each chosen technology. Then invoke the Patterns Writer (`docs/skills/patterns-writer.md`) to define implementation patterns.

@@ -1,0 +1,42 @@
+version: "3"
+
+tasks:
+  install:
+    desc: Install dependencies
+    cmds:
+      - uv sync
+
+  fmt:
+    desc: Format code
+    cmds:
+      - uv run ruff format src/ tests/
+
+  lint:
+    desc: Run all linters
+    cmds:
+      - uv run ruff check src/ tests/
+      - uv run ty check
+      - uv run bandit -c pyproject.toml -r src/
+      - uv run vulture src/
+      - uv run complexipy src/
+
+  security:
+    desc: Run security checks only
+    cmds:
+      - uv run bandit -c pyproject.toml -r src/
+
+  test:
+    desc: Run tests
+    cmds:
+      - uv run pytest
+
+  test:mut:
+    desc: Run mutation testing
+    cmds:
+      - uv run mutmut run
+
+  check:
+    desc: Run all quality checks
+    deps: [lint]
+    cmds:
+      - uv run pytest

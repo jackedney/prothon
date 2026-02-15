@@ -1,4 +1,4 @@
-"""Perfect Python CLI — project generator with docs-first AI workflow."""
+"""Prothon CLI — Python project generator with docs-first AI workflow."""
 
 import os
 import shutil
@@ -73,7 +73,7 @@ def generate(dest: Path, context: dict) -> None:
     subprocess.run(["git", "init"], cwd=dest, capture_output=True, check=True)
     subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, check=True)
     subprocess.run(
-        ["git", "commit", "-m", "Initial commit from perfect-python template"],
+        ["git", "commit", "-m", "Initial commit from prothon template"],
         cwd=dest,
         capture_output=True,
         check=True,
@@ -84,7 +84,7 @@ def _write_copier_answers(dest: Path, context: dict) -> None:
     """Write .copier-answers.yml for copier update compatibility."""
     lines = [
         "# Changes here will be overwritten by Copier",
-        "_src_path: gh:jackedney/perfect-python",
+        "_src_path: gh:jackedney/prothon",
     ]
     for key in (
         "project_name",

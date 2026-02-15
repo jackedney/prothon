@@ -9,7 +9,7 @@ _tasks:
   - "ln -s AGENTS.md GEMINI.md"
   - "ln -s AGENTS.md AGENT.md"
   - "git add ."
-  - 'git commit -m "Initial commit from perfect-python template"'
+  - 'git commit -m "Initial commit from prothon template"'
 
 project_name:
   type: str

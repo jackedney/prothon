@@ -1,4 +1,4 @@
-# perfect-python
+# prothon
 
 Copier template for Python projects with docs-first AI workflow. Generated projects ship with a documentation hierarchy, agent skills, and quality tooling — ready for Claude Code from the first commit.
 
@@ -7,7 +7,7 @@ Copier template for Python projects with docs-first AI workflow. Generated proje
 Requires [uv](https://docs.astral.sh/uv/) and [go-task](https://taskfile.dev/).
 
 ```bash
-uvx perfect-python my-project
+uvx prothon my-project
 cd my-project
 uv sync
 task check
@@ -16,7 +16,7 @@ task check
 Or with [Copier](https://copier.readthedocs.io/) directly:
 
 ```bash
-copier copy --trust gh:jackedney/perfect-python my-project
+copier copy --trust gh:jackedney/prothon my-project
 ```
 
 ## What You Get
@@ -76,7 +76,7 @@ Tell Claude to read each skill file and follow its instructions:
 Template files live in `template/`. Jinja-templated files use `.jinja` extension. Test changes locally:
 
 ```bash
-copier copy --trust --vcs-ref HEAD /path/to/perfect-python /tmp/test-project
+copier copy --trust --vcs-ref HEAD /path/to/prothon /tmp/test-project
 ```
 
 ## License

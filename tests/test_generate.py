@@ -116,6 +116,39 @@ def test_git_initialized(generated_project):
     assert (generated_project / ".git").is_dir()
 
 
+def test_authors_omitted_when_both_empty(tmp_path):
+    context = {
+        "project_name": "no-author",
+        "module_name": "no_author",
+        "description": "No author project",
+        "author_name": "",
+        "author_email": "",
+        "python_version": "3.13",
+        "license": "MIT",
+    }
+    dest = tmp_path / "no-author"
+    generate(dest, context)
+    content = (dest / "pyproject.toml").read_text()
+    assert "authors" not in content
+
+
+def test_authors_name_only(tmp_path):
+    context = {
+        "project_name": "name-only",
+        "module_name": "name_only",
+        "description": "Name only project",
+        "author_name": "Test Author",
+        "author_email": "",
+        "python_version": "3.13",
+        "license": "MIT",
+    }
+    dest = tmp_path / "name-only"
+    generate(dest, context)
+    content = (dest / "pyproject.toml").read_text()
+    assert 'name = "Test Author"' in content
+    assert "email" not in content
+
+
 def test_license_none_excluded(tmp_path):
     context = {
         "project_name": "no-license",

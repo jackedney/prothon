@@ -123,8 +123,11 @@ def main(
         default=project_name.lower().replace("-", "_").replace(" ", "_"),
     )
     description = typer.prompt("Description", default="A Python project")
-    author_name = typer.prompt("Author name")
-    author_email = typer.prompt("Author email")
+    author_name = typer.prompt("Author name", default="")
+    author_email = typer.prompt("Author email", default="")
+    while author_email and "@" not in author_email:
+        typer.echo("Must be a valid email address (e.g. user@example.com)")
+        author_email = typer.prompt("Author email", default="")
 
     python_version = typer.prompt(
         "Python version (3.11/3.12/3.13)", default="3.13"

@@ -6,9 +6,15 @@ requires-python = ">={{ python_version }}"
 {% if license != 'None' %}
 license = "{{ license }}"
 {% endif %}
+{% if author_name and author_email %}
 authors = [
     { name = "{{ author_name }}", email = "{{ author_email }}" },
 ]
+{% elif author_name %}
+authors = [
+    { name = "{{ author_name }}" },
+]
+{% endif %}
 readme = "README.md"
 
 [build-system]

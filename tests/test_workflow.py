@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 import typer
 
-from prothon.cli import find_project_root, launch_claude
+from prothon.cli import find_project_root, generate, launch_claude
 
 
 def test_find_project_root_from_project_dir(tmp_path):
@@ -71,3 +71,67 @@ def test_patterns_command_exists():
 def test_compliance_command_exists():
     result = runner.invoke(app, ["compliance", "--help"])
     assert result.exit_code == 0
+
+
+@pytest.fixture
+def context():
+    return {
+        "project_name": "test-project",
+        "module_name": "test_project",
+        "description": "A test project",
+        "author_name": "Test Author",
+        "author_email": "test@example.com",
+        "python_version": "3.13",
+        "license": "MIT",
+    }
+
+
+def test_spec_fails_outside_project(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["spec"])
+    assert result.exit_code != 0
+    assert "Not inside a prothon-generated project" in result.output
+
+
+def test_design_fails_outside_project(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["design"])
+    assert result.exit_code != 0
+    assert "Not inside a prothon-generated project" in result.output
+
+
+def test_patterns_fails_outside_project(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["patterns"])
+    assert result.exit_code != 0
+    assert "Not inside a prothon-generated project" in result.output
+
+
+def test_compliance_fails_outside_project(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["compliance"])
+    assert result.exit_code != 0
+    assert "Not inside a prothon-generated project" in result.output
+
+
+def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    with patch("prothon.cli.shutil.which", return_value="/usr/bin/claude"):
+        with patch("prothon.cli.subprocess.run") as mock_run:
+            result = runner.invoke(app, ["spec"])
+    claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
+    assert len(claude_calls) == 1
+    assert "--append-system-prompt" in claude_calls[0].args[0]
+
+
+def test_design_chains_tech_researcher(tmp_path, monkeypatch, context):
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    with patch("prothon.cli.shutil.which", return_value="/usr/bin/claude"):
+        with patch("prothon.cli.subprocess.run") as mock_run:
+            result = runner.invoke(app, ["design"])
+    claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
+    assert len(claude_calls) == 2  # design-writer + tech-researcher

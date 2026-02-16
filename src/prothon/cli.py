@@ -159,16 +159,9 @@ def _write_copier_answers(dest: Path, context: dict) -> None:
 
 
 @app.callback(invoke_without_command=True)
-def callback(
-    ctx: typer.Context,
-    destination: str = typer.Argument(default=None, help="Directory to create the project in"),
-) -> None:
+def callback(ctx: typer.Context) -> None:
     """Python project generator with docs-first AI workflow."""
-    if ctx.invoked_subcommand is not None:
-        return
-    if destination is not None:
-        ctx.invoke(new, destination=destination)
-    else:
+    if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
 
 

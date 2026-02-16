@@ -36,6 +36,20 @@ def find_project_root(start: Path | None = None) -> Path | None:
         current = parent
 
 
+def launch_claude(system_prompt: str, cwd: Path) -> None:
+    """Launch an interactive Claude Code session with the given system prompt."""
+    if not shutil.which("claude"):
+        typer.echo(
+            "Error: Claude Code CLI not found.\n"
+            "Install: https://docs.anthropic.com/en/docs/claude-code"
+        )
+        raise typer.Exit(1)
+    subprocess.run(
+        ["claude", "--append-system-prompt", system_prompt],
+        cwd=cwd,
+    )
+
+
 def generate(dest: Path, context: dict) -> None:
     """Generate a project from the template."""
     env = Environment(

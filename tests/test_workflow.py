@@ -28,9 +28,9 @@ def test_find_project_root_not_found(tmp_path):
 def test_launch_claude_calls_subprocess(tmp_path):
     with patch("prothon.cli.subprocess.run") as mock_run:
         with patch("prothon.cli.shutil.which", return_value="/usr/bin/claude"):
-            launch_claude("You are a spec writer.", tmp_path)
+            launch_claude("spec-writer", tmp_path)
     mock_run.assert_called_once_with(
-        ["claude", "--append-system-prompt", "You are a spec writer."],
+        ["claude", "/spec-writer"],
         cwd=tmp_path,
     )
 
@@ -38,7 +38,7 @@ def test_launch_claude_calls_subprocess(tmp_path):
 def test_launch_claude_raises_when_claude_not_found(tmp_path):
     with patch("prothon.cli.shutil.which", return_value=None):
         with pytest.raises((SystemExit, typer.Exit)):
-            launch_claude("prompt", tmp_path)
+            launch_claude("spec-writer", tmp_path)
 
 
 from typer.testing import CliRunner
@@ -123,10 +123,10 @@ def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):
             result = runner.invoke(app, ["spec"])
     claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
     assert len(claude_calls) == 1
-    assert "--append-system-prompt" in claude_calls[0].args[0]
+    assert claude_calls[0].args[0] == ["claude", "/spec-writer"]
 
 
-def test_design_chains_tech_researcher(tmp_path, monkeypatch, context):
+def test_design_launches_single_session(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
@@ -134,4 +134,5 @@ def test_design_chains_tech_researcher(tmp_path, monkeypatch, context):
         with patch("prothon.cli.subprocess.run") as mock_run:
             result = runner.invoke(app, ["design"])
     claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
-    assert len(claude_calls) == 2  # design-writer + tech-researcher
+    assert len(claude_calls) == 1
+    assert claude_calls[0].args[0] == ["claude", "/design-writer"]

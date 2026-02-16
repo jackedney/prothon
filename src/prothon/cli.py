@@ -40,8 +40,8 @@ def find_project_root(start: Path | None = None) -> Path | None:
         current = parent
 
 
-def launch_claude(system_prompt: str, cwd: Path) -> None:
-    """Launch an interactive Claude Code session with the given system prompt."""
+def launch_claude(skill_name: str, cwd: Path) -> None:
+    """Launch an interactive Claude Code session that invokes the given skill."""
     if not shutil.which("claude"):
         typer.echo(
             "Error: Claude Code CLI not found.\n"
@@ -49,7 +49,7 @@ def launch_claude(system_prompt: str, cwd: Path) -> None:
         )
         raise typer.Exit(1)
     subprocess.run(
-        ["claude", "--append-system-prompt", system_prompt],
+        ["claude", f"/{skill_name}"],
         cwd=cwd,
     )
 
@@ -66,13 +66,12 @@ def _require_project_root() -> Path:
     return root
 
 
-def _read_skill(root: Path, skill_name: str) -> str:
-    """Read a skill file from the project."""
+def _require_skill(root: Path, skill_name: str) -> None:
+    """Verify a skill file exists in the project."""
     skill_path = root / ".agents" / "skills" / skill_name / "SKILL.md"
     if not skill_path.exists():
         typer.echo(f"Error: Skill file not found: {skill_path}")
         raise typer.Exit(1)
-    return skill_path.read_text()
 
 
 def generate(dest: Path, context: dict) -> None:
@@ -224,33 +223,29 @@ def new(
 def spec() -> None:
     """Write or revise SPEC.md — extract requirements through probing questions."""
     root = _require_project_root()
-    skill = _read_skill(root, "spec-writer")
-    launch_claude(skill, root)
+    _require_skill(root, "spec-writer")
+    launch_claude("spec-writer", root)
 
 
 @app.command()
 def design() -> None:
     """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
     root = _require_project_root()
-    skill = _read_skill(root, "design-writer")
-    launch_claude(skill, root)
-    # Chain tech-researcher after design session exits
-    tech_skill = _read_skill(root, "tech-researcher")
-    typer.echo("\nDesign complete. Launching tech-researcher to generate reference docs...\n")
-    launch_claude(tech_skill, root)
+    _require_skill(root, "design-writer")
+    launch_claude("design-writer", root)
 
 
 @app.command()
 def patterns() -> None:
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
     root = _require_project_root()
-    skill = _read_skill(root, "patterns-writer")
-    launch_claude(skill, root)
+    _require_skill(root, "patterns-writer")
+    launch_claude("patterns-writer", root)
 
 
 @app.command()
 def compliance() -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
-    skill = _read_skill(root, "compliance-checker")
-    launch_claude(skill, root)
+    _require_skill(root, "compliance-checker")
+    launch_claude("compliance-checker", root)

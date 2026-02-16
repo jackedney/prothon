@@ -76,4 +76,6 @@ A populated `docs/DESIGN.md` with all sections filled in, every choice traced to
 
 ## What Comes Next
 
-After DESIGN.md is written, invoke `/tech-researcher` to generate reference skills for each chosen technology. Then invoke `/patterns-writer` to define implementation patterns.
+After DESIGN.md is written:
+1. Invoke `/tech-researcher` to generate reference skills for the chosen technologies
+2. After tech-researcher completes, invoke `/patterns-writer` to define implementation patterns

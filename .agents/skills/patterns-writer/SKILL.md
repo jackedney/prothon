@@ -72,4 +72,4 @@ A populated `docs/PATTERNS.md` with all sections filled in, concrete examples, a
 
 ## What Comes Next
 
-After PATTERNS.md is written, the documentation hierarchy is complete. Tell the user they can now implement code. Do NOT invoke `/doc-harmonizer` or `/compliance-checker` yourself — the CLI runs harmonization and compliance as dedicated subagent sessions.
+After PATTERNS.md is written, the documentation hierarchy is complete. Tell the user they can now implement code.

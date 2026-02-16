@@ -56,4 +56,4 @@ A populated `docs/SPEC.md` with all sections filled in using clear, testable lan
 
 ## What Comes Next
 
-After SPEC.md is written, tell the user to run `prothon design` to create DESIGN.md based on these requirements. Do NOT invoke `/design-writer` yourself.
+After SPEC.md is written, invoke `/design-writer` to create DESIGN.md based on these requirements.

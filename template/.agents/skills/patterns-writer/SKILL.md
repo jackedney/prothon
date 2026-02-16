@@ -72,4 +72,4 @@ A populated `docs/PATTERNS.md` with all sections filled in, concrete examples, a
 
 ## What Comes Next
 
-After PATTERNS.md is written, the documentation hierarchy is complete. The user can now implement code. Run `/doc-harmonizer` to verify consistency, then implement. Use `/compliance-checker` to verify code matches docs before completing work.
+After PATTERNS.md is written, the documentation hierarchy is complete. Tell the user they can now implement code.

@@ -79,6 +79,3 @@ Note: `user-invocable: false` makes these auto-discoverable reference skills —
 
 A set of skill files in `.agents/skills/tech-*/`, one per technology from DESIGN.md, plus a summary of what was generated.
 
-## What Comes Next
-
-After tech references are generated, invoke `/patterns-writer` to define implementation patterns. The Patterns Writer can reference these tech files for library-specific guidance.

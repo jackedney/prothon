@@ -256,6 +256,3 @@ A set of skill files in `.agents/skills/`, grouped by category:
 
 Plus a summary of what was generated.
 
-## What Comes Next
-
-After tech references are generated, tell the user to run `prothon patterns` to define implementation patterns. Do NOT invoke `/patterns-writer` yourself — the CLI launches it as its own dedicated session.

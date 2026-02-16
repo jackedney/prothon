@@ -49,7 +49,7 @@ def launch_claude(skill_name: str, cwd: Path) -> None:
         )
         raise typer.Exit(1)
     subprocess.run(
-        ["claude", f"/{skill_name}"],
+        ["claude", "--dangerously-skip-permissions", f"/{skill_name}"],
         cwd=cwd,
     )
 

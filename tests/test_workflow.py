@@ -30,7 +30,7 @@ def test_launch_claude_calls_subprocess(tmp_path):
         with patch("prothon.cli.shutil.which", return_value="/usr/bin/claude"):
             launch_claude("spec-writer", tmp_path)
     mock_run.assert_called_once_with(
-        ["claude", "/spec-writer"],
+        ["claude", "--dangerously-skip-permissions", "/spec-writer"],
         cwd=tmp_path,
     )
 
@@ -123,7 +123,7 @@ def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):
             result = runner.invoke(app, ["spec"])
     claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
     assert len(claude_calls) == 1
-    assert claude_calls[0].args[0] == ["claude", "/spec-writer"]
+    assert claude_calls[0].args[0] == ["claude", "--dangerously-skip-permissions", "/spec-writer"]
 
 
 def test_design_launches_single_session(tmp_path, monkeypatch, context):
@@ -135,4 +135,4 @@ def test_design_launches_single_session(tmp_path, monkeypatch, context):
             result = runner.invoke(app, ["design"])
     claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
     assert len(claude_calls) == 1
-    assert claude_calls[0].args[0] == ["claude", "/design-writer"]
+    assert claude_calls[0].args[0] == ["claude", "--dangerously-skip-permissions", "/design-writer"]

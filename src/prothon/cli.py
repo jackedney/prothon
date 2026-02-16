@@ -60,11 +60,19 @@ def generate(dest: Path, context: dict) -> None:
             # Copy as-is
             shutil.copy2(src_path, dest_path)
 
-    # Create symlinks
+    # Create symlinks for agent instruction files
     for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
         link = dest / name
         if not link.exists():
             os.symlink("AGENTS.md", link)
+
+    # Create symlinks for skill directories (.claude/skills, .opencode/skills -> .agents/skills)
+    for dir_name in (".claude", ".opencode"):
+        parent = dest / dir_name
+        parent.mkdir(parents=True, exist_ok=True)
+        link = parent / "skills"
+        if not link.exists():
+            os.symlink(os.path.join("..", ".agents", "skills"), link)
 
     # Write .copier-answers.yml for copier update support
     _write_copier_answers(dest, context)

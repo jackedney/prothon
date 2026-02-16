@@ -26,29 +26,23 @@ All code changes — features, bug fixes, refactors — MUST follow this workflo
 - Does this change affect **requirements**? → Start at SPEC
 - Does this change affect **architecture or packages**? → Start at DESIGN
 - Does this change affect **code patterns**? → Start at PATTERNS
-- Is this a **code-only change** with no doc impact? → Skip to step 4
+- Is this a **code-only change** with no doc impact? → Skip to step 5
 
 ### 2. Update Docs Top-Down
 
-Starting from the highest affected level, update each document down through the hierarchy:
+Starting from the highest affected level, update each document down through the hierarchy using the corresponding skill:
 
-- SPEC-level change → update SPEC.md, then DESIGN.md, then PATTERNS.md
-- DESIGN-level change → update DESIGN.md, then PATTERNS.md
-- PATTERNS-level change → update PATTERNS.md only
+- SPEC-level change → `/spec-writer`, then `/design-writer`, then `/patterns-writer`
+- DESIGN-level change → `/design-writer`, then `/patterns-writer`
+- PATTERNS-level change → `/patterns-writer` only
 
-Use the corresponding writer skill for each level (see Available Skills below).
+### 3. Generate Tech References
 
-### 3. Generate Tech Skills
-
-After any DESIGN-level changes, invoke the Tech Researcher to regenerate reference skills for newly chosen technologies.
-
-Invoke with `model: "sonnet"` — see `docs/skills/tech-researcher.md`
+After any DESIGN-level changes, invoke `/tech-researcher` to regenerate reference docs for newly chosen technologies.
 
 ### 4. Harmonize
 
-After any doc changes, invoke the Doc Harmonizer to check for conflicts between doc levels.
-
-Invoke with `model: "sonnet"` — see `docs/skills/doc-harmonizer.md`
+After any doc changes, invoke `/doc-harmonizer` to check for conflicts between doc levels.
 
 ### 5. Implement
 
@@ -56,22 +50,21 @@ Write the code changes.
 
 ### 6. Verify Compliance
 
-Before considering work complete, invoke the Compliance Checker to verify code matches all docs.
-
-Invoke with `model: "sonnet"` — see `docs/skills/compliance-checker.md`
+Before considering work complete, invoke `/compliance-checker` to verify code matches all docs.
 
 If the compliance check reports failures, fix the code or update docs and re-check.
 
-## Available Skills
+## Skills Directory
 
-| Skill | File | Model | Purpose |
-|-------|------|-------|---------|
-| Spec Writer | `docs/skills/spec-writer.md` | Default | Interactively write/update SPEC.md — deep requirement understanding |
-| Design Writer | `docs/skills/design-writer.md` | Default | Interactively write/update DESIGN.md — research and decision-making |
-| Tech Researcher | `docs/skills/tech-researcher.md` | Sonnet 4.5 | Auto-generate reference skills for chosen technologies |
-| Patterns Writer | `docs/skills/patterns-writer.md` | Default | Interactively write/update PATTERNS.md — implementation craft |
-| Doc Harmonizer | `docs/skills/doc-harmonizer.md` | Sonnet 4.5 | Check and resolve conflicts between doc levels |
-| Compliance Checker | `docs/skills/compliance-checker.md` | Sonnet 4.5 | Verify code matches all documentation |
+Skills live in `.agents/skills/` as the canonical location. This directory is symlinked to both `.claude/skills/` and `.opencode/skills/` for automatic discovery by Claude Code and OpenCode respectively.
+
+```
+.agents/skills/           <- canonical location (edit here)
+.claude/skills -> .agents/skills   <- symlink (auto-discovered by Claude Code)
+.opencode/skills -> .agents/skills <- symlink (auto-discovered by OpenCode)
+```
+
+When creating new skills, always place them in `.agents/skills/<skill-name>/SKILL.md`. The symlinks ensure both tools discover them automatically.
 
 ## Conventions
 

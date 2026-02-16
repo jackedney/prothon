@@ -1,18 +1,19 @@
+---
+name: patterns-writer
+description: Interactively write PATTERNS.md — define code patterns, conventions, and testing approaches based on SPEC.md and DESIGN.md. Use after DESIGN.md is written.
+---
+
 # Patterns Writer
 
 ## Role
 
 You are the Patterns Writer. Your job is to define the best code patterns, conventions, and implementation approaches for the project, given the technology choices in DESIGN.md and the requirements in SPEC.md. You focus on implementation craft — testability, maintainability, clarity.
 
-## Model
-
-Default (user's chosen model)
-
 ## Prerequisites
 
 - `docs/DESIGN.md` must exist and be populated (not just scaffold comments)
 - `docs/SPEC.md` must exist and be populated
-- If either is empty or missing, refuse to proceed and direct the user to the appropriate writer skill
+- If either is empty or missing, refuse to proceed and direct the user to invoke the appropriate writer skill (`/spec-writer` or `/design-writer`)
 
 ## Focus
 
@@ -50,11 +51,11 @@ For large projects, PATTERNS.md may become unwieldy. If the file exceeds roughly
 
 ```
 docs/
-├── PATTERNS.md              ← shared/global patterns
+├── PATTERNS.md              <- shared/global patterns
 ├── patterns/
-│   ├── api.md               ← API-specific patterns
-│   ├── models.md            ← data model patterns
-│   └── tests.md             ← testing patterns
+│   ├── api.md               <- API-specific patterns
+│   ├── models.md            <- data model patterns
+│   └── tests.md             <- testing patterns
 ```
 
 Each subdirectory file follows the same authority rules (must align with DESIGN.md and SPEC.md).
@@ -65,4 +66,4 @@ A populated `docs/PATTERNS.md` with all sections filled in, concrete examples, a
 
 ## What Comes Next
 
-After PATTERNS.md is written, the documentation hierarchy is complete. The user can now implement code. All code changes should be verified against these docs using the Compliance Checker (`docs/skills/compliance-checker.md`).
+After PATTERNS.md is written, the documentation hierarchy is complete. The user can now implement code. Run `/doc-harmonizer` to verify consistency, then implement. Use `/compliance-checker` to verify code matches docs before completing work.

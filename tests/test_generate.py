@@ -78,17 +78,24 @@ def test_creates_doc_scaffolds(generated_project):
 
 
 def test_creates_skill_files(generated_project):
-    skills_dir = generated_project / "docs" / "skills"
+    skills_dir = generated_project / ".agents" / "skills"
     expected = [
-        "spec-writer.md",
-        "design-writer.md",
-        "tech-researcher.md",
-        "patterns-writer.md",
-        "doc-harmonizer.md",
-        "compliance-checker.md",
+        "spec-writer",
+        "design-writer",
+        "tech-researcher",
+        "patterns-writer",
+        "doc-harmonizer",
+        "compliance-checker",
     ]
     for name in expected:
-        assert (skills_dir / name).exists()
+        assert (skills_dir / name / "SKILL.md").exists()
+
+
+def test_creates_skill_symlinks(generated_project):
+    for dir_name in (".claude", ".opencode"):
+        link = generated_project / dir_name / "skills"
+        assert link.is_symlink()
+        assert os.readlink(str(link)) == os.path.join("..", ".agents", "skills")
 
 
 def test_creates_agents_md(generated_project):

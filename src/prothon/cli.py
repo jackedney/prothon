@@ -167,7 +167,7 @@ def callback(ctx: typer.Context) -> None:
 
 @app.command()
 def new(
-    destination: str = typer.Argument(help="Directory to create the project in"),
+    destination: str = typer.Argument(default=".", help="Directory to create the project in (defaults to current directory)"),
 ) -> None:
     """Generate a new Python project with docs-first AI workflow."""
     dest = Path(destination).resolve()

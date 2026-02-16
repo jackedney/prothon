@@ -39,3 +39,35 @@ def test_launch_claude_raises_when_claude_not_found(tmp_path):
     with patch("prothon.cli.shutil.which", return_value=None):
         with pytest.raises((SystemExit, typer.Exit)):
             launch_claude("prompt", tmp_path)
+
+
+from typer.testing import CliRunner
+from prothon.cli import app
+
+runner = CliRunner()
+
+
+def test_new_command_shows_help():
+    result = runner.invoke(app, ["new", "--help"])
+    assert result.exit_code == 0
+    assert "Generate" in result.output
+
+
+def test_spec_command_exists():
+    result = runner.invoke(app, ["spec", "--help"])
+    assert result.exit_code == 0
+
+
+def test_design_command_exists():
+    result = runner.invoke(app, ["design", "--help"])
+    assert result.exit_code == 0
+
+
+def test_patterns_command_exists():
+    result = runner.invoke(app, ["patterns", "--help"])
+    assert result.exit_code == 0
+
+
+def test_compliance_command_exists():
+    result = runner.invoke(app, ["compliance", "--help"])
+    assert result.exit_code == 0

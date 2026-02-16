@@ -8,7 +8,11 @@ from pathlib import Path
 import typer
 from jinja2 import Environment, BaseLoader
 
-app = typer.Typer(add_completion=False)
+app = typer.Typer(
+    add_completion=False,
+    help="Python project generator with docs-first AI workflow.",
+    invoke_without_command=True,
+)
 
 COPIER_ANSWERS_TEMPLATE = "{{ _copier_conf.answers_file }}.jinja"
 
@@ -48,6 +52,27 @@ def launch_claude(system_prompt: str, cwd: Path) -> None:
         ["claude", "--append-system-prompt", system_prompt],
         cwd=cwd,
     )
+
+
+def _require_project_root() -> Path:
+    """Find the project root or exit with an error."""
+    root = find_project_root()
+    if root is None:
+        typer.echo(
+            "Error: Not inside a prothon-generated project.\n"
+            "Generate one with: uvx prothon new my-project"
+        )
+        raise typer.Exit(1)
+    return root
+
+
+def _read_skill(root: Path, skill_name: str) -> str:
+    """Read a skill file from the project."""
+    skill_path = root / ".agents" / "skills" / skill_name / "SKILL.md"
+    if not skill_path.exists():
+        typer.echo(f"Error: Skill file not found: {skill_path}")
+        raise typer.Exit(1)
+    return skill_path.read_text()
 
 
 def generate(dest: Path, context: dict) -> None:
@@ -133,12 +158,23 @@ def _write_copier_answers(dest: Path, context: dict) -> None:
     (dest / ".copier-answers.yml").write_text("\n".join(lines) + "\n")
 
 
+@app.callback(invoke_without_command=True)
+def callback(
+    ctx: typer.Context,
+    destination: str = typer.Argument(default=None, help="Directory to create the project in"),
+) -> None:
+    """Python project generator with docs-first AI workflow."""
+    if ctx.invoked_subcommand is not None:
+        return
+    if destination is not None:
+        ctx.invoke(new, destination=destination)
+    else:
+        typer.echo(ctx.get_help())
+
+
 @app.command()
-def main(
-    destination: str = typer.Argument(
-        default=".",
-        help="Directory to create the project in (defaults to current directory)",
-    ),
+def new(
+    destination: str = typer.Argument(help="Directory to create the project in"),
 ) -> None:
     """Generate a new Python project with docs-first AI workflow."""
     dest = Path(destination).resolve()
@@ -187,3 +223,39 @@ def main(
     typer.echo(f"  cd {dest.name}")
     typer.echo("  uv sync")
     typer.echo("  poe check")
+
+
+@app.command()
+def spec() -> None:
+    """Write or revise SPEC.md — extract requirements through probing questions."""
+    root = _require_project_root()
+    skill = _read_skill(root, "spec-writer")
+    launch_claude(skill, root)
+
+
+@app.command()
+def design() -> None:
+    """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
+    root = _require_project_root()
+    skill = _read_skill(root, "design-writer")
+    launch_claude(skill, root)
+    # Chain tech-researcher after design session exits
+    tech_skill = _read_skill(root, "tech-researcher")
+    typer.echo("\nDesign complete. Launching tech-researcher to generate reference docs...\n")
+    launch_claude(tech_skill, root)
+
+
+@app.command()
+def patterns() -> None:
+    """Write or revise PATTERNS.md — define code conventions and testing approaches."""
+    root = _require_project_root()
+    skill = _read_skill(root, "patterns-writer")
+    launch_claude(skill, root)
+
+
+@app.command()
+def compliance() -> None:
+    """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
+    root = _require_project_root()
+    skill = _read_skill(root, "compliance-checker")
+    launch_claude(skill, root)

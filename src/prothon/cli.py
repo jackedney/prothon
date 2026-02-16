@@ -24,6 +24,18 @@ def _template_dir() -> Path:
     return repo_root / "template"
 
 
+def find_project_root(start: Path | None = None) -> Path | None:
+    """Walk up from start directory to find a prothon project root."""
+    current = (start or Path.cwd()).resolve()
+    while True:
+        if (current / ".copier-answers.yml").exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
 def generate(dest: Path, context: dict) -> None:
     """Generate a project from the template."""
     env = Environment(

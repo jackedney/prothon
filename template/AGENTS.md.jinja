@@ -40,19 +40,30 @@ Starting from the highest affected level, update each document down through the 
 
 After any DESIGN-level changes, invoke `/tech-researcher` to regenerate reference docs for newly chosen technologies.
 
-### 4. Harmonize
+### 4. Harmonize (Automatic)
 
-After any doc changes, invoke `/doc-harmonizer` to check for conflicts between doc levels.
+**This is an always-on quality gate.** After making any changes to SPEC.md, DESIGN.md, or PATTERNS.md, you MUST automatically check for conflicts between doc levels before proceeding. Do not wait for the user to invoke `/doc-harmonizer` — perform the consistency check yourself:
+
+- Verify DESIGN.md choices don't contradict SPEC.md requirements
+- Verify PATTERNS.md conventions align with DESIGN.md technology choices
+- If conflicts are found, flag them immediately and propose resolutions (higher-level doc always wins)
 
 ### 5. Implement
 
 Write the code changes.
 
-### 6. Verify Compliance
+### 6. Verify Compliance (Automatic)
 
-Before considering work complete, invoke `/compliance-checker` to verify code matches all docs.
+**This is an always-on quality gate.** Before claiming any implementation work is complete, you MUST verify code matches documentation. Do not wait for the user to invoke `/compliance-checker` — check compliance yourself:
+
+- Verify code implements SPEC.md requirements
+- Verify code uses DESIGN.md technology choices
+- Verify code follows PATTERNS.md conventions
+- Report any deviations before marking work as done
 
 If the compliance check reports failures, fix the code or update docs and re-check.
+
+For explicit full compliance scans, the user can run `uvx prothon compliance`.
 
 ## Skills Directory
 

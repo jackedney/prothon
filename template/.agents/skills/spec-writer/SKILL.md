@@ -23,6 +23,12 @@ None. SPEC.md is the first document in the hierarchy.
 
 ## Process
 
+0. **Check for existing SPEC.md** — Read `docs/SPEC.md`. If it exists and contains more than scaffold comments:
+   - Present a summary of the current spec to the user
+   - Ask: "Would you like to revise specific sections, add new requirements, or rewrite from scratch?"
+   - Work through the requested changes section by section, preserving content the user doesn't want to change
+   - Skip to step 3 for the sections being modified
+
 1. **Explore context** — Read any existing code in `src/`, the README, and any prior docs. Understand what already exists.
 2. **Ask clarifying questions** — One at a time. Start broad ("What problem does this solve?") and narrow down ("When you say 'fast', what response time is acceptable?"). Prefer multiple-choice questions when possible.
 3. **Propose sections** — Once you understand the domain, draft each SPEC.md section and present it for approval:

@@ -215,7 +215,9 @@ def new(
     typer.echo("Next steps:")
     typer.echo(f"  cd {dest.name}")
     typer.echo("  uv sync")
-    typer.echo("  poe check")
+    typer.echo("  uvx prothon spec       # Write requirements")
+    typer.echo("  uvx prothon design     # Choose architecture")
+    typer.echo("  uvx prothon patterns   # Define conventions")
 
 
 @app.command()

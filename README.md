@@ -2,22 +2,23 @@
 
 Copier template for Python projects with docs-first AI workflow. Generated projects ship with a documentation hierarchy, agent skills, and quality tooling — ready for Claude Code from the first commit.
 
-## Quick Start
-
-Requires [uv](https://docs.astral.sh/uv/).
+## Install
 
 ```bash
-uvx --from git+https://github.com/jackedney/prothon prothon my-project
+curl -fsSL https://raw.githubusercontent.com/jackedney/prothon/master/install.sh | sh
+```
+
+This puts a `prothon` command in `~/.local/bin`. Requires [uv](https://docs.astral.sh/uv/).
+
+## Quick Start
+
+```bash
+prothon my-project
 cd my-project
 uv sync
 poe check
 ```
 
-Or with [Copier](https://copier.readthedocs.io/) directly:
-
-```bash
-copier copy --trust gh:jackedney/prothon my-project
-```
 
 ## What You Get
 

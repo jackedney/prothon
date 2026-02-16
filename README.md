@@ -7,16 +7,18 @@
 > docs-first project generator for AI-assisted Python development
 
 ```text
-                    ┌─────────────────────────────────────┐
-                    │                                     │
-  prothon new ─────>│  SPEC → DESIGN → PATTERNS → code  │
-                    │    ▲        ▲         ▲            │
-                    │    skills guide each phase          │
-                    │                                     │
-                    └─────────────────────────────────────┘
+            ┌──────────────────────────────────────────┐
+            │                                          │
+            │  SPEC  ->  DESIGN  ->  PATTERNS  ->  code│
+            │   ▲          ▲           ▲               │
+            │   skills guide each phase                │
+            │                                          │
+            └──────────────────────────────────────────┘
 ```
 
-Most AI-generated projects start with no structure — the AI writes code with no shared understanding of requirements, architecture, or conventions. prothon generates projects with a documentation hierarchy that acts as a contract between you and the AI, so it stays aligned with your decisions instead of freelancing.
+Most AI-generated projects start with no structure — the AI writes code with no shared understanding of requirements, architecture, or conventions. As features are added and requirements change, there's no source of truth, so every prompt is a fresh negotiation and the AI drifts further from your intent.
+
+prothon fixes this by generating projects with a documentation hierarchy that the AI treats as its instructions — and a toolchain that enforces they stay in sync with the code.
 
 ## install
 
@@ -82,7 +84,11 @@ Two automated checks close the loop:
 - **doc-harmonizer** runs after any doc change and detects conflicts between levels — if DESIGN.md contradicts SPEC.md, you find out before a line of code is written
 - **compliance-checker** runs before work is declared complete and verifies the code actually implements what the docs describe — catching drift before it compounds
 
-The result: the AI reads your docs on every interaction, follows the hierarchy, and gets checked against it. Requirements, architecture, conventions, and code stay aligned as the project evolves.
+### the AI learns your stack
+
+When you choose technologies in DESIGN.md, **tech-researcher** generates reference skills — up-to-date documentation, idioms, and best practices for the specific libraries in your project. The AI doesn't just know your requirements; it has current reference material for the tools you chose to implement them with.
+
+The result: the AI reads your docs on every interaction, follows the hierarchy, and gets checked against it. Requirements, architecture, conventions, and code stay aligned as the project evolves — not just at the start, but through every change.
 
 ## skills
 
@@ -97,17 +103,19 @@ Two additional skills run automatically: **doc-harmonizer** (detects conflicts b
 
 ## tooling
 
-Generated projects ship with quality tooling enforced via pre-commit hooks and CI:
+AI-generated code needs stronger guardrails, not weaker ones. Generated projects ship with a full quality toolchain that runs on every commit via pre-commit hooks and on every push via CI — so bad code from any source (human or AI) gets caught before it lands.
 
 ```text
 ruff           lint & format
 ty             type checking
 pytest         tests (+ hypothesis for property-based)
 mutmut         mutation testing
-bandit         security
+bandit         security scanning
 vulture        dead code detection
 complexipy     complexity analysis
 ```
+
+Run `poe check` to execute all checks locally. Pre-commit hooks ensure nothing bypasses them.
 
 ## customizing the template
 

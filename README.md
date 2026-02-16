@@ -3,7 +3,7 @@
 ```
 1 █▀▀▄ █▀▀▄ ▄▀▀▄ ▀█▀ █  █ ▄▀▀▄ █▄  █
 2 █▄▄█ █▄▄▀ █  █  █  █▄▄█ █  █ █ █ █
- 3 █    █  █ ▀▄▄▀  █  █  █ ▀▄▄▀ █  ▀█ ●
+  3 █    █  █ ▀▄▄▀  █  █  █ ▀▄▄▀ █  ▀█ ●
 ```
 
 **docs-first project generator for AI-assisted Python development**

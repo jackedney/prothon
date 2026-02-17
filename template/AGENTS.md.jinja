@@ -1,7 +1,5 @@
 # {{ project_name }}
 
-{{ description }}
-
 ## Documentation Hierarchy
 
 This project uses a three-level documentation hierarchy. Documents are listed in order of authority — higher documents override lower ones when in conflict.
@@ -30,23 +28,15 @@ All code changes — features, bug fixes, refactors — MUST follow this workflo
 
 ### 2. Update Docs Top-Down
 
-Starting from the highest affected level, update each document down through the hierarchy using the corresponding skill:
+Starting from the highest affected level, tell the user to run the corresponding `prothon` CLI commands in order:
 
-- SPEC-level change → `/spec-writer`, then `/design-writer`, then `/patterns-writer`
-- DESIGN-level change → `/design-writer`, then `/patterns-writer`
-- PATTERNS-level change → `/patterns-writer` only
+- SPEC-level change → `prothon spec`, then `prothon design`, then `prothon patterns`
+- DESIGN-level change → `prothon design`, then `prothon patterns`
+- PATTERNS-level change → `prothon patterns` only
 
-### 3. Generate Tech References
+Each command launches a separate Claude session. Do NOT invoke `/spec-writer`, `/design-writer`, or `/patterns-writer` directly — the user runs these via the CLI.
 
-After any DESIGN-level changes, invoke `/tech-researcher` to regenerate reference docs for newly chosen technologies.
-
-### 4. Harmonize (Automatic)
-
-**This is an always-on quality gate.** After making any changes to SPEC.md, DESIGN.md, or PATTERNS.md, you MUST automatically check for conflicts between doc levels before proceeding. Do not wait for the user to invoke `/doc-harmonizer` — perform the consistency check yourself:
-
-- Verify DESIGN.md choices don't contradict SPEC.md requirements
-- Verify PATTERNS.md conventions align with DESIGN.md technology choices
-- If conflicts are found, flag them immediately and propose resolutions (higher-level doc always wins)
+Doc harmonization and tech-researcher are handled automatically by the design-writer and patterns-writer skills as subagent quality gates. You do not need to trigger them manually.
 
 ### 5. Implement
 
@@ -54,12 +44,7 @@ Write the code changes.
 
 ### 6. Verify Compliance (Automatic)
 
-**This is an always-on quality gate.** Before claiming any implementation work is complete, you MUST verify code matches documentation. Do not wait for the user to invoke `/compliance-checker` — check compliance yourself:
-
-- Verify code implements SPEC.md requirements
-- Verify code uses DESIGN.md technology choices
-- Verify code follows PATTERNS.md conventions
-- Report any deviations before marking work as done
+**This is an always-on quality gate.** Before claiming any implementation work is complete, you MUST launch a **dedicated subagent** (using the Task tool) to verify code matches documentation. Do not perform this check inline — spawn a fresh subagent with the compliance-checker skill content so it gets a clean context focused solely on compliance verification. Report the subagent's findings to the user.
 
 If the compliance check reports failures, fix the code or update docs and re-check.
 

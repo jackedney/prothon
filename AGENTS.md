@@ -1,7 +1,5 @@
 # prothon
 
-basecamp-research kmer-counting software assignment
-
 ## Documentation Hierarchy
 
 This project uses a three-level documentation hierarchy. Documents are listed in order of authority — higher documents override lower ones when in conflict.

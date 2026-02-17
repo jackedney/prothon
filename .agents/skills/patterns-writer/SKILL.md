@@ -26,22 +26,30 @@ You are the Patterns Writer. Your job is to define the best code patterns, conve
 
 ## Process
 
-0. **Check for existing PATTERNS.md** — Read `docs/PATTERNS.md`. If it exists and contains more than scaffold comments:
-   - Present a summary of the current patterns to the user
-   - Ask: "Would you like to revise specific patterns, add new conventions, or rewrite from scratch?"
-   - Work through the requested changes section by section, preserving content the user doesn't want to change
-   - Skip to step 3 for the sections being modified
+0. **Check for existing PATTERNS.md** — Read `docs/PATTERNS.md` to determine which path to follow.
+
+### Path A: New Patterns (PATTERNS.md is empty or scaffold-only)
 
 1. **Read SPEC.md and DESIGN.md** — Understand requirements and technology choices.
-2. **Analyze existing code** — If code exists in `src/`, study its current patterns.
-3. **Propose patterns** — For each PATTERNS.md section, propose conventions with reasoning:
+2. **Ask the user's priorities** — Before proposing patterns, ask the user if they have preferences for code style, testing approach, or conventions they want to carry over from other projects. Do NOT guess from existing code or project metadata. Wait for their response.
+3. **Analyze existing code** — If code exists in `src/`, study its current patterns to understand what's already in place.
+4. **Propose patterns** — For each PATTERNS.md section, propose conventions with reasoning:
    - Code Organization: module structure, naming, layout
    - Design Patterns: which patterns apply and where
    - Error Handling: how errors flow through the system
    - Testing Patterns: test structure and conventions
-4. **Show examples** — For each pattern, show a brief concrete example of what it looks like.
-5. **Get approval** — Present each section individually. Revise based on feedback.
-6. **Write PATTERNS.md** — Write the final approved content to `docs/PATTERNS.md`.
+5. **Show examples** — For each pattern, show a brief concrete example of what it looks like.
+6. **Get approval** — Present each section individually. Revise based on feedback.
+7. **Write PATTERNS.md** — Write the final approved content to `docs/PATTERNS.md`.
+
+### Path B: Updating Existing Patterns (PATTERNS.md has content)
+
+1. **Present current state** — Summarize the existing patterns to the user.
+2. **Ask what to change** — "Would you like to revise specific patterns, add new conventions, or rewrite from scratch?"
+3. **Read SPEC.md and DESIGN.md** — Re-read the current docs to understand any changes since patterns were last written.
+4. **Analyze existing code** — If code exists in `src/`, study its current patterns to understand what's changed.
+5. **Work through changes** — For each section being modified, follow steps A.4–A.6 (propose, show examples, approve). Preserve content the user doesn't want to change.
+6. **Write PATTERNS.md** — Write the updated content to `docs/PATTERNS.md`.
 
 ## Guards
 
@@ -70,6 +78,11 @@ Each subdirectory file follows the same authority rules (must align with DESIGN.
 
 A populated `docs/PATTERNS.md` with all sections filled in, concrete examples, and clear rationale for each choice.
 
-## What Comes Next
+## After Writing
 
-After PATTERNS.md is written, the documentation hierarchy is complete. Tell the user they can now implement code.
+Once PATTERNS.md is written to disk, run this quality gate before finishing. Do NOT ask the user — just run it.
+
+1. **Harmonize docs** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
+   > Read the doc-harmonizer skill at `.agents/skills/doc-harmonizer/SKILL.md` and execute it. Read `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md`, cross-reference them, and report any conflicts. Apply fixes to the lower-authority document without asking for confirmation.
+
+2. **Report and finish** — Once the subagent completes, summarize its results to the user and tell them the documentation hierarchy is complete — they can now implement code.

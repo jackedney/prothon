@@ -25,21 +25,28 @@ You are the Design Writer. Your job is to research and choose the best technolog
 
 ## Process
 
-0. **Check for existing DESIGN.md** — Read `docs/DESIGN.md`. If it exists and contains more than scaffold comments:
-   - Present a summary of the current design to the user
-   - Ask: "Would you like to revise specific sections, update technology choices, or rewrite from scratch?"
-   - Work through the requested changes section by section, preserving content the user doesn't want to change
-   - Skip to step 4 for the sections being modified
+0. **Check for existing DESIGN.md** — Read `docs/DESIGN.md` to determine which path to follow.
+
+### Path A: New Design (DESIGN.md is empty or scaffold-only)
 
 1. **Read SPEC.md** — Understand every requirement and constraint thoroughly.
-2. **Identify decisions** — List all technology/architecture decisions that need to be made to fulfill the SPEC.
-3. **Research options** — For each decision, research 2-3 viable alternatives. Use web search and documentation to gather current information.
-4. **Present trade-offs** — For each decision, present options with:
+2. **Ask the user's priorities** — Before researching technologies, ask the user if they have any preferences, constraints, or prior experience that should guide architecture and technology choices. Do NOT guess from the project name or README. Wait for their response.
+3. **Identify decisions** — List all technology/architecture decisions that need to be made to fulfill the SPEC.
+4. **Research options** — For each decision, research 2-3 viable alternatives. Use web search and documentation to gather current information.
+5. **Present trade-offs** — For each decision, present options with:
    - What it is and why it's a candidate
    - Pros and cons relative to the SPEC requirements
    - Your recommendation and why
-5. **Get approval** — Present each DESIGN.md section individually. Revise based on feedback.
-6. **Write DESIGN.md** — Write the final approved content to `docs/DESIGN.md`.
+6. **Get approval** — Present each DESIGN.md section individually. Revise based on feedback.
+7. **Write DESIGN.md** — Write the final approved content to `docs/DESIGN.md`.
+
+### Path B: Updating an Existing Design (DESIGN.md has content)
+
+1. **Present current state** — Summarize the existing design to the user.
+2. **Ask what to change** — "Would you like to revise specific sections, update technology choices, or rewrite from scratch?"
+3. **Read SPEC.md** — Re-read the current spec to understand any changes since the design was last written.
+4. **Work through changes** — For each section being modified, follow steps A.3–A.6 (identify decisions, research, present trade-offs, approve). Preserve content the user doesn't want to change.
+5. **Write DESIGN.md** — Write the updated content to `docs/DESIGN.md`.
 
 ## Sections to Populate
 
@@ -74,8 +81,16 @@ If a SPEC requirement seems impossible to fulfill with available technology, fla
 
 A populated `docs/DESIGN.md` with all sections filled in, every choice traced to a SPEC requirement.
 
-## What Comes Next
+## After Writing
 
-After DESIGN.md is written:
-1. Invoke `/tech-researcher` to generate reference skills for the chosen technologies
-2. After tech-researcher completes, invoke `/patterns-writer` to define implementation patterns
+Once DESIGN.md is written to disk, run these quality gates before finishing. Do NOT ask the user — just run them.
+
+1. **Harmonize docs** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
+   > Read the doc-harmonizer skill at `.agents/skills/doc-harmonizer/SKILL.md` and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. Apply fixes to the lower-authority document without asking for confirmation.
+
+2. **Generate tech references** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
+   > Read the tech-researcher skill at `.agents/skills/tech-researcher/SKILL.md` and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, then generate reference skills in `.agents/skills/` for all chosen technologies, codestyle, optimisation, and domain knowledge.
+
+   These two subagents are independent — launch them in parallel.
+
+3. **Report and finish** — Once both subagents complete, summarize their results to the user and tell them to run `prothon patterns` next. Do NOT invoke `/patterns-writer` yourself.

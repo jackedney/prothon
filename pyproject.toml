@@ -7,6 +7,7 @@ license = "MIT"
 dependencies = [
     "typer>=0.15",
     "jinja2>=3.1",
+    "tomli-w>=1.0",
 ]
 
 [dependency-groups]

@@ -40,6 +40,22 @@ def find_project_root(start: Path | None = None) -> Path | None:
         current = parent
 
 
+def _sync_skills(root: Path) -> None:
+    """Sync all skills from the package template to the project."""
+    template_skills = _template_dir() / ".agents" / "skills"
+    if not template_skills.is_dir():
+        return
+    project_skills = root / ".agents" / "skills"
+    for skill_dir in template_skills.iterdir():
+        if not skill_dir.is_dir():
+            continue
+        src = skill_dir / "SKILL.md"
+        if src.exists():
+            dst = project_skills / skill_dir.name / "SKILL.md"
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+
+
 def launch_claude(skill_name: str, cwd: Path) -> None:
     """Launch an interactive Claude Code session that invokes the given skill."""
     if not shutil.which("claude"):
@@ -48,6 +64,7 @@ def launch_claude(skill_name: str, cwd: Path) -> None:
             "Install: https://docs.anthropic.com/en/docs/claude-code"
         )
         raise typer.Exit(1)
+    _sync_skills(cwd)
     subprocess.run(
         ["claude", "--dangerously-skip-permissions", f"/{skill_name}"],
         cwd=cwd,

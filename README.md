@@ -58,11 +58,12 @@ uv sync
 prothon spec       # define requirements   (writes SPEC.md)
 prothon design     # choose architecture   (writes DESIGN.md)
 prothon patterns   # set conventions       (writes PATTERNS.md)
+prothon execute    # implement code from docs
 ```
 
 Each command launches a Claude Code session with the corresponding skill. The skill asks you questions, researches options, and writes the doc. You make the decisions.
 
-Once your docs are in place, Claude Code has full context via `CLAUDE.md` and follows the documented hierarchy for all future work.
+Once your docs are in place, the AI has full context via `AGENTS.md` and follows the documented hierarchy for all future work. Generated projects symlink `AGENTS.md` to `CLAUDE.md`, `GEMINI.md`, and `AGENT.md` so the instructions are picked up automatically regardless of which AI coding assistant you use.
 
 ---
 
@@ -93,14 +94,24 @@ convention changes  ->                               update PATTERNS -> implemen
 
 ### docs stay in sync with code
 
-Two automated checks close the loop:
+Three mechanisms close the loop:
 
 - **doc-harmonizer** runs after any doc change and detects conflicts between levels. If DESIGN.md contradicts SPEC.md, you find out before a line of code is written.
 - **compliance-checker** runs before work is declared complete and verifies the code actually implements what the docs describe, catching drift before it compounds.
+- **change promises** track what each implementation task is supposed to do — files to create, modify, or remove, and expected scope. After each task completes, the promise is checked against what actually happened. Discrepancies are either fixed or explicitly accepted.
 
 ### the AI learns your stack
 
 When you choose technologies in DESIGN.md, **tech-researcher** generates reference skills: up-to-date documentation, idioms, and best practices for the specific libraries in your project. The AI doesn't just know your requirements. It has current reference material for the tools you chose to implement them with.
+
+### execute: from docs to code
+
+Once your documentation is in place, `prothon execute` aligns the source code to it. The executor reads all three docs, scans the codebase for gaps, and classifies the work:
+
+- **Small changes** (1-2 files) are implemented directly.
+- **Large changes** (3+ files) get a written plan in `docs/PLAN.md`. After you approve the plan, the executor delegates tasks to subagents that work in parallel, each with only the context it needs.
+
+Every task gets a change promise. After each subagent finishes, the promise is checked. If there's a discrepancy, a **senior-dev** reviewer examines the work and either fixes the code or accepts the deviation. A final compliance check verifies the full codebase matches documentation before the work is declared complete.
 
 The result: the AI reads your docs on every interaction, follows the hierarchy, and gets checked against it. Requirements, architecture, conventions, and code stay aligned as the project evolves, not just at the start but through every change.
 
@@ -112,10 +123,11 @@ The result: the AI reads your docs on every interaction, follows the hierarchy, 
 prothon spec         spec-writer          extract requirements through probing questions
 prothon design       design-writer        research technologies, present trade-offs
 prothon patterns     patterns-writer      define code patterns and testing conventions
+prothon execute      execute              plan, delegate, and implement code from docs
 prothon compliance   compliance-checker   verify code matches documentation
 ```
 
-Two additional skills run automatically: **doc-harmonizer** (detects conflicts between doc levels) and **tech-researcher** (generates reference material for your chosen stack).
+Three additional skills run automatically as part of the workflow: **doc-harmonizer** (detects conflicts between doc levels), **tech-researcher** (generates reference material for your chosen stack), and **senior-dev** (reviews discrepancies found by change promise checks).
 
 ## tooling
 
@@ -135,9 +147,22 @@ Run `poe check` to execute all checks locally. Pre-commit hooks ensure nothing b
 
 ---
 
+## agent compatibility
+
+Generated projects use `AGENTS.md` as the canonical instruction file, with symlinks for automatic discovery by different AI coding assistants:
+
+```
+AGENTS.md              <- canonical instructions
+CLAUDE.md  -> AGENTS.md   <- Claude Code
+GEMINI.md  -> AGENTS.md   <- Gemini
+AGENT.md   -> AGENTS.md   <- other agents
+```
+
+Skills live in `.agents/skills/` with symlinks to `.claude/skills/` and `.opencode/skills/` for tool-specific discovery.
+
 ## customizing the template
 
-Template files live in `template/`. Jinja-templated files use `.jinja` extension.
+Template files live in `template/`. Jinja-templated files use `.jinja` extension. Generated projects include a `.copier-answers.yml` for update compatibility:
 
 ```bash
 copier copy --trust --vcs-ref HEAD /path/to/prothon /tmp/test-project

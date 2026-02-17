@@ -23,13 +23,13 @@ None. SPEC.md is the first document in the hierarchy.
 
 ## Process
 
-0. **Check for existing SPEC.md** — Read `docs/SPEC.md` to determine which path to follow.
+0. **Check for existing SPEC.md** — Read `docs/SPEC.md` (and ONLY this file) to determine which path to follow. Do NOT read any other files at this stage.
 
 ### Path A: New Spec (SPEC.md is empty or scaffold-only)
 
-1. **Get the user's vision** — Ask the user to describe their project in their own words: what they're building, who it's for, and why. Do NOT read the README, project name, or other metadata to guess the project's purpose — let the user define it. Use a single open-ended prompt and wait for their response.
-2. **Explore context** — After the user has stated their vision, read any existing code in `src/` and prior docs. Use this only to understand what already exists, not to form assumptions about what the project should be.
-3. **Ask clarifying questions** — One topic at a time. Build on the user's stated vision, narrowing into specifics ("When you say 'fast', what response time is acceptable?"). Prefer multiple-choice questions when possible. **STOP and wait for the user's response before asking the next question.** Do NOT batch multiple topics into one message.
+1. **Get the user's vision** — Ask the user a single, open-ended question: "What are you building, who is it for, and why?" Do NOT read any other files first (no README, pyproject.toml, project name, description, or existing code). Do NOT offer multiple-choice options or pre-populated guesses for this first question — you know nothing about the project yet. Just ask and wait.
+2. **Explore context** — ONLY after the user has responded with their vision, read any existing code in `src/` and prior docs. Use this only to understand what already exists, not to form assumptions about what the project should be.
+3. **Ask clarifying questions** — One topic at a time. Build on the user's stated vision, narrowing into specifics ("When you say 'fast', what response time is acceptable?"). Multiple-choice options are fine here since they are grounded in what the user has already told you. **STOP and wait for the user's response before asking the next question.** Do NOT batch multiple topics into one message.
 4. **Walk through sections one at a time** — Once you understand the domain, work through each SPEC.md section in order:
    a. Purpose (1-3 sentences, no jargon)
    b. Requirements (numbered, testable statements)

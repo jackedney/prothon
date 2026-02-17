@@ -244,6 +244,14 @@ def patterns() -> None:
 
 
 @app.command()
+def execute() -> None:
+    """Align source code to documentation — plan and implement with subagents."""
+    root = _require_project_root()
+    _require_skill(root, "execute")
+    launch_claude("execute", root)
+
+
+@app.command()
 def compliance() -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()

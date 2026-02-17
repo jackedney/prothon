@@ -30,19 +30,15 @@ All code changes — features, bug fixes, refactors — MUST follow this workflo
 
 ### 2. Update Docs Top-Down
 
-Starting from the highest affected level, update each document down through the hierarchy using the corresponding skill:
+Starting from the highest affected level, tell the user to run the corresponding `prothon` CLI commands in order:
 
-- SPEC-level change → `/spec-writer`, then `/design-writer`, then `/patterns-writer`
-- DESIGN-level change → `/design-writer`, then `/patterns-writer`
-- PATTERNS-level change → `/patterns-writer` only
+- SPEC-level change → `prothon spec`, then `prothon design`, then `prothon patterns`
+- DESIGN-level change → `prothon design`, then `prothon patterns`
+- PATTERNS-level change → `prothon patterns` only
 
-### 3. Generate Reference Skills
+Each command launches a separate Claude session. Do NOT invoke `/spec-writer`, `/design-writer`, or `/patterns-writer` directly — the user runs these via the CLI.
 
-After any DESIGN-level changes, invoke `/tech-researcher` to regenerate reference skills — covering technologies, codestyle conventions, optimisation patterns, and domain knowledge.
-
-### 4. Harmonize (Automatic)
-
-**This is an always-on quality gate.** After making any changes to SPEC.md, DESIGN.md, or PATTERNS.md, you MUST launch a **dedicated subagent** (using the Task tool) to check for conflicts between doc levels before proceeding. Do not perform this check inline — spawn a fresh subagent with the doc-harmonizer skill content so it gets a clean context focused solely on harmonization. If the subagent reports conflicts, flag them immediately and propose resolutions (higher-level doc always wins).
+Doc harmonization and tech-researcher are handled automatically by the design-writer and patterns-writer skills as subagent quality gates. You do not need to trigger them manually.
 
 ### 5. Implement
 

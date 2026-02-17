@@ -46,7 +46,7 @@ You have ZERO knowledge of what this project does until the user tells you. Even
 
 1. **Wait for the user's response** — Do nothing until the user describes their vision.
 2. **Explore context** — ONLY after the user has responded, read any existing code in `src/` and prior docs. Use this only to understand what already exists, not to form assumptions about what the project should be.
-3. **Ask clarifying questions** — One topic at a time. Build on the user's stated vision, narrowing into specifics ("When you say 'fast', what response time is acceptable?"). Multiple-choice options are fine here since they are grounded in what the user has already told you. **STOP and wait for the user's response before asking the next question.** Do NOT batch multiple topics into one message.
+3. **Ask clarifying questions** — One topic at a time. Start with open-ended questions until you understand the domain well enough to offer meaningful choices. Only then shift to multiple-choice to narrow down specifics. Do NOT offer multiple-choice options when you lack context to make the options representative — bad options anchor the conversation in the wrong direction. **STOP and wait for the user's response before asking the next question.** Do NOT batch multiple topics into one message.
 4. **Walk through sections one at a time** — Once you understand the domain, work through each SPEC.md section in order:
    a. Purpose (1-3 sentences, no jargon)
    b. Requirements (numbered, testable statements)

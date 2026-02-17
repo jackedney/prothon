@@ -23,15 +23,26 @@ None. SPEC.md is the first document in the hierarchy.
 
 ## Process
 
-0. **Check for existing SPEC.md** — Read `docs/SPEC.md` (and ONLY this file) to determine which path to follow.
+0. **Check for existing SPEC.md** — Use the Read tool on `docs/SPEC.md`. This is the ONLY tool call you make before asking the user a question. Do NOT use Glob, Grep, or Read on any other file.
 
 ### Path A: New Spec (SPEC.md is empty or scaffold-only)
 
-**IMMEDIATELY after determining this is Path A, your very next action MUST be to output the open-ended question below as plain text. Do NOT call any tools first — no Glob, no Grep, no Read, no AskUserQuestion. Just output this text and stop:**
+Your response after reading SPEC.md must be ONLY this text — nothing else:
 
-> I'm going to help you write a specification for this project. To start with a blank slate, tell me in your own words: **what are you building, who is it for, and why?**
+> I'm going to help you write a specification for this project. Tell me in your own words: **what are you building, who is it for, and why?**
 
-**Why this matters:** If you read project files (README, pyproject.toml, etc.) or use the project name/description to infer the purpose, you will anchor on assumptions the user hasn't confirmed. The user must define the project — not you.
+That's it. No preamble, no summary of what you found, no "here's what I know so far." Just the question above.
+
+**DO NOT:**
+- Read pyproject.toml, README, or any file other than SPEC.md
+- Use Glob or Grep to search the project
+- Mention the project name, description, or any metadata you see in system context
+- Summarize the current state of the project
+- Use the AskUserQuestion tool (which creates multiple-choice widgets) — output plain text only
+- Offer multiple-choice options or guesses about what the project might do
+- Say things like "Here's what I know so far" or "Based on the project description"
+
+You have ZERO knowledge of what this project does until the user tells you. Even if the project name or description appears in your context (from CLAUDE.md, AGENTS.md, pyproject.toml, or anywhere else), **ignore it completely** — the user defines the project, not metadata.
 
 1. **Wait for the user's response** — Do nothing until the user describes their vision.
 2. **Explore context** — ONLY after the user has responded, read any existing code in `src/` and prior docs. Use this only to understand what already exists, not to form assumptions about what the project should be.

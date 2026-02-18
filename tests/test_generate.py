@@ -1,7 +1,6 @@
 """Tests for project generation."""
 
 import os
-from pathlib import Path
 
 import pytest
 

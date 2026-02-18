@@ -37,7 +37,11 @@ class TaskCheckReport:
         for c in self.checks:
             tag = "PASS" if c.passed else "FAIL"
             lines.append(f"  {c.name + ':':20s} {tag} ({c.detail})")
-        suffix = "" if self.passed else f" ({failures} failure{'s' if failures != 1 else ''})"
+        suffix = (
+            ""
+            if self.passed
+            else f" ({failures} failure{'s' if failures != 1 else ''})"
+        )
         lines.append(f"  RESULT: {status}{suffix}")
         return "\n".join(lines)
 
@@ -111,32 +115,38 @@ def check_task(task_index: int, *, path: Path = PROMISE_PATH) -> TaskCheckReport
     to_create = task.get("files_to_create", [])
     if to_create:
         existing = [f for f in to_create if Path(f).exists()]
-        report.checks.append(CheckResult(
-            name="files_to_create",
-            passed=len(existing) == len(to_create),
-            detail=f"{len(existing)}/{len(to_create)} exist",
-        ))
+        report.checks.append(
+            CheckResult(
+                name="files_to_create",
+                passed=len(existing) == len(to_create),
+                detail=f"{len(existing)}/{len(to_create)} exist",
+            )
+        )
 
     # Check files_to_modify
     to_modify = task.get("files_to_modify", [])
     if to_modify:
         diff_names = _git_diff_names(base_commit)
         modified = [f for f in to_modify if f in diff_names]
-        report.checks.append(CheckResult(
-            name="files_to_modify",
-            passed=len(modified) == len(to_modify),
-            detail=f"{len(modified)}/{len(to_modify)} modified",
-        ))
+        report.checks.append(
+            CheckResult(
+                name="files_to_modify",
+                passed=len(modified) == len(to_modify),
+                detail=f"{len(modified)}/{len(to_modify)} modified",
+            )
+        )
 
     # Check files_to_remove
     to_remove = task.get("files_to_remove", [])
     if to_remove:
         removed = [f for f in to_remove if not Path(f).exists()]
-        report.checks.append(CheckResult(
-            name="files_to_remove",
-            passed=len(removed) == len(to_remove),
-            detail=f"{len(removed)}/{len(to_remove)} removed",
-        ))
+        report.checks.append(
+            CheckResult(
+                name="files_to_remove",
+                passed=len(removed) == len(to_remove),
+                detail=f"{len(removed)}/{len(to_remove)} removed",
+            )
+        )
 
     # Check line counts
     expected_added = task.get("expected_lines_added", 0)
@@ -152,27 +162,33 @@ def check_task(task_index: int, *, path: Path = PROMISE_PATH) -> TaskCheckReport
             detail = f"expected ~{expected_added}, actual {actual_added}"
             if not added_ok:
                 detail += " \u2014 outside \u00b130%/\u00b130 tolerance"
-            report.checks.append(CheckResult(
-                name="lines_added",
-                passed=added_ok,
-                detail=detail,
-            ))
+            report.checks.append(
+                CheckResult(
+                    name="lines_added",
+                    passed=added_ok,
+                    detail=detail,
+                )
+            )
 
         if expected_removed > 0:
             removed_ok = _within_tolerance(expected_removed, actual_removed)
             detail = f"expected ~{expected_removed}, actual {actual_removed}"
             if not removed_ok:
                 detail += " \u2014 outside \u00b130%/\u00b130 tolerance"
-            report.checks.append(CheckResult(
-                name="lines_removed",
-                passed=removed_ok,
-                detail=detail,
-            ))
+            report.checks.append(
+                CheckResult(
+                    name="lines_removed",
+                    passed=removed_ok,
+                    detail=detail,
+                )
+            )
 
     return report
 
 
-def complete_task(task_index: int, *, attempts: int = 1, path: Path = PROMISE_PATH) -> None:
+def complete_task(
+    task_index: int, *, attempts: int = 1, path: Path = PROMISE_PATH
+) -> None:
     """Mark a task as completed and record the number of attempts."""
     data = load_promise(path)
     tasks = data.get("tasks", [])
@@ -259,12 +275,20 @@ def cleanup(path: Path = PROMISE_PATH) -> None:
 def main() -> None:
     args = sys.argv[1:]
     if not args:
-        print("Usage: python -m prothon.promise <check|status|complete|plan|cleanup> [task-index]")
+        print(
+            "Usage: python -m prothon.promise <check|status|complete|plan|cleanup> [task-index]"
+        )
         sys.exit(1)
 
     command = args[0]
 
-    if not PROMISE_PATH.exists() and command in ("status", "check", "complete", "plan", "cleanup"):
+    if not PROMISE_PATH.exists() and command in (
+        "status",
+        "check",
+        "complete",
+        "plan",
+        "cleanup",
+    ):
         print(f"No promise file found at {PROMISE_PATH}")
         sys.exit(1)
 
@@ -304,7 +328,9 @@ def main() -> None:
                 print(f"Error: attempts must be an integer, got '{args[2]}'")
                 sys.exit(1)
         complete_task(idx, attempts=attempts)
-        print(f"Task {idx} marked as completed ({attempts} attempt{'s' if attempts != 1 else ''}).")
+        print(
+            f"Task {idx} marked as completed ({attempts} attempt{'s' if attempts != 1 else ''})."
+        )
 
     elif command == "cleanup":
         cleanup()

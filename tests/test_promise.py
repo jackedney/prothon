@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -138,11 +137,14 @@ class TestCheckTask:
 
         with (
             patch("prothon.promise._git_diff_names", return_value={"src/app.py"}),
-            patch("prothon.promise._git_diff_numstat", return_value={
-                "src/app.py": (10, 15),
-                str(tmp_path / "src" / "auth.py"): (80, 0),
-                str(tmp_path / "tests" / "test_auth.py"): (25, 0),
-            }),
+            patch(
+                "prothon.promise._git_diff_numstat",
+                return_value={
+                    "src/app.py": (10, 15),
+                    str(tmp_path / "src" / "auth.py"): (80, 0),
+                    str(tmp_path / "tests" / "test_auth.py"): (25, 0),
+                },
+            ),
         ):
             report = check_task(0, path=promise_file)
             assert report.passed is True
@@ -168,7 +170,9 @@ class TestCheckTask:
     def test_unmodified_file(self, promise_file: Path):
         """Fail when a file that should be modified isn't in git diff."""
         with (
-            patch("prothon.promise._git_diff_names", return_value=set()),  # nothing modified
+            patch(
+                "prothon.promise._git_diff_names", return_value=set()
+            ),  # nothing modified
             patch("prothon.promise._git_diff_numstat", return_value={}),
         ):
             report = check_task(0, path=promise_file)
@@ -194,9 +198,12 @@ class TestCheckTask:
         """Fail when line counts are way off."""
         with (
             patch("prothon.promise._git_diff_names", return_value={"src/app.py"}),
-            patch("prothon.promise._git_diff_numstat", return_value={
-                "src/app.py": (5, 200),  # 200 removed vs 20 expected
-            }),
+            patch(
+                "prothon.promise._git_diff_numstat",
+                return_value={
+                    "src/app.py": (5, 200),  # 200 removed vs 20 expected
+                },
+            ),
         ):
             report = check_task(0, path=promise_file)
             removed_check = next(
@@ -235,9 +242,7 @@ class TestCompleteTask:
     def test_marks_complete_and_records_attempts(self, tmp_path):
         data = {
             "metadata": {"base_commit": "abc1234"},
-            "tasks": [
-                {"title": "Test", "completed": False, "attempts": 0}
-            ],
+            "tasks": [{"title": "Test", "completed": False, "attempts": 0}],
         }
         p = tmp_path / "promise.toml"
         save_promise(data, p)
@@ -251,9 +256,7 @@ class TestCompleteTask:
     def test_defaults_to_one_attempt(self, tmp_path):
         data = {
             "metadata": {"base_commit": "abc1234"},
-            "tasks": [
-                {"title": "Test", "completed": False, "attempts": 0}
-            ],
+            "tasks": [{"title": "Test", "completed": False, "attempts": 0}],
         }
         p = tmp_path / "promise.toml"
         save_promise(data, p)
@@ -283,9 +286,7 @@ class TestReportFormat:
             task_index=0,
             title="Test task",
             checks=[
-                CheckResult(
-                    name="files_to_create", passed=True, detail="2/2 exist"
-                ),
+                CheckResult(name="files_to_create", passed=True, detail="2/2 exist"),
             ],
         )
         formatted = report.format()
@@ -298,7 +299,9 @@ class TestReportFormat:
             title="Test task",
             checks=[
                 CheckResult(name="files_to_create", passed=True, detail="2/2 exist"),
-                CheckResult(name="files_to_modify", passed=False, detail="0/1 modified"),
+                CheckResult(
+                    name="files_to_modify", passed=False, detail="0/1 modified"
+                ),
             ],
         )
         formatted = report.format()

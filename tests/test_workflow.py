@@ -1,12 +1,12 @@
 """Tests for workflow CLI commands."""
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 import typer
+from typer.testing import CliRunner
 
-from prothon.cli import find_project_root, generate, launch_claude
+from prothon.cli import app, find_project_root, generate, launch_claude
 
 
 def test_find_project_root_from_project_dir(tmp_path):
@@ -40,9 +40,6 @@ def test_launch_claude_raises_when_claude_not_found(tmp_path):
         with pytest.raises((SystemExit, typer.Exit)):
             launch_claude("spec-writer", tmp_path)
 
-
-from typer.testing import CliRunner
-from prothon.cli import app
 
 runner = CliRunner()
 
@@ -120,10 +117,14 @@ def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):
     monkeypatch.chdir(dest)
     with patch("prothon.cli.shutil.which", return_value="/usr/bin/claude"):
         with patch("prothon.cli.subprocess.run") as mock_run:
-            result = runner.invoke(app, ["spec"])
+            runner.invoke(app, ["spec"])
     claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
     assert len(claude_calls) == 1
-    assert claude_calls[0].args[0] == ["claude", "--dangerously-skip-permissions", "/spec-writer"]
+    assert claude_calls[0].args[0] == [
+        "claude",
+        "--dangerously-skip-permissions",
+        "/spec-writer",
+    ]
 
 
 def test_design_launches_single_session(tmp_path, monkeypatch, context):
@@ -132,7 +133,11 @@ def test_design_launches_single_session(tmp_path, monkeypatch, context):
     monkeypatch.chdir(dest)
     with patch("prothon.cli.shutil.which", return_value="/usr/bin/claude"):
         with patch("prothon.cli.subprocess.run") as mock_run:
-            result = runner.invoke(app, ["design"])
+            runner.invoke(app, ["design"])
     claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
     assert len(claude_calls) == 1
-    assert claude_calls[0].args[0] == ["claude", "--dangerously-skip-permissions", "/design-writer"]
+    assert claude_calls[0].args[0] == [
+        "claude",
+        "--dangerously-skip-permissions",
+        "/design-writer",
+    ]

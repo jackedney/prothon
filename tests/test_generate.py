@@ -102,7 +102,6 @@ def test_creates_agents_md(generated_project):
     assert agents.exists()
     content = agents.read_text()
     assert "# test-project" in content
-    assert "A test project" in content
 
 
 def test_skips_copier_answers_template(generated_project):

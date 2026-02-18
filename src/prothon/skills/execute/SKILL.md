@@ -20,46 +20,40 @@ You are the Executor. Your job is to make the source code match the documentatio
 2. **Inventory reference skills** — List all skill directories in `.agents/skills/` matching `tech-*`, `style-*`, `optim-*`, and `domain-*`. Read each one. These contain guidance on technologies, code style, optimisation, and domain concepts.
 3. **Scan code structure** — List all files in `src/` and `tests/`. Read module-level docstrings, class/function signatures, and imports — do NOT read full function bodies yet. If no code exists, note that.
 4. **Identify gaps** — Determine what needs to be built, changed, or removed to align code with docs.
-5. **Generate `docs/change_promise.toml`** — Write the enriched promise file with `base_commit` set to the current HEAD SHA. Use the schema below.
-6. **Pretty-print the plan** — Run: `python -m prothon.promise plan`
-7. **Get approval** — Present the plan output to the user. Do not proceed until approved.
-
-### Enriched Promise Schema
+5. **Get HEAD SHA** — Run: `git rev-parse HEAD` and save the output.
+6. **Write `docs/change_promise.toml`** — Use the Write tool to create this file. It MUST be valid TOML using the exact schema below. Every `[[tasks]]` entry MUST include all fields. Set `base_commit` to the SHA from step 5 and `created_at` to the current ISO 8601 timestamp.
 
 ```toml
 [metadata]
-base_commit = "<HEAD SHA when plan was generated>"
+base_commit = "<SHA from step 5>"
 created_at = "<ISO 8601 timestamp>"
 
 [[tasks]]
 title = "Add auth middleware"
 goal = "JWT validation on all protected routes"
 success_criteria = "Requests without valid token return 401"
-
-# File contract (verifiable)
 files_to_create = ["src/auth.py", "tests/test_auth.py"]
 files_to_modify = ["src/app.py"]
 files_to_remove = []
 expected_lines_added = 120
 expected_lines_removed = 5
-
-# Context routing (tells subagent what to read)
 context_files = ["src/middleware.py", "src/config.py"]
 doc_sections = ["DESIGN.md#Authentication", "PATTERNS.md#Error-Handling"]
 reference_skills = ["tech-fastapi", "style-python"]
-
-# Execution state
-dependencies = []     # indices of tasks that must complete first
+dependencies = []
 completed = false
-attempts = 0          # loop iterations taken
+attempts = 0
 ```
 
-Each task must be:
-- **Small enough** for a single subagent to complete independently
-- **Well-scoped** with clear file boundaries — no two independent tasks should modify the same file
-- **Ordered** so that dependencies come before dependents
+7. **Pretty-print the plan** — Run: `python -m prothon.promise plan` and show its output to the user. This is the ONLY way to present the plan — do NOT create your own tables, summaries, or descriptions.
+8. **Get approval** — Wait for the user to approve. Do not proceed until approved.
 
-Every task MUST list the specific reference skills relevant to it. Estimate line counts based on scope — these are checked with ±30% or ±30 lines tolerance (whichever is greater).
+**Task sizing rules:**
+- Each task must be **small enough** for a single subagent to complete independently
+- Each task must be **well-scoped** with clear file boundaries — no two independent tasks should modify the same file
+- Tasks must be **ordered** so dependencies come before dependents
+- Every task MUST list the specific reference skills relevant to it
+- Estimate line counts — these are checked with ±30% or ±30 lines tolerance (whichever is greater)
 
 ---
 
@@ -127,9 +121,11 @@ You are implementing a single task. Follow this loop:
 
 ## Guards
 
+- Do NOT write markdown plan files — no `docs/PLAN.md`, no `plan.md`, no markdown summaries. The plan is ALWAYS `docs/change_promise.toml` in TOML format.
+- Do NOT create your own plan tables, summaries, or wave diagrams — ALWAYS use `python -m prothon.promise plan` output and nothing else.
+- Do NOT improvise an alternative plan format — the TOML schema above is the contract. Every field is required.
 - Do NOT modify doc files (SPEC.md, DESIGN.md, PATTERNS.md) — if docs seem wrong, flag it to the user
 - Do NOT skip the planning phase — always generate `docs/change_promise.toml` and get approval first
 - Do NOT launch subagents that modify the same files in parallel — this causes conflicts
 - Do NOT paste file contents into subagent prompts — reference paths and let subagents read
 - Do NOT read full file contents yourself unless absolutely necessary for planning — stay lean
-- Do NOT skip the change promise — always generate `docs/change_promise.toml` before launching implementation subagents

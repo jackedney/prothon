@@ -41,6 +41,29 @@ def find_project_root(start: Path | None = None) -> Path | None:
 
 
 
+def _skills_dir() -> Path:
+    """Return the path to the bundled skills directory."""
+    return Path(__file__).parent / "skills"
+
+
+def _sync_skills(cwd: Path) -> None:
+    """Symlink bundled skills into the target project so Claude discovers them via /skill-name."""
+    bundled = _skills_dir()
+    if not bundled.is_dir():
+        return
+    target = cwd / ".agents" / "skills"
+    target.mkdir(parents=True, exist_ok=True)
+    for skill_dir in bundled.iterdir():
+        if not skill_dir.is_dir():
+            continue
+        dest = target / skill_dir.name
+        if dest.is_symlink():
+            dest.unlink()
+        elif dest.exists():
+            shutil.rmtree(dest)
+        dest.symlink_to(skill_dir.resolve())
+
+
 def launch_claude(skill_name: str, cwd: Path) -> None:
     """Launch an interactive Claude Code session that invokes the given skill."""
     if not shutil.which("claude"):
@@ -49,6 +72,7 @@ def launch_claude(skill_name: str, cwd: Path) -> None:
             "Install: https://docs.anthropic.com/en/docs/claude-code"
         )
         raise typer.Exit(1)
+    _sync_skills(cwd)
     subprocess.run(
         ["claude", "--dangerously-skip-permissions", f"/{skill_name}"],
         cwd=cwd,

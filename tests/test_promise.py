@@ -55,29 +55,35 @@ def promise_file(tmp_path: Path) -> Path:
 
 
 class TestWithinTolerance:
+    """Tests for _within_tolerance with ±30%/±30 tolerance."""
+
     def test_exact_match(self):
         assert _within_tolerance(100, 100) is True
 
-    def test_within_percentage(self):
-        assert _within_tolerance(100, 140) is True  # 40% off, under 50%
-        assert _within_tolerance(100, 60) is True
+    def test_at_thirty_percent_upper(self):
+        # 100 + 30% = 130
+        assert _within_tolerance(100, 130) is True
 
-    def test_outside_percentage_but_within_absolute(self):
-        # 20 expected, actual 60 — 200% off but only 40 lines diff (under 50)
-        assert _within_tolerance(20, 60) is True
+    def test_over_thirty_percent_upper(self):
+        assert _within_tolerance(100, 131) is False
 
-    def test_outside_both(self):
-        assert _within_tolerance(100, 200) is False  # 100% off, 100 lines diff
+    def test_at_thirty_percent_lower(self):
+        # 100 - 30% = 70
+        assert _within_tolerance(100, 70) is True
+
+    def test_under_thirty_percent_lower(self):
+        assert _within_tolerance(100, 69) is False
+
+    def test_absolute_floor_when_small_expected(self):
+        # 10 expected, 30% = 3, but absolute minimum is 30
+        # So tolerance is 30: range is -20 to 40
+        assert _within_tolerance(10, 40) is True
+        assert _within_tolerance(10, 41) is False
 
     def test_zero_expected_uses_absolute(self):
-        # 0 expected, 50% tolerance = 0, but absolute = 50
-        assert _within_tolerance(0, 40) is True
-        assert _within_tolerance(0, 51) is False
-
-    def test_small_expected_uses_absolute(self):
-        # 10 expected: 50% = 5, absolute = 50, so tolerance = 50
-        assert _within_tolerance(10, 55) is True
-        assert _within_tolerance(10, 61) is False
+        # 0 expected, 30% = 0, absolute = 30
+        assert _within_tolerance(0, 30) is True
+        assert _within_tolerance(0, 31) is False
 
 
 class TestLoadSaveRoundtrip:

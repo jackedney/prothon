@@ -94,9 +94,9 @@ def _git_diff_numstat() -> dict[str, tuple[int, int]]:
 
 
 def _within_tolerance(expected: int, actual: int) -> bool:
-    """Check if actual is within ±50% or ±50 lines of expected (whichever is greater)."""
-    pct_tolerance = expected * 0.5
-    abs_tolerance = 50
+    """Check if actual is within ±30% or ±30 lines of expected (whichever is greater)."""
+    pct_tolerance = expected * 0.3
+    abs_tolerance = 30
     tolerance = max(pct_tolerance, abs_tolerance)
     return abs(actual - expected) <= tolerance
 
@@ -156,7 +156,7 @@ def check_task(task_index: int, path: Path = PROMISE_PATH) -> TaskCheckReport:
             added_ok = _within_tolerance(expected_added, actual_added)
             detail = f"expected ~{expected_added}, actual {actual_added}"
             if not added_ok:
-                detail += " \u2014 outside \u00b150%/\u00b150 tolerance"
+                detail += " \u2014 outside \u00b130%/\u00b130 tolerance"
             report.checks.append(CheckResult(
                 name="lines_added",
                 passed=added_ok,
@@ -167,7 +167,7 @@ def check_task(task_index: int, path: Path = PROMISE_PATH) -> TaskCheckReport:
             removed_ok = _within_tolerance(expected_removed, actual_removed)
             detail = f"expected ~{expected_removed}, actual {actual_removed}"
             if not removed_ok:
-                detail += " \u2014 outside \u00b150%/\u00b150 tolerance"
+                detail += " \u2014 outside \u00b130%/\u00b130 tolerance"
             report.checks.append(CheckResult(
                 name="lines_removed",
                 passed=removed_ok,

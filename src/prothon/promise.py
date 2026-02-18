@@ -251,15 +251,20 @@ def plan(path: Path = PROMISE_PATH) -> str:
     return "\n".join(lines)
 
 
+def cleanup(path: Path = PROMISE_PATH) -> None:
+    """Remove the promise file after all tasks are complete."""
+    path.unlink()
+
+
 def main() -> None:
     args = sys.argv[1:]
     if not args:
-        print("Usage: python -m prothon.promise <check|status|complete|plan> [task-index]")
+        print("Usage: python -m prothon.promise <check|status|complete|plan|cleanup> [task-index]")
         sys.exit(1)
 
     command = args[0]
 
-    if not PROMISE_PATH.exists() and command in ("status", "check", "complete", "plan"):
+    if not PROMISE_PATH.exists() and command in ("status", "check", "complete", "plan", "cleanup"):
         print(f"No promise file found at {PROMISE_PATH}")
         sys.exit(1)
 
@@ -300,6 +305,10 @@ def main() -> None:
                 sys.exit(1)
         complete_task(idx, attempts=attempts)
         print(f"Task {idx} marked as completed ({attempts} attempt{'s' if attempts != 1 else ''}).")
+
+    elif command == "cleanup":
+        cleanup()
+        print("Promise file removed.")
 
     else:
         print(f"Unknown command: {command}")

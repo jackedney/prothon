@@ -123,6 +123,8 @@ You are implementing a single task. Follow this loop:
 
 2. **Report results** — Present the compliance report to the user. If there are failures, fix them and re-check until compliance passes or the remaining issues need user input.
 
+3. **Clean up** — Run: `python -m prothon.promise cleanup` to remove the promise file. Each execution generates a fresh promise, so stale ones must not persist.
+
 ## Guards
 
 - Do NOT modify doc files (SPEC.md, DESIGN.md, PATTERNS.md) — if docs seem wrong, flag it to the user

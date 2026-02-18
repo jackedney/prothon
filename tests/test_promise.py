@@ -17,6 +17,7 @@ from prothon.promise import (
     _git_diff_numstat,
     _within_tolerance,
     check_task,
+    cleanup,
     complete_task,
     load_promise,
     plan,
@@ -466,3 +467,20 @@ class TestPlan:
         assert "Task 0" in output
         assert "Task 1" in output
         assert "Deps:   Task 0" in output
+
+
+class TestCleanup:
+    """Tests for cleanup (removing the promise file)."""
+
+    def test_removes_promise_file(self, tmp_path):
+        p = tmp_path / "promise.toml"
+        save_promise({"metadata": {}, "tasks": []}, p)
+        assert p.exists()
+
+        cleanup(p)
+        assert not p.exists()
+
+    def test_raises_if_file_missing(self, tmp_path):
+        p = tmp_path / "promise.toml"
+        with pytest.raises(FileNotFoundError):
+            cleanup(p)

@@ -196,20 +196,77 @@ def status(path: Path = PROMISE_PATH) -> str:
     return "\n".join(lines)
 
 
+def plan(path: Path = PROMISE_PATH) -> str:
+    """Return a formatted plan view of all tasks for human review."""
+    data = load_promise(path)
+    metadata = data.get("metadata", {})
+    tasks = data.get("tasks", [])
+
+    base = metadata.get("base_commit", "unknown")
+    task_word = "task" if len(tasks) == 1 else "tasks"
+    lines = [f"PLAN: {len(tasks)} {task_word} (base: {base})", ""]
+
+    for i, task in enumerate(tasks):
+        lines.append(f"Task {i}: {task['title']}")
+        if goal := task.get("goal"):
+            lines.append(f"  Goal:   {goal}")
+
+        to_create = task.get("files_to_create", [])
+        if to_create:
+            lines.append(f"  Create: {', '.join(to_create)}")
+
+        to_modify = task.get("files_to_modify", [])
+        if to_modify:
+            lines.append(f"  Modify: {', '.join(to_modify)}")
+
+        to_remove = task.get("files_to_remove", [])
+        if to_remove:
+            lines.append(f"  Remove: {', '.join(to_remove)}")
+
+        context = task.get("context_files", [])
+        if context:
+            lines.append(f"  Reads:  {', '.join(context)}")
+
+        skills = task.get("reference_skills", [])
+        if skills:
+            lines.append(f"  Skills: {', '.join(skills)}")
+
+        docs = task.get("doc_sections", [])
+        if docs:
+            lines.append(f"  Docs:   {', '.join(docs)}")
+
+        deps = task.get("dependencies", [])
+        if deps:
+            dep_labels = [f"Task {d}" for d in deps]
+            lines.append(f"  Deps:   {', '.join(dep_labels)}")
+        else:
+            lines.append("  Deps:   none")
+
+        added = task.get("expected_lines_added", 0)
+        removed = task.get("expected_lines_removed", 0)
+        lines.append(f"  Lines:  +{added} / -{removed}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def main() -> None:
     args = sys.argv[1:]
     if not args:
-        print("Usage: python -m prothon.promise <check|status|complete> [task-index]")
+        print("Usage: python -m prothon.promise <check|status|complete|plan> [task-index]")
         sys.exit(1)
 
     command = args[0]
 
-    if not PROMISE_PATH.exists() and command in ("status", "check", "complete"):
+    if not PROMISE_PATH.exists() and command in ("status", "check", "complete", "plan"):
         print(f"No promise file found at {PROMISE_PATH}")
         sys.exit(1)
 
     if command == "status":
         print(status())
+
+    elif command == "plan":
+        print(plan())
 
     elif command == "check":
         if len(args) < 2:

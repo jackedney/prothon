@@ -19,6 +19,7 @@ from prothon.promise import (
     check_task,
     complete_task,
     load_promise,
+    plan,
     save_promise,
     status,
 )
@@ -354,3 +355,83 @@ class TestCheckTaskReadsBaseCommit:
 
         mock_names.assert_called_once_with("abc1234")
         mock_numstat.assert_called_once_with("abc1234")
+
+
+class TestPlan:
+    """Tests for plan pretty-print function."""
+
+    def test_formats_single_task(self, tmp_path):
+        data = {
+            "metadata": {"base_commit": "abc1234", "created_at": "2026-02-18T14:30:00"},
+            "tasks": [
+                {
+                    "title": "Add auth middleware",
+                    "goal": "JWT validation on all protected routes",
+                    "success_criteria": "401 without token",
+                    "files_to_create": ["src/auth.py", "tests/test_auth.py"],
+                    "files_to_modify": ["src/app.py"],
+                    "files_to_remove": [],
+                    "context_files": ["src/middleware.py"],
+                    "doc_sections": ["DESIGN.md#Auth"],
+                    "reference_skills": ["tech-fastapi"],
+                    "dependencies": [],
+                    "expected_lines_added": 120,
+                    "expected_lines_removed": 5,
+                    "completed": False,
+                    "attempts": 0,
+                }
+            ],
+        }
+        p = tmp_path / "promise.toml"
+        save_promise(data, p)
+
+        output = plan(p)
+        assert "PLAN: 1 task" in output
+        assert "base: abc1234" in output
+        assert "Task 0: Add auth middleware" in output
+        assert "JWT validation" in output
+        assert "src/auth.py" in output
+        assert "src/app.py" in output
+        assert "src/middleware.py" in output
+        assert "tech-fastapi" in output
+        assert "DESIGN.md#Auth" in output
+        assert "+120 / -5" in output
+
+    def test_formats_dependencies(self, tmp_path):
+        data = {
+            "metadata": {"base_commit": "abc1234"},
+            "tasks": [
+                {
+                    "title": "Task A",
+                    "goal": "First",
+                    "files_to_create": [],
+                    "files_to_modify": [],
+                    "files_to_remove": [],
+                    "dependencies": [],
+                    "expected_lines_added": 10,
+                    "expected_lines_removed": 0,
+                    "completed": False,
+                    "attempts": 0,
+                },
+                {
+                    "title": "Task B",
+                    "goal": "Second",
+                    "files_to_create": [],
+                    "files_to_modify": [],
+                    "files_to_remove": [],
+                    "dependencies": [0],
+                    "expected_lines_added": 20,
+                    "expected_lines_removed": 0,
+                    "completed": False,
+                    "attempts": 0,
+                },
+            ],
+        }
+        p = tmp_path / "promise.toml"
+        save_promise(data, p)
+
+        output = plan(p)
+        assert "PLAN: 2 tasks" in output
+        assert "Task 0" in output
+        assert "Task 1" in output
+        assert "Deps:   Task 0" in output

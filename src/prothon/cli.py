@@ -40,26 +40,17 @@ def find_project_root(start: Path | None = None) -> Path | None:
         current = parent
 
 
-def _skills_dir() -> Path:
-    """Return the path to the bundled skills directory."""
-    return Path(__file__).parent / "skills"
-
 
 def launch_claude(skill_name: str, cwd: Path) -> None:
-    """Launch an interactive Claude Code session with the given skill as initial prompt."""
+    """Launch an interactive Claude Code session that invokes the given skill."""
     if not shutil.which("claude"):
         typer.echo(
             "Error: Claude Code CLI not found.\n"
             "Install: https://docs.anthropic.com/en/docs/claude-code"
         )
         raise typer.Exit(1)
-    skill_path = _skills_dir() / skill_name / "SKILL.md"
-    if not skill_path.exists():
-        typer.echo(f"Error: Skill not found in package: {skill_name}")
-        raise typer.Exit(1)
-    skill_content = skill_path.read_text()
     subprocess.run(
-        ["claude", "--dangerously-skip-permissions", "--", skill_content],
+        ["claude", "--dangerously-skip-permissions", f"/{skill_name}"],
         cwd=cwd,
     )
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import tomli_w
@@ -12,6 +12,9 @@ import tomli_w
 from prothon.promise import (
     CheckResult,
     TaskCheckReport,
+    _git_diff_args,
+    _git_diff_names,
+    _git_diff_numstat,
     _within_tolerance,
     check_task,
     complete_task,
@@ -139,7 +142,7 @@ class TestCheckTask:
                 str(tmp_path / "tests" / "test_auth.py"): (25, 0),
             }),
         ):
-            report = check_task(0, promise_file)
+            report = check_task(0, path=promise_file)
             assert report.passed is True
             assert all(c.passed for c in report.checks)
 
@@ -156,7 +159,7 @@ class TestCheckTask:
             patch("prothon.promise._git_diff_names", return_value={"src/app.py"}),
             patch("prothon.promise._git_diff_numstat", return_value={}),
         ):
-            report = check_task(0, promise_file)
+            report = check_task(0, path=promise_file)
             create_check = next(c for c in report.checks if c.name == "files_to_create")
             assert create_check.passed is False
 
@@ -166,7 +169,7 @@ class TestCheckTask:
             patch("prothon.promise._git_diff_names", return_value=set()),  # nothing modified
             patch("prothon.promise._git_diff_numstat", return_value={}),
         ):
-            report = check_task(0, promise_file)
+            report = check_task(0, path=promise_file)
             modify_check = next(c for c in report.checks if c.name == "files_to_modify")
             assert modify_check.passed is False
 
@@ -181,7 +184,7 @@ class TestCheckTask:
             patch("prothon.promise._git_diff_names", return_value={"src/app.py"}),
             patch("prothon.promise._git_diff_numstat", return_value={}),
         ):
-            report = check_task(0, promise_file)
+            report = check_task(0, path=promise_file)
             remove_check = next(c for c in report.checks if c.name == "files_to_remove")
             assert remove_check.passed is False
 
@@ -193,7 +196,7 @@ class TestCheckTask:
                 "src/app.py": (5, 200),  # 200 removed vs 20 expected
             }),
         ):
-            report = check_task(0, promise_file)
+            report = check_task(0, path=promise_file)
             removed_check = next(
                 (c for c in report.checks if c.name == "lines_removed"), None
             )
@@ -202,7 +205,7 @@ class TestCheckTask:
 
     def test_index_out_of_range(self, promise_file: Path):
         with pytest.raises(IndexError):
-            check_task(99, promise_file)
+            check_task(99, path=promise_file)
 
     def test_empty_file_lists_skip_checks(self, promise_file: Path):
         """Tasks with empty file lists should skip those checks."""
@@ -210,7 +213,7 @@ class TestCheckTask:
             patch("prothon.promise._git_diff_names", return_value=set()),
             patch("prothon.promise._git_diff_numstat", return_value={}),
         ):
-            report = check_task(1, promise_file)  # task 1 has no modify/remove
+            report = check_task(1, path=promise_file)  # task 1 has no modify/remove
             check_names = [c.name for c in report.checks]
             assert "files_to_modify" not in check_names
             assert "files_to_remove" not in check_names
@@ -268,3 +271,86 @@ class TestReportFormat:
         formatted = report.format()
         assert "DISCREPANCY" in formatted
         assert "1 failure" in formatted
+
+
+class TestGitDiffArgs:
+    """Tests for base-commit-aware _git_diff_args."""
+
+    def test_uses_base_commit(self):
+        result = _git_diff_args("abc1234")
+        assert result == ["git", "diff", "abc1234"]
+
+    def test_different_commit(self):
+        result = _git_diff_args("def5678")
+        assert result == ["git", "diff", "def5678"]
+
+
+class TestGitDiffNames:
+    """Tests for _git_diff_names with base_commit parameter."""
+
+    @patch("prothon.promise.subprocess.run")
+    def test_returns_modified_files(self, mock_run):
+        mock_run.return_value = MagicMock(
+            stdout="src/app.py\nsrc/auth.py\n",
+        )
+        result = _git_diff_names("abc1234")
+        assert result == {"src/app.py", "src/auth.py"}
+        mock_run.assert_called_once_with(
+            ["git", "diff", "abc1234", "--name-only"],
+            capture_output=True,
+            text=True,
+        )
+
+
+class TestGitDiffNumstat:
+    """Tests for _git_diff_numstat with base_commit parameter."""
+
+    @patch("prothon.promise.subprocess.run")
+    def test_parses_numstat(self, mock_run):
+        mock_run.return_value = MagicMock(
+            stdout="50\t10\tsrc/app.py\n70\t0\tsrc/auth.py\n",
+        )
+        result = _git_diff_numstat("abc1234")
+        assert result == {
+            "src/app.py": (50, 10),
+            "src/auth.py": (70, 0),
+        }
+        mock_run.assert_called_once_with(
+            ["git", "diff", "abc1234", "--numstat"],
+            capture_output=True,
+            text=True,
+        )
+
+
+class TestCheckTaskReadsBaseCommit:
+    """Tests that check_task reads base_commit from promise metadata."""
+
+    @patch("prothon.promise._git_diff_numstat")
+    @patch("prothon.promise._git_diff_names")
+    def test_passes_base_commit_to_git_functions(
+        self, mock_names, mock_numstat, tmp_path
+    ):
+        mock_names.return_value = {"src/app.py"}
+        mock_numstat.return_value = {"src/app.py": (50, 5)}
+
+        promise_path = tmp_path / "promise.toml"
+        data = {
+            "metadata": {"base_commit": "abc1234"},
+            "tasks": [
+                {
+                    "title": "Test task",
+                    "files_to_create": [],
+                    "files_to_modify": ["src/app.py"],
+                    "files_to_remove": [],
+                    "expected_lines_added": 50,
+                    "expected_lines_removed": 5,
+                    "completed": False,
+                }
+            ],
+        }
+        save_promise(data, promise_path)
+
+        check_task(0, path=promise_path)
+
+        mock_names.assert_called_once_with("abc1234")
+        mock_numstat.assert_called_once_with("abc1234")

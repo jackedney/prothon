@@ -50,21 +50,15 @@ def save_promise(data: dict, path: Path = PROMISE_PATH) -> None:
     path.write_bytes(tomli_w.dumps(data).encode())
 
 
-def _git_diff_args() -> list[str]:
-    """Return the base git diff args: diff against HEAD if it exists, else --cached."""
-    result = subprocess.run(
-        ["git", "rev-parse", "--verify", "HEAD"],
-        capture_output=True,
-    )
-    if result.returncode == 0:
-        return ["git", "diff", "HEAD"]
-    return ["git", "diff", "--cached"]
+def _git_diff_args(base_commit: str) -> list[str]:
+    """Return the base git diff args against a specific commit."""
+    return ["git", "diff", base_commit]
 
 
-def _git_diff_names() -> set[str]:
-    """Return set of file paths that have been modified (staged or unstaged)."""
+def _git_diff_names(base_commit: str) -> set[str]:
+    """Return set of file paths changed since base_commit."""
     result = subprocess.run(
-        [*_git_diff_args(), "--name-only"],
+        [*_git_diff_args(base_commit), "--name-only"],
         capture_output=True,
         text=True,
     )
@@ -75,11 +69,11 @@ def _git_diff_names() -> set[str]:
     return names
 
 
-def _git_diff_numstat() -> dict[str, tuple[int, int]]:
-    """Return {filepath: (lines_added, lines_removed)} from git diff."""
+def _git_diff_numstat(base_commit: str) -> dict[str, tuple[int, int]]:
+    """Return {filepath: (lines_added, lines_removed)} since base_commit."""
     stats: dict[str, tuple[int, int]] = {}
     result = subprocess.run(
-        [*_git_diff_args(), "--numstat"],
+        [*_git_diff_args(base_commit), "--numstat"],
         capture_output=True,
         text=True,
     )
@@ -101,7 +95,7 @@ def _within_tolerance(expected: int, actual: int) -> bool:
     return abs(actual - expected) <= tolerance
 
 
-def check_task(task_index: int, path: Path = PROMISE_PATH) -> TaskCheckReport:
+def check_task(task_index: int, *, path: Path = PROMISE_PATH) -> TaskCheckReport:
     """Check a single task's promises against git reality."""
     data = load_promise(path)
     tasks = data.get("tasks", [])
@@ -109,6 +103,7 @@ def check_task(task_index: int, path: Path = PROMISE_PATH) -> TaskCheckReport:
         msg = f"Task index {task_index} out of range (0-{len(tasks) - 1})"
         raise IndexError(msg)
 
+    base_commit = data.get("metadata", {}).get("base_commit", "HEAD")
     task = tasks[task_index]
     report = TaskCheckReport(task_index=task_index, title=task["title"])
 
@@ -125,7 +120,7 @@ def check_task(task_index: int, path: Path = PROMISE_PATH) -> TaskCheckReport:
     # Check files_to_modify
     to_modify = task.get("files_to_modify", [])
     if to_modify:
-        diff_names = _git_diff_names()
+        diff_names = _git_diff_names(base_commit)
         modified = [f for f in to_modify if f in diff_names]
         report.checks.append(CheckResult(
             name="files_to_modify",
@@ -148,7 +143,7 @@ def check_task(task_index: int, path: Path = PROMISE_PATH) -> TaskCheckReport:
     expected_removed = task.get("expected_lines_removed", 0)
     all_files = set(to_create + to_modify)
     if all_files and (expected_added > 0 or expected_removed > 0):
-        numstat = _git_diff_numstat()
+        numstat = _git_diff_numstat(base_commit)
         actual_added = sum(numstat.get(f, (0, 0))[0] for f in all_files)
         actual_removed = sum(numstat.get(f, (0, 0))[1] for f in all_files)
 

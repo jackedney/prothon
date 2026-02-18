@@ -172,14 +172,15 @@ def check_task(task_index: int, *, path: Path = PROMISE_PATH) -> TaskCheckReport
     return report
 
 
-def complete_task(task_index: int, path: Path = PROMISE_PATH) -> None:
-    """Mark a task as completed in the promise file."""
+def complete_task(task_index: int, *, attempts: int = 1, path: Path = PROMISE_PATH) -> None:
+    """Mark a task as completed and record the number of attempts."""
     data = load_promise(path)
     tasks = data.get("tasks", [])
     if task_index < 0 or task_index >= len(tasks):
         msg = f"Task index {task_index} out of range (0-{len(tasks) - 1})"
         raise IndexError(msg)
     tasks[task_index]["completed"] = True
+    tasks[task_index]["attempts"] = attempts
     save_promise(data, path)
 
 
@@ -283,15 +284,22 @@ def main() -> None:
 
     elif command == "complete":
         if len(args) < 2:
-            print("Usage: python -m prothon.promise complete <task-index>")
+            print("Usage: python -m prothon.promise complete <task-index> [attempts]")
             sys.exit(1)
         try:
             idx = int(args[1])
         except ValueError:
             print(f"Error: task-index must be an integer, got '{args[1]}'")
             sys.exit(1)
-        complete_task(idx)
-        print(f"Task {idx} marked as completed.")
+        attempts = 1
+        if len(args) >= 3:
+            try:
+                attempts = int(args[2])
+            except ValueError:
+                print(f"Error: attempts must be an integer, got '{args[2]}'")
+                sys.exit(1)
+        complete_task(idx, attempts=attempts)
+        print(f"Task {idx} marked as completed ({attempts} attempt{'s' if attempts != 1 else ''}).")
 
     else:
         print(f"Unknown command: {command}")

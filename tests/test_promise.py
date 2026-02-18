@@ -222,14 +222,45 @@ class TestCheckTask:
 
 class TestCompleteTask:
     def test_marks_completed(self, promise_file: Path):
-        complete_task(0, promise_file)
+        complete_task(0, path=promise_file)
         data = load_promise(promise_file)
         assert data["tasks"][0]["completed"] is True
         assert data["tasks"][1]["completed"] is False
 
     def test_index_out_of_range(self, promise_file: Path):
         with pytest.raises(IndexError):
-            complete_task(99, promise_file)
+            complete_task(99, path=promise_file)
+
+    def test_marks_complete_and_records_attempts(self, tmp_path):
+        data = {
+            "metadata": {"base_commit": "abc1234"},
+            "tasks": [
+                {"title": "Test", "completed": False, "attempts": 0}
+            ],
+        }
+        p = tmp_path / "promise.toml"
+        save_promise(data, p)
+
+        complete_task(0, attempts=3, path=p)
+
+        result = load_promise(p)
+        assert result["tasks"][0]["completed"] is True
+        assert result["tasks"][0]["attempts"] == 3
+
+    def test_defaults_to_one_attempt(self, tmp_path):
+        data = {
+            "metadata": {"base_commit": "abc1234"},
+            "tasks": [
+                {"title": "Test", "completed": False, "attempts": 0}
+            ],
+        }
+        p = tmp_path / "promise.toml"
+        save_promise(data, p)
+
+        complete_task(0, path=p)
+
+        result = load_promise(p)
+        assert result["tasks"][0]["attempts"] == 1
 
 
 class TestStatus:
@@ -240,7 +271,7 @@ class TestStatus:
         assert "0/2 completed" in output
 
     def test_reflects_completion(self, promise_file: Path):
-        complete_task(0, promise_file)
+        complete_task(0, path=promise_file)
         output = status(promise_file)
         assert "1/2 completed" in output
 

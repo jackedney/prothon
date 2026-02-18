@@ -76,20 +76,6 @@ def test_creates_doc_scaffolds(generated_project):
         assert doc.stat().st_size > 0
 
 
-def test_creates_skill_files(generated_project):
-    skills_dir = generated_project / ".agents" / "skills"
-    expected = [
-        "spec-writer",
-        "design-writer",
-        "tech-researcher",
-        "patterns-writer",
-        "doc-harmonizer",
-        "compliance-checker",
-    ]
-    for name in expected:
-        assert (skills_dir / name / "SKILL.md").exists()
-
-
 def test_creates_skill_symlinks(generated_project):
     for dir_name in (".claude", ".opencode"):
         link = generated_project / dir_name / "skills"

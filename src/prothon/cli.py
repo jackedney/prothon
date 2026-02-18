@@ -40,33 +40,26 @@ def find_project_root(start: Path | None = None) -> Path | None:
         current = parent
 
 
-def _sync_skills(root: Path) -> None:
-    """Sync all skills from the package template to the project."""
-    template_skills = _template_dir() / ".agents" / "skills"
-    if not template_skills.is_dir():
-        return
-    project_skills = root / ".agents" / "skills"
-    for skill_dir in template_skills.iterdir():
-        if not skill_dir.is_dir():
-            continue
-        src = skill_dir / "SKILL.md"
-        if src.exists():
-            dst = project_skills / skill_dir.name / "SKILL.md"
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
+def _skills_dir() -> Path:
+    """Return the path to the bundled skills directory."""
+    return Path(__file__).parent / "skills"
 
 
 def launch_claude(skill_name: str, cwd: Path) -> None:
-    """Launch an interactive Claude Code session that invokes the given skill."""
+    """Launch an interactive Claude Code session with the given skill as initial prompt."""
     if not shutil.which("claude"):
         typer.echo(
             "Error: Claude Code CLI not found.\n"
             "Install: https://docs.anthropic.com/en/docs/claude-code"
         )
         raise typer.Exit(1)
-    _sync_skills(cwd)
+    skill_path = _skills_dir() / skill_name / "SKILL.md"
+    if not skill_path.exists():
+        typer.echo(f"Error: Skill not found in package: {skill_name}")
+        raise typer.Exit(1)
+    skill_content = skill_path.read_text()
     subprocess.run(
-        ["claude", "--dangerously-skip-permissions", f"/{skill_name}"],
+        ["claude", "--dangerously-skip-permissions", skill_content],
         cwd=cwd,
     )
 
@@ -81,14 +74,6 @@ def _require_project_root() -> Path:
         )
         raise typer.Exit(1)
     return root
-
-
-def _require_skill(root: Path, skill_name: str) -> None:
-    """Verify a skill file exists in the project."""
-    skill_path = root / ".agents" / "skills" / skill_name / "SKILL.md"
-    if not skill_path.exists():
-        typer.echo(f"Error: Skill file not found: {skill_path}")
-        raise typer.Exit(1)
 
 
 def generate(dest: Path, context: dict) -> None:
@@ -183,7 +168,10 @@ def callback(ctx: typer.Context) -> None:
 
 @app.command()
 def new(
-    destination: str = typer.Argument(default=".", help="Directory to create the project in (defaults to current directory)"),
+    destination: str = typer.Argument(
+        default=".",
+        help="Directory to create the project in (defaults to current directory)",
+    ),
 ) -> None:
     """Generate a new Python project with docs-first AI workflow."""
     dest = Path(destination).resolve()
@@ -200,21 +188,15 @@ def new(
         typer.echo("Must be a valid email address (e.g. user@example.com)")
         author_email = typer.prompt("Author email", default="")
 
-    python_version = typer.prompt(
-        "Python version (3.11/3.12/3.13)", default="3.13"
-    )
+    python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
     while python_version not in ("3.11", "3.12", "3.13"):
         typer.echo("Must be 3.11, 3.12, or 3.13")
-        python_version = typer.prompt(
-            "Python version (3.11/3.12/3.13)", default="3.13"
-        )
+        python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
 
     license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
     while license_choice not in ("MIT", "Apache-2.0", "None"):
         typer.echo("Must be MIT, Apache-2.0, or None")
-        license_choice = typer.prompt(
-            "License (MIT/Apache-2.0/None)", default="MIT"
-        )
+        license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
 
     context = {
         "project_name": project_name,
@@ -240,7 +222,6 @@ def new(
 def spec() -> None:
     """Write or revise SPEC.md — extract requirements through probing questions."""
     root = _require_project_root()
-    _require_skill(root, "spec-writer")
     launch_claude("spec-writer", root)
 
 
@@ -248,7 +229,6 @@ def spec() -> None:
 def design() -> None:
     """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
     root = _require_project_root()
-    _require_skill(root, "design-writer")
     launch_claude("design-writer", root)
 
 
@@ -256,7 +236,6 @@ def design() -> None:
 def patterns() -> None:
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
     root = _require_project_root()
-    _require_skill(root, "patterns-writer")
     launch_claude("patterns-writer", root)
 
 
@@ -264,7 +243,6 @@ def patterns() -> None:
 def execute() -> None:
     """Align source code to documentation — plan and implement with subagents."""
     root = _require_project_root()
-    _require_skill(root, "execute")
     launch_claude("execute", root)
 
 
@@ -272,5 +250,4 @@ def execute() -> None:
 def compliance() -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
-    _require_skill(root, "compliance-checker")
     launch_claude("compliance-checker", root)

@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import tomli_w
+import tomlkit
 
 from prothon.promise import (
     CheckResult,
@@ -54,7 +54,7 @@ SAMPLE_PROMISE = {
 @pytest.fixture
 def promise_file(tmp_path: Path) -> Path:
     p = tmp_path / "change_promise.toml"
-    p.write_bytes(tomli_w.dumps(SAMPLE_PROMISE).encode())
+    p.write_text(tomlkit.dumps(SAMPLE_PROMISE))
     return p
 
 

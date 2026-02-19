@@ -8,7 +8,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import tomli_w
+import tomlkit
 
 PROMISE_PATH = Path("docs/change_promise.toml")
 
@@ -51,7 +51,7 @@ def load_promise(path: Path = PROMISE_PATH) -> dict:
 
 
 def save_promise(data: dict, path: Path = PROMISE_PATH) -> None:
-    path.write_bytes(tomli_w.dumps(data).encode())
+    path.write_text(tomlkit.dumps(data))
 
 
 def _git_diff_args(base_commit: str) -> list[str]:

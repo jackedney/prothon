@@ -45,7 +45,7 @@ completed = false
 attempts = 0
 ```
 
-7. **Pretty-print the plan** — Run: `python -m prothon.promise plan` and show its output to the user. This is the ONLY way to present the plan — do NOT create your own tables, summaries, or descriptions.
+7. **Pretty-print the plan** — Run: `uvx prothon promise plan` and show its output to the user. This is the ONLY way to present the plan — do NOT create your own tables, summaries, or descriptions.
 8. **Get approval** — Wait for the user to approve. Do not proceed until approved.
 
 **Task sizing rules:**
@@ -67,7 +67,7 @@ For each task (respecting dependency order):
 4. **After each subagent returns:**
    - If succeeded (task marked complete): continue to next task
    - If failed (3 retries exhausted): report to user, ask skip/retry/abort
-5. **Track progress** — Run `python -m prothon.promise status` to see overall progress.
+5. **Track progress** — Run `uvx prothon promise status` to see overall progress.
 
 ### Subagent Prompt Template
 
@@ -90,7 +90,7 @@ You are implementing a single task. Follow this loop:
    a) Run: poe check
    b) Stage files: git add {all task files}
    c) Commit: git commit -m "feat: {title}"
-   d) Run: python -m prothon.promise check {task_index}
+   d) Run: uvx prothon promise check {task_index}
 
 4. IF ANY CHECK FAILS:
    - Read the error output
@@ -98,7 +98,7 @@ You are implementing a single task. Follow this loop:
    - Go to step 3 (max 3 total attempts)
 
 5. IF ALL PASS:
-   - Run: python -m prothon.promise complete {task_index} {attempts}
+   - Run: uvx prothon promise complete {task_index} {attempts}
    - Report success
 ```
 
@@ -117,12 +117,12 @@ You are implementing a single task. Follow this loop:
 
 2. **Report results** — Present the compliance report to the user. If there are failures, fix them and re-check until compliance passes or the remaining issues need user input.
 
-3. **Clean up** — Run: `python -m prothon.promise cleanup` to remove the promise file. Each execution generates a fresh promise, so stale ones must not persist.
+3. **Clean up** — Run: `uvx prothon promise cleanup` to remove the promise file. Each execution generates a fresh promise, so stale ones must not persist.
 
 ## Guards
 
 - Do NOT write markdown plan files — no `docs/PLAN.md`, no `plan.md`, no markdown summaries. The plan is ALWAYS `docs/change_promise.toml` in TOML format.
-- Do NOT create your own plan tables, summaries, or wave diagrams — ALWAYS use `python -m prothon.promise plan` output and nothing else.
+- Do NOT create your own plan tables, summaries, or wave diagrams — ALWAYS use `uvx prothon promise plan` output and nothing else.
 - Do NOT improvise an alternative plan format — the TOML schema above is the contract. Every field is required.
 - Do NOT modify doc files (SPEC.md, DESIGN.md, PATTERNS.md) — if docs seem wrong, flag it to the user
 - Do NOT skip the planning phase — always generate `docs/change_promise.toml` and get approval first

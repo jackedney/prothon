@@ -8,11 +8,16 @@ from pathlib import Path
 import typer
 from jinja2 import Environment, BaseLoader
 
+from prothon import promise
+
 app = typer.Typer(
     add_completion=False,
     help="Python project generator with docs-first AI workflow.",
     invoke_without_command=True,
 )
+
+promise_app = typer.Typer(help="Manage change promises (plan, check, execute).")
+app.add_typer(promise_app, name="promise")
 
 COPIER_ANSWERS_TEMPLATE = "{{ _copier_conf.answers_file }}.jinja"
 
@@ -38,7 +43,6 @@ def find_project_root(start: Path | None = None) -> Path | None:
         if parent == current:
             return None
         current = parent
-
 
 
 def _skills_dir() -> Path:
@@ -261,3 +265,67 @@ def compliance() -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
     launch_claude("prothon-compliance-checker", root)
+
+
+# --- Promise subcommands ---
+
+
+@promise_app.command("plan")
+def promise_plan() -> None:
+    """Pretty-print the change promise plan."""
+    _require_project_root()
+    if not promise.PROMISE_PATH.exists():
+        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
+        raise typer.Exit(1)
+    typer.echo(promise.plan())
+
+
+@promise_app.command("status")
+def promise_status() -> None:
+    """Show completion status of all tasks."""
+    _require_project_root()
+    if not promise.PROMISE_PATH.exists():
+        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
+        raise typer.Exit(1)
+    typer.echo(promise.status())
+
+
+@promise_app.command("check")
+def promise_check(
+    task_index: int = typer.Argument(help="Zero-based task index to check"),
+) -> None:
+    """Verify a task's promises against git reality."""
+    _require_project_root()
+    if not promise.PROMISE_PATH.exists():
+        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
+        raise typer.Exit(1)
+    report = promise.check_task(task_index)
+    typer.echo(report.format())
+    if not report.passed:
+        raise typer.Exit(1)
+
+
+@promise_app.command("complete")
+def promise_complete(
+    task_index: int = typer.Argument(help="Zero-based task index to mark complete"),
+    attempts: int = typer.Argument(default=1, help="Number of attempts taken"),
+) -> None:
+    """Mark a task as completed and record attempt count."""
+    _require_project_root()
+    if not promise.PROMISE_PATH.exists():
+        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
+        raise typer.Exit(1)
+    promise.complete_task(task_index, attempts=attempts)
+    suffix = "s" if attempts != 1 else ""
+    typer.echo(f"Task {task_index} marked as completed ({attempts} attempt{suffix}).")
+
+
+@promise_app.command("cleanup")
+def promise_cleanup() -> None:
+    """Remove the promise file after all tasks are complete."""
+    _require_project_root()
+    if not promise.PROMISE_PATH.exists():
+        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
+        raise typer.Exit(1)
+    promise.cleanup()
+    typer.echo("Promise file removed.")

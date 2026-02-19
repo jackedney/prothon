@@ -13,6 +13,12 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "poethepoet>=0.32",
+    "ruff>=0.15",
+    "ty>=0.0.1a",
+    "bandit[toml]>=1.9",
+    "vulture>=2.14",
+    "complexipy>=5.1",
 ]
 
 [build-system]
@@ -27,3 +33,17 @@ packages = ["src/prothon"]
 
 [project.scripts]
 prothon = "prothon.cli:app"
+
+[tool.poe.tasks]
+lint = "ruff check src/ tests/"
+format = "ruff format --check src/ tests/"
+typecheck = "ty check"
+test = "pytest tests/"
+security = "bandit -c pyproject.toml -r src/"
+deadcode = "vulture src/ --min-confidence=61"
+complexity = "complexipy src/ --max-complexity-allowed 20"
+check = ["lint", "format", "typecheck", "test", "security", "deadcode", "complexity"]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B404", "B603", "B607", "B701"]

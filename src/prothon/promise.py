@@ -1,27 +1,42 @@
-"""Change promise checker — verifies task completion against declared promises."""
+"""Promise data model, TOML I/O, git diff verification."""
 
 from __future__ import annotations
 
-import subprocess
-import sys
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import tomlkit
 
+from prothon.exceptions import PromiseError
+from prothon.git import GitDiffProvider, SubprocessGitDiff
+
 PROMISE_PATH = Path("docs/change_promise.toml")
 
 
 @dataclass
+class FileCheckDetail:
+    """Per-file pass/fail detail within a check."""
+
+    path: str
+    expected_state: str
+    actual_state: str
+    passed: bool
+
+
+@dataclass
 class CheckResult:
+    """Single verification check result."""
+
     name: str
     passed: bool
     detail: str
+    file_details: list[FileCheckDetail] = field(default_factory=list)
 
 
 @dataclass
 class TaskCheckReport:
+    """Aggregated verification report for one task."""
+
     task_index: int
     title: str
     checks: list[CheckResult] = field(default_factory=list)
@@ -31,6 +46,7 @@ class TaskCheckReport:
         return all(c.passed for c in self.checks)
 
     def format(self) -> str:
+        """Return a human-readable summary of the check results."""
         status = "PASS" if self.passed else "DISCREPANCY"
         failures = sum(1 for c in self.checks if not c.passed)
         lines = [f'TASK {self.task_index}: "{self.title}"']
@@ -46,142 +62,244 @@ class TaskCheckReport:
         return "\n".join(lines)
 
 
-def load_promise(path: Path = PROMISE_PATH) -> dict:
-    return tomllib.loads(path.read_text())
+@dataclass
+class Task:
+    """A single promised task within the change promise."""
+
+    title: str
+    goal: str = ""
+    success_criteria: str = ""
+    files_to_create: list[str] = field(default_factory=list)
+    files_to_modify: list[str] = field(default_factory=list)
+    files_to_remove: list[str] = field(default_factory=list)
+    expected_lines_added: int = 0
+    expected_lines_removed: int = 0
+    context_files: list[str] = field(default_factory=list)
+    doc_sections: list[str] = field(default_factory=list)
+    reference_skills: list[str] = field(default_factory=list)
+    dependencies: list[int] = field(default_factory=list)
+    completed: bool = False
+    attempts: int = 0
 
 
-def save_promise(data: dict, path: Path = PROMISE_PATH) -> None:
-    path.write_text(tomlkit.dumps(data))
+@dataclass
+class Metadata:
+    """Promise-level metadata (base commit, timestamps, etc.)."""
+
+    base_commit: str = ""
+    created_at: str = ""
 
 
-def _git_diff_args(base_commit: str) -> list[str]:
-    """Return the base git diff args against a specific commit."""
-    return ["git", "diff", base_commit]
+@dataclass
+class Promise:
+    """Top-level change promise containing metadata and tasks."""
+
+    metadata: Metadata = field(default_factory=Metadata)
+    tasks: list[Task] = field(default_factory=list)
 
 
-def _git_diff_names(base_commit: str) -> set[str]:
-    """Return set of file paths changed since base_commit."""
-    result = subprocess.run(
-        [*_git_diff_args(base_commit), "--name-only"],
-        capture_output=True,
-        text=True,
+def _task_from_dict(d: dict) -> Task:
+    """Construct a Task from a TOML dict, tolerating missing keys."""
+    return Task(
+        title=d.get("title", ""),
+        goal=d.get("goal", ""),
+        success_criteria=d.get("success_criteria", ""),
+        files_to_create=list(d.get("files_to_create", [])),
+        files_to_modify=list(d.get("files_to_modify", [])),
+        files_to_remove=list(d.get("files_to_remove", [])),
+        expected_lines_added=d.get("expected_lines_added", 0),
+        expected_lines_removed=d.get("expected_lines_removed", 0),
+        context_files=list(d.get("context_files", [])),
+        doc_sections=list(d.get("doc_sections", [])),
+        reference_skills=list(d.get("reference_skills", [])),
+        dependencies=list(d.get("dependencies", [])),
+        completed=d.get("completed", False),
+        attempts=d.get("attempts", 0),
     )
-    names = set()
-    for line in result.stdout.strip().splitlines():
-        if line.strip():
-            names.add(line.strip())
-    return names
 
 
-def _git_diff_numstat(base_commit: str) -> dict[str, tuple[int, int]]:
-    """Return {filepath: (lines_added, lines_removed)} since base_commit."""
-    stats: dict[str, tuple[int, int]] = {}
-    result = subprocess.run(
-        [*_git_diff_args(base_commit), "--numstat"],
-        capture_output=True,
-        text=True,
+def _metadata_from_dict(d: dict) -> Metadata:
+    """Construct a Metadata from a TOML dict, tolerating missing keys."""
+    return Metadata(
+        base_commit=d.get("base_commit", ""),
+        created_at=d.get("created_at", ""),
     )
-    for line in result.stdout.strip().splitlines():
-        parts = line.split("\t")
-        if len(parts) == 3:
-            added_str, removed_str, filepath = parts
-            if added_str == "-" or removed_str == "-":
-                continue  # binary file
-            stats[filepath] = (int(added_str), int(removed_str))
-    return stats
+
+
+def _task_to_dict(task: Task) -> dict:
+    """Serialize a Task to a plain dict for TOML output."""
+    return {
+        "title": task.title,
+        "goal": task.goal,
+        "success_criteria": task.success_criteria,
+        "files_to_create": task.files_to_create,
+        "files_to_modify": task.files_to_modify,
+        "files_to_remove": task.files_to_remove,
+        "expected_lines_added": task.expected_lines_added,
+        "expected_lines_removed": task.expected_lines_removed,
+        "context_files": task.context_files,
+        "doc_sections": task.doc_sections,
+        "reference_skills": task.reference_skills,
+        "dependencies": task.dependencies,
+        "completed": task.completed,
+        "attempts": task.attempts,
+    }
+
+
+def load_promise(path: Path = PROMISE_PATH) -> Promise:
+    """Load a change promise from a TOML file.
+
+    Args:
+        path: Path to the promise TOML file.
+
+    Returns:
+        A Promise dataclass populated from the file.
+    """
+    doc = tomlkit.parse(path.read_text())
+    metadata = _metadata_from_dict(dict(doc.get("metadata", {})))
+    tasks = [_task_from_dict(dict(t)) for t in doc.get("tasks", [])]
+    return Promise(metadata=metadata, tasks=tasks)
+
+
+def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
+    """Serialize a Promise dataclass to TOML and write to disk.
+
+    Args:
+        promise: The Promise to save.
+        path: Path to write the TOML file.
+    """
+    doc = tomlkit.document()
+
+    meta = tomlkit.table()
+    if promise.metadata.base_commit:
+        meta.add("base_commit", promise.metadata.base_commit)
+    if promise.metadata.created_at:
+        meta.add("created_at", promise.metadata.created_at)
+    doc.add("metadata", meta)
+
+    tasks_aot = tomlkit.aot()
+    for task in promise.tasks:
+        tbl = tomlkit.table()
+        for key, value in _task_to_dict(task).items():
+            tbl.add(key, value)
+        tasks_aot.append(tbl)
+    doc.add("tasks", tasks_aot)
+
+    path.write_text(tomlkit.dumps(doc))
 
 
 def _within_tolerance(expected: int, actual: int) -> bool:
-    """Check if actual is within ±30% or ±30 lines of expected (whichever is greater)."""
+    """Check if actual is within +/-30% or +/-30 lines of expected (whichever is greater)."""
     pct_tolerance = expected * 0.3
     abs_tolerance = 30
     tolerance = max(pct_tolerance, abs_tolerance)
     return abs(actual - expected) <= tolerance
 
 
-def check_task(task_index: int, *, path: Path = PROMISE_PATH) -> TaskCheckReport:
-    """Check a single task's promises against git reality."""
-    data = load_promise(path)
-    tasks = data.get("tasks", [])
-    if task_index < 0 or task_index >= len(tasks):
-        msg = f"Task index {task_index} out of range (0-{len(tasks) - 1})"
-        raise IndexError(msg)
+def _check_line_count(name: str, expected: int, actual: int) -> CheckResult:
+    """Build a CheckResult for a line-count metric."""
+    passed = _within_tolerance(expected, actual)
+    detail = f"expected ~{expected}, actual {actual}"
+    if not passed:
+        detail += " \u2014 outside \u00b130%/\u00b130 tolerance"
+    return CheckResult(name=name, passed=passed, detail=detail)
 
-    base_commit = data.get("metadata", {}).get("base_commit", "HEAD")
-    task = tasks[task_index]
-    report = TaskCheckReport(task_index=task_index, title=task["title"])
+
+def _check_line_counts(
+    task: Task, diff: GitDiffProvider, base_commit: str
+) -> list[CheckResult]:
+    """Check added/removed line counts against tolerances."""
+    all_files = set(task.files_to_create + task.files_to_modify)
+    if not all_files:
+        return []
+    if task.expected_lines_added <= 0 and task.expected_lines_removed <= 0:
+        return []
+
+    numstat = diff.diff_numstat(base_commit)
+    actual_added = sum(numstat.get(f, (0, 0))[0] for f in all_files)
+    actual_removed = sum(numstat.get(f, (0, 0))[1] for f in all_files)
+
+    results: list[CheckResult] = []
+    if task.expected_lines_added > 0:
+        results.append(
+            _check_line_count("lines_added", task.expected_lines_added, actual_added)
+        )
+    if task.expected_lines_removed > 0:
+        results.append(
+            _check_line_count(
+                "lines_removed", task.expected_lines_removed, actual_removed
+            )
+        )
+    return results
+
+
+def check_task(
+    task_index: int,
+    *,
+    diff: GitDiffProvider | None = None,
+    path: Path = PROMISE_PATH,
+) -> TaskCheckReport:
+    """Check a single task's promises against git reality.
+
+    Args:
+        task_index: Zero-based index of the task to check.
+        diff: Git diff data source; defaults to SubprocessGitDiff().
+        path: Path to the promise TOML file.
+
+    Returns:
+        A TaskCheckReport with per-check PASS/FAIL details.
+
+    Raises:
+        PromiseError: If task_index is out of range.
+    """
+    if diff is None:
+        diff = SubprocessGitDiff()
+
+    promise = load_promise(path)
+    if task_index < 0 or task_index >= len(promise.tasks):
+        msg = f"Task index {task_index} out of range (0-{len(promise.tasks) - 1})"
+        raise PromiseError(msg)
+
+    base_commit = promise.metadata.base_commit or "HEAD"
+    task = promise.tasks[task_index]
+    report = TaskCheckReport(task_index=task_index, title=task.title)
 
     # Check files_to_create
-    to_create = task.get("files_to_create", [])
-    if to_create:
-        existing = [f for f in to_create if Path(f).exists()]
+    if task.files_to_create:
+        existing = [f for f in task.files_to_create if Path(f).exists()]
         report.checks.append(
             CheckResult(
                 name="files_to_create",
-                passed=len(existing) == len(to_create),
-                detail=f"{len(existing)}/{len(to_create)} exist",
+                passed=len(existing) == len(task.files_to_create),
+                detail=f"{len(existing)}/{len(task.files_to_create)} exist",
             )
         )
 
     # Check files_to_modify
-    to_modify = task.get("files_to_modify", [])
-    if to_modify:
-        diff_names = _git_diff_names(base_commit)
-        modified = [f for f in to_modify if f in diff_names]
+    if task.files_to_modify:
+        diff_names = diff.diff_names(base_commit)
+        modified = [f for f in task.files_to_modify if f in diff_names]
         report.checks.append(
             CheckResult(
                 name="files_to_modify",
-                passed=len(modified) == len(to_modify),
-                detail=f"{len(modified)}/{len(to_modify)} modified",
+                passed=len(modified) == len(task.files_to_modify),
+                detail=f"{len(modified)}/{len(task.files_to_modify)} modified",
             )
         )
 
     # Check files_to_remove
-    to_remove = task.get("files_to_remove", [])
-    if to_remove:
-        removed = [f for f in to_remove if not Path(f).exists()]
+    if task.files_to_remove:
+        removed = [f for f in task.files_to_remove if not Path(f).exists()]
         report.checks.append(
             CheckResult(
                 name="files_to_remove",
-                passed=len(removed) == len(to_remove),
-                detail=f"{len(removed)}/{len(to_remove)} removed",
+                passed=len(removed) == len(task.files_to_remove),
+                detail=f"{len(removed)}/{len(task.files_to_remove)} removed",
             )
         )
 
     # Check line counts
-    expected_added = task.get("expected_lines_added", 0)
-    expected_removed = task.get("expected_lines_removed", 0)
-    all_files = set(to_create + to_modify)
-    if all_files and (expected_added > 0 or expected_removed > 0):
-        numstat = _git_diff_numstat(base_commit)
-        actual_added = sum(numstat.get(f, (0, 0))[0] for f in all_files)
-        actual_removed = sum(numstat.get(f, (0, 0))[1] for f in all_files)
-
-        if expected_added > 0:
-            added_ok = _within_tolerance(expected_added, actual_added)
-            detail = f"expected ~{expected_added}, actual {actual_added}"
-            if not added_ok:
-                detail += " \u2014 outside \u00b130%/\u00b130 tolerance"
-            report.checks.append(
-                CheckResult(
-                    name="lines_added",
-                    passed=added_ok,
-                    detail=detail,
-                )
-            )
-
-        if expected_removed > 0:
-            removed_ok = _within_tolerance(expected_removed, actual_removed)
-            detail = f"expected ~{expected_removed}, actual {actual_removed}"
-            if not removed_ok:
-                detail += " \u2014 outside \u00b130%/\u00b130 tolerance"
-            report.checks.append(
-                CheckResult(
-                    name="lines_removed",
-                    passed=removed_ok,
-                    detail=detail,
-                )
-            )
+    report.checks.extend(_check_line_counts(task, diff, base_commit))
 
     return report
 
@@ -189,80 +307,77 @@ def check_task(task_index: int, *, path: Path = PROMISE_PATH) -> TaskCheckReport
 def complete_task(
     task_index: int, *, attempts: int = 1, path: Path = PROMISE_PATH
 ) -> None:
-    """Mark a task as completed and record the number of attempts."""
-    data = load_promise(path)
-    tasks = data.get("tasks", [])
-    if task_index < 0 or task_index >= len(tasks):
-        msg = f"Task index {task_index} out of range (0-{len(tasks) - 1})"
-        raise IndexError(msg)
-    tasks[task_index]["completed"] = True
-    tasks[task_index]["attempts"] = attempts
-    save_promise(data, path)
+    """Mark a task as completed and record the number of attempts.
+
+    Args:
+        task_index: Zero-based index of the task to mark complete.
+        attempts: Number of attempts taken to complete the task.
+        path: Path to the promise TOML file.
+
+    Raises:
+        PromiseError: If task_index is out of range.
+    """
+    promise = load_promise(path)
+    if task_index < 0 or task_index >= len(promise.tasks):
+        msg = f"Task index {task_index} out of range (0-{len(promise.tasks) - 1})"
+        raise PromiseError(msg)
+    promise.tasks[task_index].completed = True
+    promise.tasks[task_index].attempts = attempts
+    save_promise(promise, path)
 
 
 def status(path: Path = PROMISE_PATH) -> str:
     """Return a formatted status of all tasks."""
-    data = load_promise(path)
-    tasks = data.get("tasks", [])
+    promise = load_promise(path)
     lines = []
-    for i, task in enumerate(tasks):
-        mark = "\u2713" if task.get("completed") else "\u2717"
-        lines.append(f"  [{mark}] {i}: {task['title']}")
-    done = sum(1 for t in tasks if t.get("completed"))
-    lines.append(f"\n  {done}/{len(tasks)} completed")
+    for i, task in enumerate(promise.tasks):
+        mark = "\u2713" if task.completed else "\u2717"
+        lines.append(f"  [{mark}] {i}: {task.title}")
+    done = sum(1 for t in promise.tasks if t.completed)
+    lines.append(f"\n  {done}/{len(promise.tasks)} completed")
     return "\n".join(lines)
+
+
+def _format_task_plan(index: int, task: Task) -> list[str]:
+    """Format a single task for the plan view."""
+    lines = [f"Task {index}: {task.title}"]
+    if task.goal:
+        lines.append(f"  Goal:   {task.goal}")
+
+    _optional_list = [
+        ("Create", task.files_to_create),
+        ("Modify", task.files_to_modify),
+        ("Remove", task.files_to_remove),
+        ("Reads", task.context_files),
+        ("Skills", task.reference_skills),
+        ("Docs", task.doc_sections),
+    ]
+    for label, items in _optional_list:
+        if items:
+            lines.append(f"  {label + ':':8s}{', '.join(items)}")
+
+    if task.dependencies:
+        dep_labels = [f"Task {d}" for d in task.dependencies]
+        lines.append(f"  Deps:   {', '.join(dep_labels)}")
+    else:
+        lines.append("  Deps:   none")
+
+    lines.append(
+        f"  Lines:  +{task.expected_lines_added} / -{task.expected_lines_removed}"
+    )
+    lines.append("")
+    return lines
 
 
 def plan(path: Path = PROMISE_PATH) -> str:
     """Return a formatted plan view of all tasks for human review."""
-    data = load_promise(path)
-    metadata = data.get("metadata", {})
-    tasks = data.get("tasks", [])
+    promise = load_promise(path)
+    base = promise.metadata.base_commit or "unknown"
+    task_word = "task" if len(promise.tasks) == 1 else "tasks"
+    lines = [f"PLAN: {len(promise.tasks)} {task_word} (base: {base})", ""]
 
-    base = metadata.get("base_commit", "unknown")
-    task_word = "task" if len(tasks) == 1 else "tasks"
-    lines = [f"PLAN: {len(tasks)} {task_word} (base: {base})", ""]
-
-    for i, task in enumerate(tasks):
-        lines.append(f"Task {i}: {task['title']}")
-        if goal := task.get("goal"):
-            lines.append(f"  Goal:   {goal}")
-
-        to_create = task.get("files_to_create", [])
-        if to_create:
-            lines.append(f"  Create: {', '.join(to_create)}")
-
-        to_modify = task.get("files_to_modify", [])
-        if to_modify:
-            lines.append(f"  Modify: {', '.join(to_modify)}")
-
-        to_remove = task.get("files_to_remove", [])
-        if to_remove:
-            lines.append(f"  Remove: {', '.join(to_remove)}")
-
-        context = task.get("context_files", [])
-        if context:
-            lines.append(f"  Reads:  {', '.join(context)}")
-
-        skills = task.get("reference_skills", [])
-        if skills:
-            lines.append(f"  Skills: {', '.join(skills)}")
-
-        docs = task.get("doc_sections", [])
-        if docs:
-            lines.append(f"  Docs:   {', '.join(docs)}")
-
-        deps = task.get("dependencies", [])
-        if deps:
-            dep_labels = [f"Task {d}" for d in deps]
-            lines.append(f"  Deps:   {', '.join(dep_labels)}")
-        else:
-            lines.append("  Deps:   none")
-
-        added = task.get("expected_lines_added", 0)
-        removed = task.get("expected_lines_removed", 0)
-        lines.append(f"  Lines:  +{added} / -{removed}")
-        lines.append("")
+    for i, task in enumerate(promise.tasks):
+        lines.extend(_format_task_plan(i, task))
 
     return "\n".join(lines)
 
@@ -270,76 +385,3 @@ def plan(path: Path = PROMISE_PATH) -> str:
 def cleanup(path: Path = PROMISE_PATH) -> None:
     """Remove the promise file after all tasks are complete."""
     path.unlink()
-
-
-def main() -> None:
-    args = sys.argv[1:]
-    if not args:
-        print(
-            "Usage: python -m prothon.promise <check|status|complete|plan|cleanup> [task-index]"
-        )
-        sys.exit(1)
-
-    command = args[0]
-
-    if not PROMISE_PATH.exists() and command in (
-        "status",
-        "check",
-        "complete",
-        "plan",
-        "cleanup",
-    ):
-        print(f"No promise file found at {PROMISE_PATH}")
-        sys.exit(1)
-
-    if command == "status":
-        print(status())
-
-    elif command == "plan":
-        print(plan())
-
-    elif command == "check":
-        if len(args) < 2:
-            print("Usage: python -m prothon.promise check <task-index>")
-            sys.exit(1)
-        try:
-            idx = int(args[1])
-        except ValueError:
-            print(f"Error: task-index must be an integer, got '{args[1]}'")
-            sys.exit(1)
-        report = check_task(idx)
-        print(report.format())
-        sys.exit(0 if report.passed else 1)
-
-    elif command == "complete":
-        if len(args) < 2:
-            print("Usage: python -m prothon.promise complete <task-index> [attempts]")
-            sys.exit(1)
-        try:
-            idx = int(args[1])
-        except ValueError:
-            print(f"Error: task-index must be an integer, got '{args[1]}'")
-            sys.exit(1)
-        attempts = 1
-        if len(args) >= 3:
-            try:
-                attempts = int(args[2])
-            except ValueError:
-                print(f"Error: attempts must be an integer, got '{args[2]}'")
-                sys.exit(1)
-        complete_task(idx, attempts=attempts)
-        print(
-            f"Task {idx} marked as completed ({attempts} attempt{'s' if attempts != 1 else ''})."
-        )
-
-    elif command == "cleanup":
-        cleanup()
-        print("Promise file removed.")
-
-    else:
-        print(f"Unknown command: {command}")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

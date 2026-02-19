@@ -1,0 +1,309 @@
+[metadata]
+base_commit = "16f68222699c6384d2b467dba43c3f539c6f841d"
+created_at = "2026-02-19T12:00:00Z"
+
+[[tasks]]
+title = "Update project dependencies and __init__"
+goal = "Replace tomli-w with tomlkit, add copier and hypothesis deps, add __version__ to __init__.py"
+success_criteria = "pyproject.toml lists tomlkit>=0.13 and copier>=9.0, removes tomli-w, adds hypothesis to dev deps; __init__.py exports __version__; uv sync succeeds"
+files_to_create = []
+files_to_modify = [
+    "pyproject.toml",
+    "src/prothon/__init__.py",
+]
+files_to_remove = []
+expected_lines_added = 10
+expected_lines_removed = 4
+context_files = []
+doc_sections = [
+    "DESIGN.md#Technology Choices",
+    "PATTERNS.md#Module Layout",
+]
+reference_skills = [
+    "style-python",
+]
+dependencies = []
+completed = true
+attempts = 2
+
+[[tasks]]
+title = "Create custom exception hierarchy"
+goal = "Flat exception hierarchy under ProthonError in exceptions.py per PATTERNS"
+success_criteria = "exceptions.py defines ProthonError, ProjectNotFoundError, PromiseError, AssistantNotFoundError, UnknownBackendError, ComplianceError, GitError — all importable"
+files_to_create = [
+    "src/prothon/exceptions.py",
+]
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 30
+expected_lines_removed = 0
+context_files = []
+doc_sections = [
+    "PATTERNS.md#Custom Exception Hierarchy",
+    "PATTERNS.md#Error Handling",
+]
+reference_skills = [
+    "style-python",
+]
+dependencies = []
+completed = true
+attempts = 1
+
+[[tasks]]
+title = "Create project module"
+goal = "Extract project root detection into project.py with ProjectNotFoundError"
+success_criteria = "project.find_project_root() works identically to current cli.find_project_root(); raises ProjectNotFoundError or returns None per PATTERNS; tests pass"
+files_to_create = [
+    "src/prothon/project.py",
+    "tests/test_project.py",
+]
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 65
+expected_lines_removed = 0
+context_files = [
+    "src/prothon/cli.py",
+]
+doc_sections = [
+    "DESIGN.md#Module Structure",
+    "PATTERNS.md#Functions First, Classes When Needed",
+]
+reference_skills = [
+    "style-python",
+]
+dependencies = [
+    1,
+]
+completed = true
+attempts = 1
+
+[[tasks]]
+title = "Create git module"
+goal = "Thin typed subprocess wrapper for git CLI with GIT_TERMINAL_PROMPT=0, GitError on failure"
+success_criteria = "git.run_git(), git.diff_names(), git.diff_numstat(), git.rev_parse_head() all work; subprocess errors wrapped as GitError; tests pass using protocol fakes"
+files_to_create = [
+    "src/prothon/git.py",
+    "tests/test_git.py",
+]
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 266
+expected_lines_removed = 0
+context_files = [
+    "src/prothon/promise.py",
+]
+doc_sections = [
+    "DESIGN.md#Technology Choices",
+    "PATTERNS.md#Subprocess Error Wrapping",
+    "PATTERNS.md#Protocols for Dependency Injection",
+]
+reference_skills = [
+    "style-python",
+    "optim-subprocess-management",
+]
+dependencies = [
+    1,
+]
+completed = true
+attempts = 1
+
+[[tasks]]
+title = "Create skills module"
+goal = "Extract skill discovery and symlink management from cli.py into skills.py"
+success_criteria = "skills.bundled_skills_dir() and skills.sync_skills() work; handles broken symlinks; tests pass"
+files_to_create = [
+    "src/prothon/skills.py",
+    "tests/test_skills.py",
+]
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 85
+expected_lines_removed = 0
+context_files = [
+    "src/prothon/cli.py",
+]
+doc_sections = [
+    "DESIGN.md#Bundled Assets",
+    "DESIGN.md#Skill Discovery Contract",
+]
+reference_skills = [
+    "style-python",
+    "domain-ai-agent-orchestration",
+]
+dependencies = [
+    1,
+]
+completed = true
+attempts = 1
+
+[[tasks]]
+title = "Create assistant module"
+goal = "AssistantBackend protocol, ClaudeCodeBackend, registry dict, get_backend(), standalone launch() lifecycle"
+success_criteria = "ClaudeCodeBackend satisfies AssistantBackend protocol; get_backend() returns correct backend; launch() checks binary, syncs skills, runs subprocess; tests pass with fake backend"
+files_to_create = [
+    "src/prothon/assistant.py",
+    "tests/test_assistant.py",
+]
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 175
+expected_lines_removed = 0
+context_files = [
+    "src/prothon/cli.py",
+]
+doc_sections = [
+    "DESIGN.md#Assistant Abstraction",
+    "DESIGN.md#Assistant Backend Contract",
+    "PATTERNS.md#Protocol for Assistant Backends",
+    "PATTERNS.md#Registry for Backend Lookup",
+    "PATTERNS.md#Shared Lifecycle as Standalone Function",
+]
+reference_skills = [
+    "style-python",
+    "domain-ai-agent-orchestration",
+    "optim-subprocess-management",
+]
+dependencies = [
+    1,
+    4,
+]
+completed = true
+attempts = 2
+
+[[tasks]]
+title = "Create scaffold module with Copier integration"
+goal = "Extract scaffolding from cli.py into scaffold.py using Copier run_copy() API; create copier.yml for template"
+success_criteria = "scaffold.generate() uses Copier run_copy(); copier.yml defines all 6 prompts; post-gen creates symlinks, .agents/skills dir, git init; tests pass"
+files_to_create = [
+    "src/prothon/scaffold.py",
+    "template/copier.yml",
+    "tests/test_scaffold.py",
+]
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 260
+expected_lines_removed = 0
+context_files = [
+    "src/prothon/cli.py",
+    "template/pyproject.toml.jinja",
+    "template/AGENTS.md.jinja",
+]
+doc_sections = [
+    "DESIGN.md#Technology Choices",
+    "DESIGN.md#Scaffolding Contract",
+    "SPEC.md#Project Scaffolding",
+]
+reference_skills = [
+    "style-python",
+    "tech-copier",
+    "optim-subprocess-management",
+]
+dependencies = [
+    0,
+    1,
+    3,
+]
+completed = true
+attempts = 1
+
+[[tasks]]
+title = "Refactor promise module with tomlkit, dataclasses, and GitDiffProvider protocol"
+goal = "Replace tomli-w with tomlkit; use typed dataclasses (Task, Metadata, Promise); inject GitDiffProvider protocol; use protocol fakes in tests"
+success_criteria = "Promise data model uses dataclasses; TOML I/O uses tomlkit with format preservation; check_task accepts GitDiffProvider; tests use FakeGitDiff from conftest.py; all tests pass"
+files_to_create = []
+files_to_modify = [
+    "src/prothon/promise.py",
+    "tests/test_promise.py",
+    "tests/conftest.py",
+]
+files_to_remove = []
+expected_lines_added = 520
+expected_lines_removed = 460
+context_files = [
+    "src/prothon/git.py",
+]
+doc_sections = [
+    "DESIGN.md#Promise Verification",
+    "DESIGN.md#Promise Contract Format",
+    "DESIGN.md#Promise Verification Contract",
+    "PATTERNS.md#Protocols for Dependency Injection",
+    "PATTERNS.md#Protocol Fakes Over Mocks",
+    "PATTERNS.md#Fixture Conventions",
+]
+reference_skills = [
+    "style-python",
+    "tech-tomlkit",
+]
+dependencies = [
+    0,
+    1,
+    3,
+]
+completed = true
+attempts = 2
+
+[[tasks]]
+title = "Create compliance and execute module stubs"
+goal = "Interface stubs per DESIGN module structure so all modules in the architecture exist"
+success_criteria = "compliance.py defines check() interface; execute.py defines run() interface; both importable; both raise NotImplementedError with helpful messages"
+files_to_create = [
+    "src/prothon/compliance.py",
+    "src/prothon/execute.py",
+]
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 55
+expected_lines_removed = 0
+context_files = []
+doc_sections = [
+    "DESIGN.md#Module Structure",
+    "DESIGN.md#Compliance Report Contract",
+]
+reference_skills = [
+    "style-python",
+]
+dependencies = [
+    1,
+]
+completed = true
+attempts = 1
+
+[[tasks]]
+title = "Refactor CLI to thin adapter calling domain modules"
+goal = "cli.py becomes thin adapter per DESIGN dependency graph — delegates to scaffold, assistant, promise, project modules"
+success_criteria = "cli.py imports from domain modules; no inline business logic; all CLI commands work; test_workflow.py and test_generate.py updated with new imports; poe check passes"
+files_to_create = []
+files_to_modify = [
+    "src/prothon/cli.py",
+    "tests/test_workflow.py",
+    "tests/test_generate.py",
+]
+files_to_remove = []
+expected_lines_added = 55
+expected_lines_removed = 175
+context_files = [
+    "src/prothon/project.py",
+    "src/prothon/assistant.py",
+    "src/prothon/scaffold.py",
+    "src/prothon/promise.py",
+    "src/prothon/compliance.py",
+    "src/prothon/execute.py",
+]
+doc_sections = [
+    "DESIGN.md#Module Dependencies",
+    "DESIGN.md#CLI Commands",
+    "PATTERNS.md#Module API Surface",
+]
+reference_skills = [
+    "style-python",
+    "tech-typer",
+]
+dependencies = [
+    2,
+    5,
+    6,
+    7,
+    8,
+]
+completed = false
+attempts = 0

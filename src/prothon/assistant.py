@@ -36,14 +36,7 @@ class ClaudeCodeBackend:
         return "claude"
 
     def build_command(self, skill_name: str) -> list[str]:
-        """Build the subprocess argv for launching a Claude Code session.
-
-        Args:
-            skill_name: The skill to invoke (e.g. ``"prothon-spec-writer"``).
-
-        Returns:
-            Command list suitable for ``subprocess.run()``.
-        """
+        """Return subprocess argv for a Claude Code session with *skill_name*."""
         return [self.cli_command, "--dangerously-skip-permissions", f"/{skill_name}"]
 
     def sync_skills(self) -> None:
@@ -59,17 +52,7 @@ _BACKENDS: dict[str, type] = {
 
 
 def get_backend(name: str = "claude-code") -> AssistantBackend:
-    """Look up a backend by registry key and return an instance.
-
-    Args:
-        name: Registry key (default ``"claude-code"``).
-
-    Returns:
-        A fresh backend instance satisfying ``AssistantBackend``.
-
-    Raises:
-        UnknownBackendError: If *name* is not in the registry.
-    """
+    """Return a backend instance for *name*, or raise UnknownBackendError."""
     cls = _BACKENDS.get(name)
     if cls is None:
         raise UnknownBackendError(f"no backend registered for '{name}'")
@@ -77,19 +60,7 @@ def get_backend(name: str = "claude-code") -> AssistantBackend:
 
 
 def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int:
-    """Check the binary, sync skills, and run the assistant subprocess.
-
-    Args:
-        backend: The assistant backend to use.
-        skill_name: Skill to invoke inside the session.
-        cwd: Working directory for the subprocess.
-
-    Returns:
-        The subprocess exit code.
-
-    Raises:
-        AssistantNotFoundError: If the backend binary is not on PATH.
-    """
+    """Check binary, sync skills, run the assistant, and return exit code."""
     if not shutil.which(backend.cli_command):
         raise AssistantNotFoundError(f"{backend.cli_command} not found on PATH")
     backend.sync_skills()

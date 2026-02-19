@@ -71,15 +71,10 @@ def test_get_backend_unknown_raises() -> None:
 # --- ClaudeCodeBackend ---
 
 
-def test_claude_code_backend_name() -> None:
-    """ClaudeCodeBackend.name returns 'Claude Code'."""
+def test_claude_code_backend_properties() -> None:
+    """ClaudeCodeBackend exposes correct name and cli_command."""
     backend = ClaudeCodeBackend()
     assert backend.name == "Claude Code"
-
-
-def test_claude_code_backend_cli_command() -> None:
-    """ClaudeCodeBackend.cli_command returns 'claude'."""
-    backend = ClaudeCodeBackend()
     assert backend.cli_command == "claude"
 
 

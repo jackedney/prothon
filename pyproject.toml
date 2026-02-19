@@ -19,6 +19,7 @@ dev = [
     "bandit[toml]>=1.9",
     "vulture>=2.14",
     "complexipy>=5.1",
+    "pre-commit>=4.0",
 ]
 
 [build-system]
@@ -35,6 +36,7 @@ packages = ["src/prothon"]
 prothon = "prothon.cli:app"
 
 [tool.poe.tasks]
+sync = { shell = "uv sync && pre-commit install" }
 lint = "ruff check src/ tests/"
 format = "ruff format --check src/ tests/"
 typecheck = "ty check"

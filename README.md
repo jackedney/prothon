@@ -16,18 +16,14 @@
 
 &nbsp;
 
-Most AI-generated projects start with no structure. The AI writes code with no shared understanding of requirements, architecture, or conventions. As features are added and requirements change, there's no source of truth. Every prompt becomes a fresh negotiation and the AI drifts further from your intent.
+AI coding assistants drift. Early in a project the AI knows what you want, but as requirements change and sessions accumulate, it starts making assumptions — picks wrong patterns, contradicts earlier decisions, ignores constraints set weeks ago. There's no shared source of truth, so every prompt is a fresh negotiation.
 
-prothon generates projects with a documentation hierarchy that the AI treats as its instructions, and a toolchain that enforces they stay in sync with the code.
+prothon generates Python projects with a documentation hierarchy the AI treats as authoritative instructions, dedicated skills that guide each phase of development, and a verification loop that catches when code drifts from intent.
 
 ```
-            ┌──────────────────────────────────────────┐
-            │                                          │
-            │  SPEC  ->  DESIGN  ->  PATTERNS  ->  code│
-            │   ▲          ▲           ▲               │
-            │   skills guide each phase                │
-            │                                          │
-            └──────────────────────────────────────────┘
+    SPEC.md  ──→  DESIGN.md  ──→  PATTERNS.md  ──→  code
+  requirements    architecture     conventions      implementation
+   (highest)                                         (verified)
 ```
 
 ---
@@ -69,9 +65,9 @@ Once your docs are in place, the AI has full context via `AGENTS.md` and follows
 
 ## how it works
 
-AI coding assistants lose alignment over time. Early on the AI knows what you want, but as requirements change and features pile up, it starts making assumptions. It picks the wrong patterns, contradicts earlier decisions, or ignores constraints you set weeks ago. Without a shared source of truth, every prompt is a fresh negotiation.
+### the documentation hierarchy
 
-prothon solves this with a documentation hierarchy that the AI treats as its instructions:
+Three documents form a strict authority chain. Higher levels override lower ones — when things conflict, the higher document wins and lower documents get amended.
 
 ```
 docs/
@@ -80,58 +76,65 @@ docs/
 └── PATTERNS.md    # code conventions & testing         (lowest authority)
 ```
 
-Higher levels override lower ones. This matters when things change, and they always do.
+Each document has a dedicated skill that guides you through writing it conversationally — one decision at a time, with options, trade-offs, and recommendations. The skills enforce boundaries: the spec-writer refuses to discuss technology choices, the design-writer refuses to include code snippets, and so on. Content lands in the right document or not at all.
 
 ### changes cascade top-down
 
-When a requirement changes, you update SPEC.md. That may invalidate a design decision in DESIGN.md, which may invalidate a convention in PATTERNS.md. The hierarchy enforces that you resolve these cascades before writing code, so the AI never implements against stale decisions.
+When a requirement changes, SPEC.md gets updated. That may invalidate decisions in DESIGN.md, which may invalidate conventions in PATTERNS.md. The cascade enforces that you resolve conflicts before writing code.
 
 ```
-requirement changes -> update SPEC -> review DESIGN -> review PATTERNS -> implement
-design changes      ->               update DESIGN -> review PATTERNS -> implement
-convention changes  ->                               update PATTERNS -> implement
+requirement changes  →  prothon spec  →  prothon design  →  prothon patterns  →  implement
+design changes       →                   prothon design  →  prothon patterns  →  implement
+convention changes   →                                      prothon patterns  →  implement
 ```
 
 ### docs stay in sync with code
 
 Three mechanisms close the loop:
 
-- **doc-harmonizer** runs after any doc change and detects conflicts between levels. If DESIGN.md contradicts SPEC.md, you find out before a line of code is written.
-- **compliance-checker** runs before work is declared complete and verifies the code actually implements what the docs describe, catching drift before it compounds.
-- **change promises** track what each implementation task is supposed to do — files to create, modify, or remove, and expected scope. After each task completes, the promise is checked against what actually happened. Discrepancies are either fixed or explicitly accepted.
+- **doc-harmonizer** runs automatically after any doc is written and cross-references all three levels. If DESIGN.md contradicts SPEC.md, or PATTERNS.md assumes technology not chosen in DESIGN.md, you find out before a line of code is written.
+- **compliance-checker** reads every checkable statement from the docs and verifies the code implements it, producing a table with PASS/FAIL/PARTIAL status and `file:line` evidence. This runs as an always-on quality gate — the AI is instructed to launch it before claiming any work is complete.
+- **change promises** (`docs/change_promise.toml`) are a contract between planning and execution. Each task declares exactly what files it will create, modify, or remove, and the expected line counts. This forces the planner to think through what the implementation actually involves — it can't hand-wave scope. After a task completes, `prothon promise check` diffs against the base commit to verify what actually happened. If the real diff is wildly different from the prediction, either the plan was sloppy or the implementation veered off course. Discrepancies trigger retries or get escalated.
 
 ### the AI learns your stack
 
-When you choose technologies in DESIGN.md, **tech-researcher** generates reference skills: up-to-date documentation, idioms, and best practices for the specific libraries in your project. The AI doesn't just know your requirements. It has current reference material for the tools you chose to implement them with.
+When you make technology choices in DESIGN.md, the **tech-researcher** fires automatically and generates reference skills — current documentation, idioms, and best practices for the specific libraries you chose. These land in `.agents/skills/` as `tech-*`, `style-*`, `optim-*`, and `domain-*` files that the AI loads during implementation. It doesn't just know your requirements; it has up-to-date reference material for your exact stack.
 
 ### execute: from docs to code
 
-Once your documentation is in place, `prothon execute` aligns the source code to it. The executor reads all three docs, scans the codebase for gaps, and classifies the work:
+`prothon execute` is an orchestrator that aligns source code to documentation in three phases:
 
-- **Small changes** (1-2 files) are implemented directly.
-- **Large changes** (3+ files) get a written plan in `docs/PLAN.md`. After you approve the plan, the executor delegates tasks to subagents that work in parallel, each with only the context it needs.
+1. **Plan** — reads all three docs plus generated reference skills, scans the codebase for gaps, and writes a `change_promise.toml` declaring every task with files, scope, dependencies, and context. You approve the plan before anything runs.
+2. **Execute** — launches a fresh-context subagent per task. Each subagent implements, runs `poe check`, commits, and verifies its promise. Failed checks trigger up to 3 retries. Independent tasks can run in parallel.
+3. **Verify** — launches a compliance-checker subagent for a full cross-reference of docs against code. The promise file is cleaned up only after everything passes.
 
-Every task gets a change promise. After each subagent finishes, the promise is checked. If there's a discrepancy, a **senior-dev** reviewer examines the work and either fixes the code or accepts the deviation. A final compliance check verifies the full codebase matches documentation before the work is declared complete.
-
-The result: the AI reads your docs on every interaction, follows the hierarchy, and gets checked against it. Requirements, architecture, conventions, and code stay aligned as the project evolves, not just at the start but through every change.
+Fresh-context subagents are the key design decision here — each task gets a clean context loaded with only the files and reference skills it needs, preventing context pollution between tasks.
 
 ---
 
 ## skills
 
+Each command launches a dedicated Claude Code session with the corresponding skill. You make the decisions; the skill handles structure, research, and verification.
+
 ```
-prothon spec         spec-writer          extract requirements through probing questions
-prothon design       design-writer        research technologies, present trade-offs
-prothon patterns     patterns-writer      define code patterns and testing conventions
-prothon execute      execute              plan, delegate, and implement code from docs
-prothon compliance   compliance-checker   verify code matches documentation
+command              skill                 what it does
+─────────────────────────────────────────────────────────────────────────────
+prothon spec         spec-writer           extract requirements through probing questions
+prothon design       design-writer         research technologies, present trade-offs
+prothon patterns     patterns-writer       define code patterns and testing conventions
+prothon execute      execute               plan, delegate, and implement code from docs
+prothon compliance   compliance-checker    verify code matches documentation
 ```
 
-Three additional skills run automatically as part of the workflow: **doc-harmonizer** (detects conflicts between doc levels), **tech-researcher** (generates reference material for your chosen stack), and **senior-dev** (reviews discrepancies found by change promise checks).
+Three additional skills run automatically as quality gates — never invoked directly:
+
+- **doc-harmonizer** — cross-references all doc levels after any doc is written, amends lower docs to resolve conflicts
+- **tech-researcher** — generates reference skills for your chosen stack after DESIGN.md is written, using Context7 docs with web search fallback
+- **promise system** — `prothon promise {plan,status,check,complete,cleanup}` tracks and verifies implementation tasks
 
 ## tooling
 
-AI-generated code needs stronger guardrails, not weaker ones. Generated projects ship with a full quality toolchain that runs on every commit via pre-commit hooks and on every push via CI. Bad code from any source, human or AI, gets caught before it lands.
+Generated projects ship with a full quality toolchain enforced on every commit (pre-commit hooks) and every push (CI). AI-generated code gets the same scrutiny as human code.
 
 ```
 ruff           lint & format
@@ -143,22 +146,31 @@ vulture        dead code detection
 complexipy     complexity analysis
 ```
 
-Run `poe check` to execute all checks locally. Pre-commit hooks ensure nothing bypasses them.
+`poe check` runs everything locally. Pre-commit hooks ensure nothing bypasses them.
 
 ---
 
+## why not just prompt better
+
+The difference between prothon and "write a good system prompt" is structural enforcement:
+
+- **Separation of concerns** — skills refuse to write content that belongs at a different level. The spec-writer won't discuss technology. The design-writer won't include code. This isn't a suggestion; the skills actively reject it.
+- **Automated verification** — doc-harmonizer catches cross-level conflicts, compliance-checker catches code-vs-doc drift, promise checks catch implementation-vs-plan drift. Three independent verification loops, all automatic.
+- **Fresh-context subagents** — each implementation task gets a clean context with only the files and skills it needs. No context pollution between tasks, no hallucinated state from earlier in a long conversation.
+- **Durable authority** — `AGENTS.md` is checked into the repo and loaded by the AI on every interaction. Decisions survive across sessions, contributors, and tools. It's not in your chat history; it's in your repository.
+
 ## agent compatibility
 
-Generated projects use `AGENTS.md` as the canonical instruction file, with symlinks for automatic discovery by different AI coding assistants:
+`AGENTS.md` is the canonical instruction file, symlinked for automatic discovery:
 
 ```
-AGENTS.md              <- canonical instructions
-CLAUDE.md  -> AGENTS.md   <- Claude Code
-GEMINI.md  -> AGENTS.md   <- Gemini
-AGENT.md   -> AGENTS.md   <- other agents
+AGENTS.md              ← canonical
+CLAUDE.md  → AGENTS.md    Claude Code
+GEMINI.md  → AGENTS.md    Gemini
+AGENT.md   → AGENTS.md    other agents
 ```
 
-Skills live in `.agents/skills/` with symlinks to `.claude/skills/` and `.opencode/skills/` for tool-specific discovery.
+Skills live in `.agents/skills/` with symlinks to `.claude/skills/` and `.opencode/skills/`.
 
 ## customizing the template
 

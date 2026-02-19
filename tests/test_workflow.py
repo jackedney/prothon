@@ -28,18 +28,18 @@ def test_find_project_root_not_found(tmp_path):
 def test_launch_claude_calls_subprocess(tmp_path):
     with patch("prothon.cli.subprocess.run") as mock_run:
         with patch("prothon.cli.shutil.which", return_value="/usr/bin/claude"):
-            launch_claude("spec-writer", tmp_path)
+            launch_claude("prothon-spec-writer", tmp_path)
     mock_run.assert_called_once()
     call_args = mock_run.call_args
     cmd = call_args.args[0]
-    assert cmd == ["claude", "--dangerously-skip-permissions", "/spec-writer"]
+    assert cmd == ["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]
     assert call_args.kwargs["cwd"] == tmp_path
 
 
 def test_launch_claude_raises_when_claude_not_found(tmp_path):
     with patch("prothon.cli.shutil.which", return_value=None):
         with pytest.raises((SystemExit, typer.Exit)):
-            launch_claude("spec-writer", tmp_path)
+            launch_claude("prothon-spec-writer", tmp_path)
 
 
 runner = CliRunner()
@@ -122,7 +122,7 @@ def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):
     claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
     assert len(claude_calls) == 1
     cmd = claude_calls[0].args[0]
-    assert cmd == ["claude", "--dangerously-skip-permissions", "/spec-writer"]
+    assert cmd == ["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]
 
 
 def test_design_launches_single_session(tmp_path, monkeypatch, context):
@@ -135,4 +135,4 @@ def test_design_launches_single_session(tmp_path, monkeypatch, context):
     claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
     assert len(claude_calls) == 1
     cmd = claude_calls[0].args[0]
-    assert cmd == ["claude", "--dangerously-skip-permissions", "/design-writer"]
+    assert cmd == ["claude", "--dangerously-skip-permissions", "/prothon-design-writer"]

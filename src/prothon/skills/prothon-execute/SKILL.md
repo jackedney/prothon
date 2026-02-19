@@ -1,5 +1,5 @@
 ---
-name: execute
+name: prothon-execute
 description: Align source code to documentation — generates an enriched change promise, then executes tasks via self-correcting subagent loops.
 ---
 
@@ -113,7 +113,7 @@ You are implementing a single task. Follow this loop:
 ## Phase 3: Verify
 
 1. **Run compliance check** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
-   > Read the compliance-checker skill at `.agents/skills/compliance-checker/SKILL.md` and execute it. Read all docs and all source code, then produce a compliance report.
+   > Read the compliance-checker skill at `~/.claude/skills/prothon-compliance-checker/SKILL.md` and execute it. Read all docs and all source code, then produce a compliance report.
 
 2. **Report results** — Present the compliance report to the user. If there are failures, fix them and re-check until compliance passes or the remaining issues need user input.
 

@@ -76,11 +76,9 @@ def test_creates_doc_scaffolds(generated_project):
         assert doc.stat().st_size > 0
 
 
-def test_creates_skill_symlinks(generated_project):
-    for dir_name in (".claude", ".opencode"):
-        link = generated_project / dir_name / "skills"
-        assert link.is_symlink()
-        assert os.readlink(str(link)) == os.path.join("..", ".agents", "skills")
+def test_creates_agents_skills_dir(generated_project):
+    skills_dir = generated_project / ".agents" / "skills"
+    assert skills_dir.is_dir()
 
 
 def test_creates_agents_md(generated_project):

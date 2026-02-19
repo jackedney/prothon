@@ -1,5 +1,5 @@
 ---
-name: doc-harmonizer
+name: prothon-doc-harmonizer
 description: Check for conflicts between SPEC.md, DESIGN.md, and PATTERNS.md. Use after any documentation changes to ensure consistency across the hierarchy.
 model: sonnet
 context: fork

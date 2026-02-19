@@ -46,12 +46,12 @@ def _skills_dir() -> Path:
     return Path(__file__).parent / "skills"
 
 
-def _sync_skills(cwd: Path) -> None:
-    """Symlink bundled skills into the target project so Claude discovers them via /skill-name."""
+def _sync_skills() -> None:
+    """Symlink bundled skills into ~/.claude/skills/ so Claude discovers them via /skill-name."""
     bundled = _skills_dir()
     if not bundled.is_dir():
         return
-    target = cwd / ".agents" / "skills"
+    target = Path.home() / ".claude" / "skills"
     target.mkdir(parents=True, exist_ok=True)
     for skill_dir in bundled.iterdir():
         if not skill_dir.is_dir():
@@ -72,7 +72,7 @@ def launch_claude(skill_name: str, cwd: Path) -> None:
             "Install: https://docs.anthropic.com/en/docs/claude-code"
         )
         raise typer.Exit(1)
-    _sync_skills(cwd)
+    _sync_skills()
     subprocess.run(
         ["claude", "--dangerously-skip-permissions", f"/{skill_name}"],
         cwd=cwd,
@@ -133,13 +133,8 @@ def generate(dest: Path, context: dict) -> None:
         if not link.exists():
             os.symlink("AGENTS.md", link)
 
-    # Create symlinks for skill directories (.claude/skills, .opencode/skills -> .agents/skills)
-    for dir_name in (".claude", ".opencode"):
-        parent = dest / dir_name
-        parent.mkdir(parents=True, exist_ok=True)
-        link = parent / "skills"
-        if not link.exists():
-            os.symlink(os.path.join("..", ".agents", "skills"), link)
+    # Create .agents/skills for project-specific reference skills (tech-*, style-*, etc.)
+    (dest / ".agents" / "skills").mkdir(parents=True, exist_ok=True)
 
     # Write .copier-answers.yml for copier update support
     _write_copier_answers(dest, context)
@@ -237,32 +232,32 @@ def new(
 def spec() -> None:
     """Write or revise SPEC.md — extract requirements through probing questions."""
     root = _require_project_root()
-    launch_claude("spec-writer", root)
+    launch_claude("prothon-spec-writer", root)
 
 
 @app.command()
 def design() -> None:
     """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
     root = _require_project_root()
-    launch_claude("design-writer", root)
+    launch_claude("prothon-design-writer", root)
 
 
 @app.command()
 def patterns() -> None:
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
     root = _require_project_root()
-    launch_claude("patterns-writer", root)
+    launch_claude("prothon-patterns-writer", root)
 
 
 @app.command()
 def execute() -> None:
     """Align source code to documentation — plan and implement with subagents."""
     root = _require_project_root()
-    launch_claude("execute", root)
+    launch_claude("prothon-execute", root)
 
 
 @app.command()
 def compliance() -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
-    launch_claude("compliance-checker", root)
+    launch_claude("prothon-compliance-checker", root)

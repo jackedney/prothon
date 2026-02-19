@@ -1,5 +1,5 @@
 ---
-name: spec-writer
+name: prothon-spec-writer
 description: Interactively write SPEC.md — deeply understand requirements through probing questions before any design or code decisions. Use when starting a new project, adding a major feature, or when requirements need clarification.
 ---
 
@@ -89,4 +89,4 @@ A populated `docs/SPEC.md` with all sections filled in using clear, testable lan
 
 ## What Comes Next
 
-After SPEC.md is written, tell the user to run `prothon design` to create DESIGN.md based on these requirements. Never mention skill names (like `/design-writer`, `/spec-writer`, etc.) to the user — they use CLI commands (`prothon design`, `prothon spec`, etc.), not skill slash commands.
+After SPEC.md is written, tell the user to run `prothon design` to create DESIGN.md based on these requirements. Never mention skill names (like `/prothon-design-writer`, `/prothon-spec-writer`, etc.) to the user — they use CLI commands (`prothon design`, `prothon spec`, etc.), not skill slash commands.

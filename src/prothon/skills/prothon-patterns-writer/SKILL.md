@@ -1,5 +1,5 @@
 ---
-name: patterns-writer
+name: prothon-patterns-writer
 description: Interactively write PATTERNS.md — define code patterns, conventions, and testing approaches based on SPEC.md and DESIGN.md. Use after DESIGN.md is written.
 ---
 
@@ -107,6 +107,6 @@ A populated `docs/PATTERNS.md` with all sections filled in, concrete examples, a
 Once PATTERNS.md is written to disk, run this quality gate before finishing. Do NOT ask the user — just run it.
 
 1. **Harmonize docs** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
-   > Read the doc-harmonizer skill at `.agents/skills/doc-harmonizer/SKILL.md` and execute it. Read `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md`, cross-reference them, and report any conflicts. Apply fixes to the lower-authority document without asking for confirmation.
+   > Read the doc-harmonizer skill at `~/.claude/skills/prothon-doc-harmonizer/SKILL.md` and execute it. Read `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md`, cross-reference them, and report any conflicts. Apply fixes to the lower-authority document without asking for confirmation.
 
 2. **Report and finish** — Once the subagent completes, summarize its results to the user and tell them the documentation hierarchy is complete — they can now implement code.

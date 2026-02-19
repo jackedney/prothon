@@ -1,5 +1,5 @@
 ---
-name: tech-researcher
+name: prothon-tech-researcher
 description: Auto-generate reference skills for technologies, codestyles, coding optimisation, and domain knowledge based on SPEC.md and DESIGN.md. Run after DESIGN.md is written or updated.
 model: sonnet
 context: fork

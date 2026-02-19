@@ -1,5 +1,5 @@
 ---
-name: compliance-checker
+name: prothon-compliance-checker
 description: Verify source code matches documentation. Use before completing work to ensure code implements all requirements from SPEC.md, DESIGN.md, and PATTERNS.md.
 model: sonnet
 context: fork

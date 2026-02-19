@@ -1,5 +1,5 @@
 ---
-name: design-writer
+name: prothon-design-writer
 description: Interactively write DESIGN.md — research technologies, present trade-offs, and make architecture decisions based on SPEC.md requirements. Use after SPEC.md is written.
 ---
 
@@ -122,11 +122,11 @@ A populated `docs/DESIGN.md` with all sections filled in, every choice traced to
 Once DESIGN.md is written to disk, run these quality gates before finishing. Do NOT ask the user — just run them.
 
 1. **Harmonize docs** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
-   > Read the doc-harmonizer skill at `.agents/skills/doc-harmonizer/SKILL.md` and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. Apply fixes to the lower-authority document without asking for confirmation.
+   > Read the doc-harmonizer skill at `~/.claude/skills/prothon-doc-harmonizer/SKILL.md` and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. Apply fixes to the lower-authority document without asking for confirmation.
 
 2. **Generate tech references** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
-   > Read the tech-researcher skill at `.agents/skills/tech-researcher/SKILL.md` and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, then generate reference skills in `.agents/skills/` for all chosen technologies, codestyle, optimisation, and domain knowledge.
+   > Read the tech-researcher skill at `~/.claude/skills/prothon-tech-researcher/SKILL.md` and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, then generate reference skills in `.agents/skills/` for all chosen technologies, codestyle, optimisation, and domain knowledge.
 
    These two subagents are independent — launch them in parallel.
 
-3. **Report and finish** — Once both subagents complete, summarize their results to the user and tell them to run `prothon patterns` next to define code patterns and conventions. Never mention skill names (like `/patterns-writer`, `/tech-researcher`, etc.) to the user — they use CLI commands (`prothon patterns`, `prothon design`, etc.), not skill slash commands.
+3. **Report and finish** — Once both subagents complete, summarize their results to the user and tell them to run `prothon patterns` next to define code patterns and conventions. Never mention skill names (like `/prothon-patterns-writer`, `/prothon-tech-researcher`, etc.) to the user — they use CLI commands (`prothon patterns`, `prothon design`, etc.), not skill slash commands.

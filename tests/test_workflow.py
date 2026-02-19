@@ -3,10 +3,13 @@
 from unittest.mock import patch
 
 import pytest
-import typer
 from typer.testing import CliRunner
 
-from prothon.cli import app, find_project_root, generate, launch_claude
+from prothon.assistant import launch
+from prothon.cli import app
+from prothon.exceptions import AssistantNotFoundError
+from prothon.project import find_project_root
+from prothon.scaffold import generate
 
 
 def test_find_project_root_from_project_dir(tmp_path):
@@ -25,10 +28,14 @@ def test_find_project_root_not_found(tmp_path):
     assert find_project_root(tmp_path) is None
 
 
-def test_launch_claude_calls_subprocess(tmp_path):
-    with patch("prothon.cli.subprocess.run") as mock_run:
-        with patch("prothon.cli.shutil.which", return_value="/usr/bin/claude"):
-            launch_claude("prothon-spec-writer", tmp_path)
+def test_launch_calls_subprocess(tmp_path):
+    with patch("prothon.assistant.subprocess.run") as mock_run:
+        with patch("prothon.assistant.shutil.which", return_value="/usr/bin/claude"):
+            from prothon.assistant import ClaudeCodeBackend
+
+            backend = ClaudeCodeBackend()
+            with patch.object(backend, "sync_skills"):
+                launch(backend, "prothon-spec-writer", tmp_path)
     mock_run.assert_called_once()
     call_args = mock_run.call_args
     cmd = call_args.args[0]
@@ -36,10 +43,13 @@ def test_launch_claude_calls_subprocess(tmp_path):
     assert call_args.kwargs["cwd"] == tmp_path
 
 
-def test_launch_claude_raises_when_claude_not_found(tmp_path):
-    with patch("prothon.cli.shutil.which", return_value=None):
-        with pytest.raises((SystemExit, typer.Exit)):
-            launch_claude("prothon-spec-writer", tmp_path)
+def test_launch_raises_when_assistant_not_found(tmp_path):
+    with patch("prothon.assistant.shutil.which", return_value=None):
+        from prothon.assistant import ClaudeCodeBackend
+
+        backend = ClaudeCodeBackend()
+        with pytest.raises(AssistantNotFoundError):
+            launch(backend, "prothon-spec-writer", tmp_path)
 
 
 runner = CliRunner()
@@ -116,23 +126,19 @@ def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.shutil.which", return_value="/usr/bin/claude"):
-        with patch("prothon.cli.subprocess.run") as mock_run:
+    with patch("prothon.cli.launch") as mock_launch:
+        with patch("prothon.cli.get_backend") as mock_get_backend:
+            mock_backend = mock_get_backend.return_value
             runner.invoke(app, ["spec"])
-    claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
-    assert len(claude_calls) == 1
-    cmd = claude_calls[0].args[0]
-    assert cmd == ["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]
+    mock_launch.assert_called_once_with(mock_backend, "prothon-spec-writer", dest)
 
 
 def test_design_launches_single_session(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.shutil.which", return_value="/usr/bin/claude"):
-        with patch("prothon.cli.subprocess.run") as mock_run:
+    with patch("prothon.cli.launch") as mock_launch:
+        with patch("prothon.cli.get_backend") as mock_get_backend:
+            mock_backend = mock_get_backend.return_value
             runner.invoke(app, ["design"])
-    claude_calls = [c for c in mock_run.call_args_list if c.args[0][0] == "claude"]
-    assert len(claude_calls) == 1
-    cmd = claude_calls[0].args[0]
-    assert cmd == ["claude", "--dangerously-skip-permissions", "/prothon-design-writer"]
+    mock_launch.assert_called_once_with(mock_backend, "prothon-design-writer", dest)

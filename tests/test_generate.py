@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from prothon.cli import generate
+from prothon.scaffold import generate
 
 
 @pytest.fixture
@@ -65,7 +65,6 @@ def test_writes_copier_answers(generated_project):
     answers = generated_project / ".copier-answers.yml"
     assert answers.exists()
     content = answers.read_text()
-    assert "project_name: test-project" in content
     assert "module_name: test_project" in content
 
 

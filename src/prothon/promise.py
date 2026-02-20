@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 
 import tomlkit
@@ -13,6 +14,14 @@ from prothon.git import GitDiffProvider, SubprocessGitDiff
 PROMISE_PATH = Path("docs/change_promise.toml")
 
 
+class CheckStatus(Enum):
+    """Tri-state result for a single verification check."""
+
+    PASSED = "PASS"
+    FAILED = "FAIL"
+    SKIPPED = "SKIP"
+
+
 @dataclass
 class FileCheckDetail:
     """Per-file pass/fail detail within a check."""
@@ -20,7 +29,7 @@ class FileCheckDetail:
     path: str
     expected_state: str
     actual_state: str
-    passed: bool
+    status: CheckStatus
 
 
 @dataclass
@@ -28,7 +37,7 @@ class CheckResult:
     """Single verification check result."""
 
     name: str
-    passed: bool
+    status: CheckStatus
     detail: str
     file_details: list[FileCheckDetail] = field(default_factory=list)
 
@@ -43,22 +52,21 @@ class TaskCheckReport:
 
     @property
     def passed(self) -> bool:
-        return all(c.passed for c in self.checks)
+        return not any(c.status is CheckStatus.FAILED for c in self.checks)
 
     def format(self) -> str:
         """Return a human-readable summary of the check results."""
-        status = "PASS" if self.passed else "DISCREPANCY"
-        failures = sum(1 for c in self.checks if not c.passed)
+        overall = "PASS" if self.passed else "DISCREPANCY"
+        failures = sum(1 for c in self.checks if c.status is CheckStatus.FAILED)
         lines = [f'TASK {self.task_index}: "{self.title}"']
         for c in self.checks:
-            tag = "PASS" if c.passed else "FAIL"
-            lines.append(f"  {c.name + ':':20s} {tag} ({c.detail})")
+            lines.append(f"  {c.name + ':':20s} {c.status.value} ({c.detail})")
         suffix = (
             ""
             if self.passed
             else f" ({failures} failure{'s' if failures != 1 else ''})"
         )
-        lines.append(f"  RESULT: {status}{suffix}")
+        lines.append(f"  RESULT: {overall}{suffix}")
         return "\n".join(lines)
 
 
@@ -155,7 +163,12 @@ def load_promise(path: Path = PROMISE_PATH) -> Promise:
     Returns:
         A Promise dataclass populated from the file.
     """
-    doc = tomlkit.parse(path.read_text())
+    try:
+        doc = tomlkit.parse(path.read_text())
+    except FileNotFoundError:
+        raise PromiseError(f"promise file not found: {path}") from None
+    except tomlkit.exceptions.ParseError as exc:
+        raise PromiseError(f"malformed TOML in {path}: {exc}") from exc
     metadata = _metadata_from_dict(dict(doc.get("metadata", {})))
     tasks = [_task_from_dict(dict(t)) for t in doc.get("tasks", [])]
     return Promise(metadata=metadata, tasks=tasks)
@@ -198,11 +211,12 @@ def _within_tolerance(expected: int, actual: int) -> bool:
 
 def _check_line_count(name: str, expected: int, actual: int) -> CheckResult:
     """Build a CheckResult for a line-count metric."""
-    passed = _within_tolerance(expected, actual)
+    ok = _within_tolerance(expected, actual)
+    status = CheckStatus.PASSED if ok else CheckStatus.FAILED
     detail = f"expected ~{expected}, actual {actual}"
-    if not passed:
+    if not ok:
         detail += " \u2014 outside \u00b130%/\u00b130 tolerance"
-    return CheckResult(name=name, passed=passed, detail=detail)
+    return CheckResult(name=name, status=status, detail=detail)
 
 
 def _check_line_counts(
@@ -210,26 +224,38 @@ def _check_line_counts(
 ) -> list[CheckResult]:
     """Check added/removed line counts against tolerances."""
     all_files = set(task.files_to_create + task.files_to_modify)
-    if not all_files:
-        return []
-    if task.expected_lines_added <= 0 and task.expected_lines_removed <= 0:
-        return []
-
-    numstat = diff.diff_numstat(base_commit)
-    actual_added = sum(numstat.get(f, (0, 0))[0] for f in all_files)
-    actual_removed = sum(numstat.get(f, (0, 0))[1] for f in all_files)
+    no_files = not all_files
 
     results: list[CheckResult] = []
-    if task.expected_lines_added > 0:
+
+    if no_files or task.expected_lines_added <= 0:
+        results.append(
+            CheckResult(
+                name="lines_added", status=CheckStatus.SKIPPED, detail="none expected"
+            )
+        )
+    else:
+        numstat = diff.diff_numstat(base_commit)
+        actual_added = sum(numstat.get(f, (0, 0))[0] for f in all_files)
         results.append(
             _check_line_count("lines_added", task.expected_lines_added, actual_added)
         )
-    if task.expected_lines_removed > 0:
+
+    if no_files or task.expected_lines_removed <= 0:
+        results.append(
+            CheckResult(
+                name="lines_removed", status=CheckStatus.SKIPPED, detail="none expected"
+            )
+        )
+    else:
+        numstat = diff.diff_numstat(base_commit)
+        actual_removed = sum(numstat.get(f, (0, 0))[1] for f in all_files)
         results.append(
             _check_line_count(
                 "lines_removed", task.expected_lines_removed, actual_removed
             )
         )
+
     return results
 
 
@@ -267,11 +293,20 @@ def check_task(
     # Check files_to_create
     if task.files_to_create:
         existing = [f for f in task.files_to_create if Path(f).exists()]
+        all_exist = len(existing) == len(task.files_to_create)
         report.checks.append(
             CheckResult(
                 name="files_to_create",
-                passed=len(existing) == len(task.files_to_create),
+                status=CheckStatus.PASSED if all_exist else CheckStatus.FAILED,
                 detail=f"{len(existing)}/{len(task.files_to_create)} exist",
+            )
+        )
+    else:
+        report.checks.append(
+            CheckResult(
+                name="files_to_create",
+                status=CheckStatus.SKIPPED,
+                detail="none declared",
             )
         )
 
@@ -279,22 +314,40 @@ def check_task(
     if task.files_to_modify:
         diff_names = diff.diff_names(base_commit)
         modified = [f for f in task.files_to_modify if f in diff_names]
+        all_modified = len(modified) == len(task.files_to_modify)
         report.checks.append(
             CheckResult(
                 name="files_to_modify",
-                passed=len(modified) == len(task.files_to_modify),
+                status=CheckStatus.PASSED if all_modified else CheckStatus.FAILED,
                 detail=f"{len(modified)}/{len(task.files_to_modify)} modified",
+            )
+        )
+    else:
+        report.checks.append(
+            CheckResult(
+                name="files_to_modify",
+                status=CheckStatus.SKIPPED,
+                detail="none declared",
             )
         )
 
     # Check files_to_remove
     if task.files_to_remove:
         removed = [f for f in task.files_to_remove if not Path(f).exists()]
+        all_removed = len(removed) == len(task.files_to_remove)
         report.checks.append(
             CheckResult(
                 name="files_to_remove",
-                passed=len(removed) == len(task.files_to_remove),
+                status=CheckStatus.PASSED if all_removed else CheckStatus.FAILED,
                 detail=f"{len(removed)}/{len(task.files_to_remove)} removed",
+            )
+        )
+    else:
+        report.checks.append(
+            CheckResult(
+                name="files_to_remove",
+                status=CheckStatus.SKIPPED,
+                detail="none declared",
             )
         )
 

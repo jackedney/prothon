@@ -11,11 +11,8 @@ src/prothon/
     __init__.py
     cli.py              # Typer app, command definitions, output formatting
     scaffold.py         # Template rendering, copier answers, git init
-    agents.py           # Assistant session launching
     skills.py           # Skill discovery, symlink management
     promise.py          # Promise data model, TOML I/O, git diff verification
-    execute.py          # Orchestrator: task planning, subagent dispatch
-    compliance.py       # Doc-vs-code verification and reporting
     project.py          # Project root detection, shared project context
     git.py              # Thin typed wrapper around git CLI via subprocess
     assistant.py        # Abstract assistant interface and backend registry
@@ -31,20 +28,11 @@ This layout is driven by the number of subsystems in the SPEC (scaffolding, doc 
 ```
 cli.py
   ├── scaffold.generate()
-  ├── agents.get_backend().launch()
-  ├── promise.load_promise(), plan(), check_task(), status(), complete_task(), cleanup()
-  ├── execute.run()
-  └── compliance.check()
-
-agents.py
-  └── skills.sync_skills()
+  ├── assistant.get_backend(), launch()
+  └── promise.load_promise(), plan(), check_task(), status(), complete_task(), cleanup()
 
 assistant.py
   └── skills.sync_skills()
-
-execute.py
-  ├── agents.get_backend().launch()
-  └── promise.load_promise(), check_task()
 
 All modules
   ├── project.find_project_root()
@@ -61,7 +49,7 @@ Two non-Python asset directories live inside the package:
 - `skills/` — 7 bundled skill directories, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 34 (skills bundled with package) and 14 (dedicated interactive agents).
 - `template/` — Copier project template with `copier.yml`, Jinja2-templated files, and post-generation tasks. Serves requirements 1-9 (project scaffolding).
 
-Both are included in wheels via `[tool.hatch.build.targets.wheel.force-include]`.
+`skills/` is included automatically as part of the `src/prothon` package. `template/` is included via `[tool.hatch.build.targets.wheel.force-include]` since it lives outside the package root.
 
 ### Assistant Abstraction
 
@@ -71,7 +59,7 @@ A registry maps assistant names to backends. Currently only Claude Code is regis
 
 ### Promise Verification
 
-The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) to represent the change contract declared in `docs/change_promise.toml`. Verification logic is attached to `Task` via a `verify()` method that accepts a `GitDiffProvider` protocol, enabling subprocess-free testing with a fake implementation.
+The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) to represent the change contract declared in `docs/change_promise.toml`. Verification logic lives in a standalone `check_task()` function that accepts a `GitDiffProvider` protocol, enabling subprocess-free testing with a fake implementation.
 
 Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers. This serves requirements 17-23 (execution verification) and 24-27 (compliance verification).
 
@@ -143,7 +131,7 @@ attempts = <int>
 
 ### Promise Verification Contract
 
-Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a status (PASS/FAIL/SKIP), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, passed boolean).
+Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (PASS/FAIL/SKIP), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). SKIP indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAIL entries — SKIP results do not affect the outcome.
 
 Tolerance for line counts: +-30% or +-30 lines, whichever is greater. Binary files are excluded from line counts.
 

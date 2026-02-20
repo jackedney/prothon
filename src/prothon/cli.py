@@ -5,12 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from rich.console import Console
+from rich.table import Table
+from rich.text import Text
 
 from prothon import promise
 from prothon.assistant import get_backend, launch
-from prothon.exceptions import AssistantNotFoundError
+from prothon.exceptions import AssistantNotFoundError, ProthonError
+from prothon.promise import CheckStatus, TaskCheckReport
 from prothon.project import find_project_root
 from prothon.scaffold import generate
+
+console = Console()
 
 app = typer.Typer(
     add_completion=False,
@@ -45,6 +51,92 @@ def _launch_skill(skill_name: str, cwd: Path) -> None:
             "Install: https://docs.anthropic.com/en/docs/claude-code"
         )
         raise typer.Exit(1)
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}")
+        raise typer.Exit(1)
+
+
+# --- Rich rendering helpers ---
+
+
+def _render_plan(p: promise.Promise) -> Table:
+    """Build a Rich table for the promise plan."""
+    base = p.metadata.base_commit or "unknown"
+    task_word = "task" if len(p.tasks) == 1 else "tasks"
+
+    table = Table(
+        title=f"PLAN: {len(p.tasks)} {task_word} (base: {base})",
+        show_lines=True,
+    )
+    table.add_column("#", style="bold", width=3)
+    table.add_column("Title", style="bold")
+    table.add_column("Files", no_wrap=False)
+    table.add_column("Lines", justify="right")
+    table.add_column("Deps")
+
+    for i, task in enumerate(p.tasks):
+        files_parts: list[str] = []
+        if task.files_to_create:
+            files_parts.append(f"[green]+[/green] {', '.join(task.files_to_create)}")
+        if task.files_to_modify:
+            files_parts.append(f"[yellow]~[/yellow] {', '.join(task.files_to_modify)}")
+        if task.files_to_remove:
+            files_parts.append(f"[red]-[/red] {', '.join(task.files_to_remove)}")
+        files_cell = "\n".join(files_parts) if files_parts else "-"
+
+        lines_cell = f"+{task.expected_lines_added} / -{task.expected_lines_removed}"
+
+        deps_cell = (
+            ", ".join(str(d) for d in task.dependencies)
+            if task.dependencies
+            else "none"
+        )
+
+        table.add_row(str(i), task.title, files_cell, lines_cell, deps_cell)
+
+    return table
+
+
+def _render_status(p: promise.Promise) -> Table:
+    """Build a Rich table for task completion status."""
+    done = sum(1 for t in p.tasks if t.completed)
+    table = Table(title=f"Status: {done}/{len(p.tasks)} completed")
+    table.add_column("#", style="bold", width=3)
+    table.add_column("Status", width=6)
+    table.add_column("Title")
+
+    for i, task in enumerate(p.tasks):
+        if task.completed:
+            status_cell = Text("\u2713", style="green")
+        else:
+            status_cell = Text("\u2717", style="red")
+        table.add_row(str(i), status_cell, task.title)
+
+    return table
+
+
+def _render_check_report(report: TaskCheckReport) -> Table:
+    """Build a Rich table for a task verification report."""
+    result_style = "green" if report.passed else "red"
+    result_label = "PASS" if report.passed else "DISCREPANCY"
+
+    table = Table(
+        title=f'Task {report.task_index}: "{report.title}" \u2014 [{result_style}]{result_label}[/{result_style}]',
+    )
+    table.add_column("Check", style="bold")
+    table.add_column("Result", width=6)
+    table.add_column("Detail")
+
+    _status_styles = {
+        CheckStatus.PASSED: ("PASS", "green"),
+        CheckStatus.FAILED: ("FAIL", "red"),
+        CheckStatus.SKIPPED: ("SKIP", "yellow"),
+    }
+    for c in report.checks:
+        label, style = _status_styles[c.status]
+        table.add_row(c.name, Text(label, style=style), c.detail)
+
+    return table
 
 
 @app.callback(invoke_without_command=True)
@@ -151,7 +243,8 @@ def promise_plan() -> None:
     if not promise.PROMISE_PATH.exists():
         typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
         raise typer.Exit(1)
-    typer.echo(promise.plan())
+    p = promise.load_promise()
+    console.print(_render_plan(p))
 
 
 @promise_app.command("status")
@@ -161,7 +254,8 @@ def promise_status() -> None:
     if not promise.PROMISE_PATH.exists():
         typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
         raise typer.Exit(1)
-    typer.echo(promise.status())
+    p = promise.load_promise()
+    console.print(_render_status(p))
 
 
 @promise_app.command("check")
@@ -173,8 +267,12 @@ def promise_check(
     if not promise.PROMISE_PATH.exists():
         typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
         raise typer.Exit(1)
-    report = promise.check_task(task_index)
-    typer.echo(report.format())
+    try:
+        report = promise.check_task(task_index)
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}")
+        raise typer.Exit(1)
+    console.print(_render_check_report(report))
     if not report.passed:
         raise typer.Exit(1)
 
@@ -189,7 +287,11 @@ def promise_complete(
     if not promise.PROMISE_PATH.exists():
         typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
         raise typer.Exit(1)
-    promise.complete_task(task_index, attempts=attempts)
+    try:
+        promise.complete_task(task_index, attempts=attempts)
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}")
+        raise typer.Exit(1)
     suffix = "s" if attempts != 1 else ""
     typer.echo(f"Task {task_index} marked as completed ({attempts} attempt{suffix}).")
 

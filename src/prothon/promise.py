@@ -88,6 +88,7 @@ class Task:
     dependencies: list[int] = field(default_factory=list)
     completed: bool = False
     attempts: int = 0
+    max_attempts: int = 3
 
 
 @dataclass
@@ -122,6 +123,7 @@ def _task_from_dict(d: dict) -> Task:
         reference_skills=list(d.get("reference_skills", [])),
         dependencies=list(d.get("dependencies", [])),
         completed=d.get("completed", False),
+        max_attempts=d.get("max_attempts", 3),
         attempts=d.get("attempts", 0),
     )
 
@@ -151,6 +153,7 @@ def _task_to_dict(task: Task) -> dict:
         "dependencies": task.dependencies,
         "completed": task.completed,
         "attempts": task.attempts,
+        "max_attempts": task.max_attempts,
     }
 
 

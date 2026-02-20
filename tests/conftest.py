@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from prothon.git import DiffStat
+
 
 class FakeGitDiff:
     """Fake GitDiffProvider for testing -- no subprocess calls."""
@@ -11,7 +13,7 @@ class FakeGitDiff:
     def __init__(
         self,
         names: set[str] | None = None,
-        stats: dict[str, tuple[int, int]] | None = None,
+        stats: DiffStat | None = None,
     ):
         self._names = names or set()
         self._stats = stats or {}
@@ -19,7 +21,7 @@ class FakeGitDiff:
     def diff_names(self, base_commit: str) -> set[str]:
         return self._names
 
-    def diff_numstat(self, base_commit: str) -> dict[str, tuple[int, int]]:
+    def diff_numstat(self, base_commit: str) -> DiffStat:
         return self._stats
 
 

@@ -1,0 +1,20 @@
+stages:
+  - check
+
+variables:
+  PYTHON_VERSION: "{{ python_version }}"
+
+check:
+  stage: check
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - pip install uv
+    - uv sync
+  script:
+    - uv run ruff check src/ tests/
+    - uv run ruff format --check src/ tests/
+    - uv run ty check
+    - uv run bandit -c pyproject.toml -r src/
+    - uv run vulture src/
+    - uv run complexipy src/
+    - uv run pytest

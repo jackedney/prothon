@@ -9,6 +9,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from prothon.exceptions import PromiseError
+from prothon.git import DiffStat
 from prothon.promise import (
     CheckResult,
     CheckStatus,
@@ -232,7 +233,7 @@ def test_check_task_line_count_outside_tolerance(promise_file: Path):
     assert removed_check.status is CheckStatus.FAILED
 
 
-def test_check_task_index_out_of_range(promise_file: Path):
+def test_check_task_raises_when_index_out_of_range(promise_file: Path):
     fake_diff = FakeGitDiff()
     with pytest.raises(PromiseError):
         check_task(99, diff=fake_diff, path=promise_file)
@@ -270,7 +271,7 @@ def test_check_task_passes_base_commit_to_diff_provider(tmp_path: Path):
             captured_commits.append(base_commit)
             return {"src/app.py"}
 
-        def diff_numstat(self, base_commit: str) -> dict[str, tuple[int, int]]:
+        def diff_numstat(self, base_commit: str) -> DiffStat:
             captured_commits.append(base_commit)
             return {"src/app.py": (50, 5)}
 

@@ -15,7 +15,7 @@ from prothon.assistant import get_backend, launch
 from prothon.exceptions import AssistantNotFoundError, ProthonError
 from prothon.promise import CheckStatus, TaskCheckReport
 from prothon.project import find_project_root
-from prothon.scaffold import generate
+from prothon.scaffold import generate, init_existing
 
 console = Console()
 
@@ -205,6 +205,19 @@ def new(
     typer.echo("  uvx prothon spec       # Write requirements")
     typer.echo("  uvx prothon design     # Choose architecture")
     typer.echo("  uvx prothon patterns   # Define conventions")
+
+
+@app.command()
+def init() -> None:
+    """Adopt an existing project into the docs-first workflow."""
+    try:
+        created = init_existing()
+        for path in created:
+            typer.echo(f"  created {path}")
+        typer.echo("\nNext step: uvx prothon spec")
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
 
 
 @app.command()

@@ -1,16 +1,80 @@
 # Project Specification
 
 ## Purpose
-<!-- What problem does this project solve? What is its core mission? -->
-<!-- Keep this abstract — no mention of specific tools, libraries, or patterns -->
+
+Prothon is a CLI tool that scaffolds opinionated Python projects and provides a structured documentation-driven workflow for keeping AI coding assistants aligned with project intent across sessions. It solves two problems: repetitive project setup (by generating a ready-to-use project with a fixed dev toolchain and pre-commit hooks), and AI drift (by establishing a three-level documentation hierarchy that serves as a durable source of truth for AI agents, with automated verification that code matches documented intent).
 
 ## Requirements
-<!-- List each requirement as a clear, testable statement -->
-<!-- Example: "The system must authenticate users before granting access" -->
-<!-- NOT: "Use JWT tokens for authentication" (that's a DESIGN decision) -->
+
+### Project Scaffolding
+
+1. The system must scaffold a new Python project from a single CLI command (`prothon new`).
+2. The system must prompt the user for: module name, description, author name, author email, Python version, and license.
+3. The scaffolded project must use a `src/` layout with a typed package (`py.typed` marker).
+4. The scaffolded project must include a fixed dev toolchain: uv (package management), poethepoet (task runner), ruff (linting and formatting), ty (type checking), pytest and hypothesis (testing), mutmut (mutation testing), bandit (security scanning), vulture (dead code detection), and complexipy (complexity analysis).
+5. The scaffolded project must include pre-commit hooks that enforce all toolchain checks on every commit.
+6. The scaffolded project must include CI workflows for both GitHub Actions and GitLab CI/CD, plus a pre-commit CI workflow, all running the full set of toolchain checks.
+7. The scaffolded project must initialize a git repository with an initial commit.
+8. The scaffolded project must include agent instruction files that teach AI assistants the documentation hierarchy and development workflow.
+9. The scaffolded project must include empty doc scaffolds for SPEC.md, DESIGN.md, and PATTERNS.md.
+
+### Documentation Hierarchy
+
+10. The system must enforce a three-level documentation hierarchy: SPEC.md (requirements), DESIGN.md (architecture), and PATTERNS.md (conventions).
+11. SPEC.md must have the highest authority. When documents conflict, higher-level documents override lower-level documents.
+12. SPEC.md must exist before DESIGN.md can be written. DESIGN.md must exist before PATTERNS.md can be written.
+13. SPEC.md must only be modifiable through the spec-writer agent. No other agent may alter it.
+14. Each documentation level must have a dedicated interactive agent: spec-writer for SPEC.md, design-writer for DESIGN.md, patterns-writer for PATTERNS.md.
+15. Documentation agents must enforce separation of concerns — the spec-writer must refuse to include technology choices, the design-writer must refuse to include code patterns, and so on.
+16. The doc-harmonizer must detect conflicts between documentation levels and suggest amendments to the lower-authority document, requiring user approval before making changes.
+
+### Code Execution
+
+17. The system must provide an execute workflow that reads all documentation levels and generates a plan of implementation tasks.
+18. Each task in the plan must declare the files to be created, modified, or removed, along with predicted line counts.
+19. The user must approve the plan before any code is written.
+20. Each task must execute in an isolated agent context with only the files and skills relevant to that task.
+21. After each task completes, the system must verify the actual changes against the declared plan, including checking that files exist or were removed as expected and that line counts are within tolerance.
+22. The system must run all toolchain quality checks after each task.
+23. If a task fails verification or quality checks, the system must retry up to a configurable number of attempts before reporting failure.
+
+### Compliance Verification
+
+24. The system must provide a compliance checker that verifies source code matches all requirements, design choices, and patterns documented across the three documentation levels.
+25. The compliance checker must produce a report listing each checkable item with a PASS or FAIL status and file-and-line evidence.
+26. Compliance checking must be mandatory before any implementation work is claimed complete.
+27. When compliance failures are found, the system must present them to the user for a decision on whether to update the code or update the documentation.
+
+### Tech Research
+
+28. The system must automatically generate reference skills based on the technology choices made in DESIGN.md.
+29. Generated reference skills must be sourced from live documentation, not solely from the AI's training data.
+30. Reference skills must cover four categories: library usage, language style conventions, performance patterns, and domain knowledge.
+31. Generated reference skills must be stored in the project's local skills directory so they are available to all AI agents working on the project.
+
+### CLI and Agent Integration
+
+32. All documentation and execution workflows must be invocable via CLI commands (`prothon spec`, `prothon design`, `prothon patterns`, `prothon execute`, `prothon compliance`).
+33. The system must currently support Claude Code as the AI assistant for all agent workflows.
+34. Built-in skills must be bundled with the package and synced to the user's AI assistant skill directory on every CLI invocation.
+35. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
 
 ## Constraints
-<!-- Non-negotiable boundaries: performance targets, compatibility, regulations -->
+
+- The tool must be built in and run via Python.
+- The tool must be installable and runnable via `uv`.
+- The scaffolded toolchain is fixed and not user-configurable.
+- The documentation hierarchy authority order (SPEC > DESIGN > PATTERNS) is non-negotiable.
+- No automated agent may modify SPEC.md — only the spec-writer agent may, and only through user interaction.
+- No documentation changes may be applied by the doc-harmonizer without user approval.
 
 ## Out of Scope
-<!-- Explicitly list what this project does NOT do -->
+
+- Support for AI assistants other than Claude Code (planned for future).
+- Project templates beyond library-style Python packages (planned for future).
+- Customization of the scaffolded toolchain (tools are fixed by design).
+- Non-Python project scaffolding (planned for future as separate equivalent tools).
+- CLI code review tool integration (e.g., Coderabbit, Greptile — planned for future).
+- Non-interactive scaffolding mode (e.g., passing all values as flags).
+- Remote repository creation (e.g., GitHub/GitLab repo initialization).
+- Automatic resolution of compliance failures without user decision.

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
@@ -40,11 +41,22 @@ def _require_project_root() -> Path:
     return root
 
 
+def _require_promise_file(root: Path) -> Path:
+    """Resolve promise path against project root, or exit if missing."""
+    promise_path = root / promise.PROMISE_PATH
+    if not promise_path.exists():
+        typer.echo(f"No promise file found at {promise_path}")
+        raise typer.Exit(1)
+    return promise_path
+
+
 def _launch_skill(skill_name: str, cwd: Path) -> None:
     """Resolve the backend, launch the skill, and handle errors."""
     try:
         backend = get_backend()
-        launch(backend, skill_name, cwd)
+        rc = launch(backend, skill_name, cwd)
+        if rc != 0:
+            raise typer.Exit(rc)
     except AssistantNotFoundError:
         typer.echo(
             "Error: Claude Code CLI not found.\n"
@@ -92,7 +104,7 @@ def _render_plan(p: promise.Promise) -> Table:
             else "none"
         )
 
-        table.add_row(str(i), task.title, files_cell, lines_cell, deps_cell)
+        table.add_row(str(i), escape(task.title), files_cell, lines_cell, deps_cell)
 
     return table
 
@@ -110,7 +122,7 @@ def _render_status(p: promise.Promise) -> Table:
             status_cell = Text("\u2713", style="green")
         else:
             status_cell = Text("\u2717", style="red")
-        table.add_row(str(i), status_cell, task.title)
+        table.add_row(str(i), status_cell, escape(task.title))
 
     return table
 
@@ -121,7 +133,7 @@ def _render_check_report(report: TaskCheckReport) -> Table:
     result_label = "PASS" if report.passed else "DISCREPANCY"
 
     table = Table(
-        title=f'Task {report.task_index}: "{report.title}" \u2014 [{result_style}]{result_label}[/{result_style}]',
+        title=f'Task {report.task_index}: "{escape(report.title)}" \u2014 [{result_style}]{result_label}[/{result_style}]',
     )
     table.add_column("Check", style="bold")
     table.add_column("Result", width=6)
@@ -239,22 +251,18 @@ def compliance() -> None:
 @promise_app.command("plan")
 def promise_plan() -> None:
     """Pretty-print the change promise plan."""
-    _require_project_root()
-    if not promise.PROMISE_PATH.exists():
-        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
-        raise typer.Exit(1)
-    p = promise.load_promise()
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
+    p = promise.load_promise(promise_path)
     console.print(_render_plan(p))
 
 
 @promise_app.command("status")
 def promise_status() -> None:
     """Show completion status of all tasks."""
-    _require_project_root()
-    if not promise.PROMISE_PATH.exists():
-        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
-        raise typer.Exit(1)
-    p = promise.load_promise()
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
+    p = promise.load_promise(promise_path)
     console.print(_render_status(p))
 
 
@@ -263,12 +271,10 @@ def promise_check(
     task_index: int = typer.Argument(help="Zero-based task index to check"),
 ) -> None:
     """Verify a task's promises against git reality."""
-    _require_project_root()
-    if not promise.PROMISE_PATH.exists():
-        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
-        raise typer.Exit(1)
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
     try:
-        report = promise.check_task(task_index)
+        report = promise.check_task(task_index, path=promise_path)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}")
         raise typer.Exit(1)
@@ -283,12 +289,10 @@ def promise_complete(
     attempts: int = typer.Argument(default=1, help="Number of attempts taken"),
 ) -> None:
     """Mark a task as completed and record attempt count."""
-    _require_project_root()
-    if not promise.PROMISE_PATH.exists():
-        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
-        raise typer.Exit(1)
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
     try:
-        promise.complete_task(task_index, attempts=attempts)
+        promise.complete_task(task_index, attempts=attempts, path=promise_path)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}")
         raise typer.Exit(1)
@@ -299,9 +303,7 @@ def promise_complete(
 @promise_app.command("cleanup")
 def promise_cleanup() -> None:
     """Remove the promise file after all tasks are complete."""
-    _require_project_root()
-    if not promise.PROMISE_PATH.exists():
-        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
-        raise typer.Exit(1)
-    promise.cleanup()
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
+    promise.cleanup(promise_path)
     typer.echo("Promise file removed.")

@@ -39,7 +39,8 @@ def run_git(*args: str, cwd: Path | None = None) -> str:
         env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
     )
     if result.returncode != 0:
-        raise GitError(f"git {args[0]} failed: {result.stderr.strip()}")
+        cmd = args[0] if args else "<no subcommand>"
+        raise GitError(f"git {cmd} failed: {result.stderr.strip()}")
     return result.stdout
 
 

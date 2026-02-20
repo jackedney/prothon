@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from prothon.assistant import launch
+from prothon.assistant import ClaudeCodeBackend, launch
 from prothon.cli import app
 from prothon.exceptions import AssistantNotFoundError
 from prothon.project import find_project_root
@@ -31,8 +31,6 @@ def test_find_project_root_not_found(tmp_path):
 def test_launch_calls_subprocess(tmp_path):
     with patch("prothon.assistant.subprocess.run") as mock_run:
         with patch("prothon.assistant.shutil.which", return_value="/usr/bin/claude"):
-            from prothon.assistant import ClaudeCodeBackend
-
             backend = ClaudeCodeBackend()
             with patch.object(backend, "sync_skills"):
                 launch(backend, "prothon-spec-writer", tmp_path)
@@ -45,8 +43,6 @@ def test_launch_calls_subprocess(tmp_path):
 
 def test_launch_raises_when_assistant_not_found(tmp_path):
     with patch("prothon.assistant.shutil.which", return_value=None):
-        from prothon.assistant import ClaudeCodeBackend
-
         backend = ClaudeCodeBackend()
         with pytest.raises(AssistantNotFoundError):
             launch(backend, "prothon-spec-writer", tmp_path)

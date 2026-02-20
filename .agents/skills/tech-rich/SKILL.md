@@ -85,7 +85,7 @@ console.print(f"  [dim]{file_path}:{line}[/dim]")
 
 ## Gotchas & Pitfalls
 
-- **Rich markup uses `[style]text[/style]` syntax.** Literal square brackets in data must be escaped as `\[` or the text will be misinterpreted as markup. Use `console.print(data, highlight=False)` or `Text.from_ansi()` for untrusted input.
+- **Rich markup uses `[style]text[/style]` syntax.** Literal square brackets in data will be misinterpreted as markup. To prevent markup injection: use `rich.markup.escape()` on dynamic strings before embedding in f-strings, pass `markup=False` to `console.print()`, or use `Text(data)` which bypasses markup parsing. Note: `highlight=False` only disables syntax highlighting, not markup parsing.
 - **`console.print()` auto-detects terminal width.** Tables wider than the terminal will be truncated or wrapped. Set `table.width` or `table.min_width` for predictable output.
 - **`Table.add_row()` accepts `*renderables`, not keyword arguments.** Column values are positional, matching column add order. Passing fewer values than columns is allowed (empty cells); passing more raises an error.
 - **Rich is always available in Typer apps** — no need to add it as a separate dependency. But import from `rich` directly, not from `typer.rich_utils`.

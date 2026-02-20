@@ -164,7 +164,7 @@ def load_promise(path: Path = PROMISE_PATH) -> Promise:
         A Promise dataclass populated from the file.
     """
     try:
-        doc = tomlkit.parse(path.read_text())
+        doc = tomlkit.parse(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise PromiseError(f"promise file not found: {path}") from None
     except tomlkit.exceptions.ParseError as exc:
@@ -198,7 +198,7 @@ def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
         tasks_aot.append(tbl)
     doc.add("tasks", tasks_aot)
 
-    path.write_text(tomlkit.dumps(doc))
+    path.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
 
 def _within_tolerance(expected: int, actual: int) -> bool:
@@ -223,12 +223,12 @@ def _check_line_counts(
     task: Task, diff: GitDiffProvider, base_commit: str
 ) -> list[CheckResult]:
     """Check added/removed line counts against tolerances."""
-    all_files = set(task.files_to_create + task.files_to_modify)
-    no_files = not all_files
+    add_files = set(task.files_to_create + task.files_to_modify)
+    remove_files = set(task.files_to_modify + task.files_to_remove)
 
     results: list[CheckResult] = []
 
-    if no_files or task.expected_lines_added <= 0:
+    if not add_files or task.expected_lines_added <= 0:
         results.append(
             CheckResult(
                 name="lines_added", status=CheckStatus.SKIPPED, detail="none expected"
@@ -236,12 +236,12 @@ def _check_line_counts(
         )
     else:
         numstat = diff.diff_numstat(base_commit)
-        actual_added = sum(numstat.get(f, (0, 0))[0] for f in all_files)
+        actual_added = sum(numstat.get(f, (0, 0))[0] for f in add_files)
         results.append(
             _check_line_count("lines_added", task.expected_lines_added, actual_added)
         )
 
-    if no_files or task.expected_lines_removed <= 0:
+    if not remove_files or task.expected_lines_removed <= 0:
         results.append(
             CheckResult(
                 name="lines_removed", status=CheckStatus.SKIPPED, detail="none expected"
@@ -249,7 +249,7 @@ def _check_line_counts(
         )
     else:
         numstat = diff.diff_numstat(base_commit)
-        actual_removed = sum(numstat.get(f, (0, 0))[1] for f in all_files)
+        actual_removed = sum(numstat.get(f, (0, 0))[1] for f in remove_files)
         results.append(
             _check_line_count(
                 "lines_removed", task.expected_lines_removed, actual_removed
@@ -283,7 +283,10 @@ def check_task(
 
     promise = load_promise(path)
     if task_index < 0 or task_index >= len(promise.tasks):
-        msg = f"Task index {task_index} out of range (0-{len(promise.tasks) - 1})"
+        if not promise.tasks:
+            msg = f"Task index {task_index} out of range (no tasks in promise)"
+        else:
+            msg = f"Task index {task_index} out of range (0-{len(promise.tasks) - 1})"
         raise PromiseError(msg)
 
     base_commit = promise.metadata.base_commit or "HEAD"
@@ -372,7 +375,10 @@ def complete_task(
     """
     promise = load_promise(path)
     if task_index < 0 or task_index >= len(promise.tasks):
-        msg = f"Task index {task_index} out of range (0-{len(promise.tasks) - 1})"
+        if not promise.tasks:
+            msg = f"Task index {task_index} out of range (no tasks in promise)"
+        else:
+            msg = f"Task index {task_index} out of range (0-{len(promise.tasks) - 1})"
         raise PromiseError(msg)
     promise.tasks[task_index].completed = True
     promise.tasks[task_index].attempts = attempts

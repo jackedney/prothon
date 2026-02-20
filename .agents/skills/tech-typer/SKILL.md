@@ -97,7 +97,7 @@ def main(verbose: bool = False):
 ## Gotchas & Pitfalls
 
 - **Boolean flags generate `--flag/--no-flag` pairs by default.** If you only want `--flag`, use `typer.Option(False, "--flag", is_flag=True)` or annotate with `Annotated[bool, typer.Option("--flag")]`.
-- **`typer.echo()` is deprecated in newer versions** — use `typer.rich_utils` or just `print()` since Rich is always available.
+- **`typer.echo()` is still valid** but the docs recommend `print()` for simple output and Rich for styled output, since Rich is always available via the Typer dependency.
 - **Typer wraps Click internally.** If you hit a Typer limitation, you can drop down to `click.get_current_context()` or access the underlying Click objects. But avoid mixing Typer decorators with raw Click decorators on the same function.
 - **Testing: use `typer.testing.CliRunner`**, not Click's runner directly. The Typer runner handles Rich output and Typer-specific context properly.
 - **Exit codes:** Raise `typer.Exit(code=1)` for non-zero exits. Unhandled exceptions produce code 1 automatically but with a traceback.

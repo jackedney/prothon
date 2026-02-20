@@ -41,7 +41,7 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 ### Compliance Verification
 
 24. The system must provide a compliance checker that verifies source code matches all requirements, design choices, and patterns documented across the three documentation levels.
-25. The compliance checker must produce a report listing each checkable item with a PASS or FAIL status and file-and-line evidence.
+25. The compliance checker must produce a report listing each checkable item with a PASS, FAIL, or SKIP status and file-and-line evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category).
 26. Compliance checking must be mandatory before any implementation work is claimed complete.
 27. When compliance failures are found, the system must present them to the user for a decision on whether to update the code or update the documentation.
 
@@ -55,7 +55,7 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 ### CLI and Agent Integration
 
 32. All documentation and execution workflows must be invocable via CLI commands (`prothon spec`, `prothon design`, `prothon patterns`, `prothon execute`, `prothon compliance`).
-33. The system must currently support Claude Code as the AI assistant for all agent workflows.
+33. The system must support Claude Code as the AI assistant for all agent workflows.
 34. Built-in skills must be bundled with the package and synced to the user's AI assistant skill directory on every CLI invocation.
 35. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
 

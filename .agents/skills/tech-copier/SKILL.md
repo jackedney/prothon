@@ -39,7 +39,7 @@ from copier import run_copy, run_update, run_recopy
 worker = run_copy(src_path, dst_path, data=answers, defaults=False)
 
 # Update existing project (3-way merge, preserves user edits)
-worker = run_update(dst_path, conflict="rej")
+worker = run_update(dst_path, conflict="rej", overwrite=True)
 
 # Full regeneration (discards evolution history)
 worker = run_recopy(dst_path)
@@ -84,7 +84,7 @@ license:
 
 Files ending in `.jinja` are rendered. Use `{{ variable_name }}` syntax:
 
-```
+```jinja
 # {{ module_name }}
 
 {{ description }}
@@ -94,8 +94,8 @@ Directory and file names can also be templated: `{{ module_name }}/`.
 
 ### Global variables available in templates
 
-- `_copier_answers` — current answers dict (excludes secrets)
-- `_copier_conf` — configuration metadata
+- `_copier_answers` — current answers dict (excludes secrets, safe to use)
+- `_copier_conf` — serialized Copier Worker object containing configuration metadata. **Warning:** its `.data` key includes secret answers — do not render, log, or include in generated output
 - `_copier_operation` — `"copy"` or `"update"`
 - `_folder_name` — root directory name
 

@@ -33,7 +33,7 @@ Bundled skills are prefixed with `prothon-` to avoid name collisions. Project sk
 
 **Context isolation:** Each agent session starts fresh. It does not inherit state from previous sessions. All context must be provided through: (a) the skill content, (b) files on disk, and (c) agent instruction files (CLAUDE.md, etc.). This is why documentation is the source of truth — it persists between sessions.
 
-**Backend abstraction:** The `AssistantBackend` ABC defines how to invoke an AI assistant. Each backend (currently only Claude Code) encapsulates: binary name, CLI flags, skill installation path, and command construction. This allows adding new assistants without changing orchestration logic. The contract has four abstract members:
+**Backend abstraction:** The `AssistantBackend` Protocol (using `typing.Protocol`) defines how to invoke an AI assistant. Implementations satisfy the protocol structurally — no explicit inheritance required. Each backend (currently only Claude Code) encapsulates: binary name, CLI flags, skill installation path, and command construction. This allows adding new assistants without changing orchestration logic. The contract has four members:
 - `name` — human-readable name for error messages
 - `cli_command` — binary name to look up on PATH
 - `build_command(skill_name)` — constructs subprocess argv

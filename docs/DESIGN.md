@@ -92,11 +92,11 @@ Verification checks file existence (for creates/removes), git diff analysis (for
 | Command | Input | Output | Subsystem |
 |---------|-------|--------|-----------|
 | `prothon new` | Interactive prompts: module name, description, author name, email, Python version, license | Scaffolded project directory with git repo | scaffold.py |
-| `prothon spec` | None (launches interactive session) | Populated `docs/SPEC.md` | agents.py |
-| `prothon design` | None (launches interactive session) | Populated `docs/DESIGN.md` + generated reference skills | agents.py |
-| `prothon patterns` | None (launches interactive session) | Populated `docs/PATTERNS.md` | agents.py |
-| `prothon execute` | None (reads docs, plans, launches subagents) | Implemented code, committed per-task | execute.py |
-| `prothon compliance` | None (reads docs and code) | Compliance report table (PASS/FAIL per requirement) | compliance.py |
+| `prothon spec` | None (launches interactive session) | Populated `docs/SPEC.md` | cli.py → assistant.py (skill subprocess) |
+| `prothon design` | None (launches interactive session) | Populated `docs/DESIGN.md` + generated reference skills | cli.py → assistant.py (skill subprocess) |
+| `prothon patterns` | None (launches interactive session) | Populated `docs/PATTERNS.md` | cli.py → assistant.py (skill subprocess) |
+| `prothon execute` | None (reads docs, plans, launches subagents) | Implemented code, committed per-task | cli.py → assistant.py (skill subprocess) |
+| `prothon compliance` | None (reads docs and code) | Compliance report table (PASS/FAIL per requirement) | cli.py → assistant.py (skill subprocess) |
 | `prothon promise plan` | None (reads `change_promise.toml`) | Pretty-printed task table | promise.py |
 | `prothon promise status` | None (reads `change_promise.toml`) | Task completion progress table | promise.py |
 | `prothon promise check N` | Task index | Verification report (per-file PASS/FAIL) | promise.py |

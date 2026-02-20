@@ -275,6 +275,7 @@ def test_check_task_passes_base_commit_to_diff_provider(tmp_path: Path):
             return {"src/app.py": (50, 5)}
 
     check_task(0, diff=CapturingFakeDiff(), path=promise_path)
+    assert captured_commits
     assert all(c == "abc1234" for c in captured_commits)
 
 

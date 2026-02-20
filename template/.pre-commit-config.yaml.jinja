@@ -29,10 +29,13 @@ repos:
         args: ["-c", "pyproject.toml"]
         additional_dependencies: ["bandit[toml]"]
 
-  - repo: https://github.com/jendrikseipp/vulture
-    rev: "v2.14"
+  - repo: local
     hooks:
       - id: vulture
+        name: vulture
+        entry: uv run vulture src/
+        language: system
+        pass_filenames: false
 
   - repo: https://github.com/rohaquinlop/complexipy-pre-commit
     rev: v5.1.0

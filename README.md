@@ -48,6 +48,8 @@ curl -fsSL https://raw.githubusercontent.com/jackedney/prothon/master/install.sh
 
 ## quickstart
 
+### new project
+
 ```bash
 cd my-project
 uv sync
@@ -56,6 +58,19 @@ prothon design     # choose architecture   (writes DESIGN.md)
 prothon patterns   # set conventions       (writes PATTERNS.md)
 prothon execute    # implement code from docs
 ```
+
+### existing project
+
+```bash
+cd your-existing-repo
+prothon init       # overlay docs-first workflow (creates docs/, AGENTS.md, symlinks)
+prothon spec       # define requirements
+prothon design     # choose architecture
+prothon patterns   # set conventions
+prothon execute    # implement code from docs
+```
+
+`prothon init` adds the documentation hierarchy and agent instruction files without touching your existing code, config, dependencies, or git history.
 
 Each command launches a Claude Code session with the corresponding skill. The skill asks you questions, researches options, and writes the doc. You make the decisions.
 
@@ -119,6 +134,8 @@ Each command launches a dedicated Claude Code session with the corresponding ski
 ```
 command              skill                 what it does
 ─────────────────────────────────────────────────────────────────────────────
+prothon new          —                     scaffold a new project with full toolchain
+prothon init         —                     adopt an existing project (docs + agent files only)
 prothon spec         spec-writer           extract requirements through probing questions
 prothon design       design-writer         research technologies, present trade-offs
 prothon patterns     patterns-writer       define code patterns and testing conventions

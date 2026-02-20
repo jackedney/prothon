@@ -489,10 +489,14 @@ def test_make_task_defaults():
     assert task_dict["title"] == "test task"
     assert task_dict["expected_lines_added"] == 50
     assert task_dict["completed"] is False
+    assert task_dict["max_attempts"] == 3
 
 
 def test_make_task_overrides():
-    task_dict = make_task(title="custom", expected_lines_added=200, completed=True)
+    task_dict = make_task(
+        title="custom", expected_lines_added=200, completed=True, max_attempts=5
+    )
     assert task_dict["title"] == "custom"
     assert task_dict["expected_lines_added"] == 200
     assert task_dict["completed"] is True
+    assert task_dict["max_attempts"] == 5

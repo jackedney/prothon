@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 
 class FakeGitDiff:
     """Fake GitDiffProvider for testing -- no subprocess calls."""
@@ -45,3 +48,11 @@ def make_task(
         "attempts": 0,
     }
     return {**base, **overrides}
+
+
+def assert_symlink_to(link: Path, target_name: str) -> None:
+    """Assert that link is a symlink pointing to target_name."""
+    assert link.is_symlink(), f"{link} is not a symlink"
+    assert os.readlink(link) == target_name, (
+        f"{link} points to {os.readlink(link)}, expected {target_name}"
+    )

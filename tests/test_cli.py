@@ -7,25 +7,28 @@ from typer.testing import CliRunner
 
 from prothon.assistant import ClaudeCodeBackend, launch
 from prothon.cli import app
-from prothon.exceptions import AssistantNotFoundError
+from prothon.exceptions import AssistantNotFoundError, ProjectNotFoundError
 from prothon.project import find_project_root
 from prothon.scaffold import generate
 
 
 def test_find_project_root_from_project_dir(tmp_path):
-    (tmp_path / ".copier-answers.yml").write_text("project_name: test")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "SPEC.md").write_text("# Spec")
     assert find_project_root(tmp_path) == tmp_path
 
 
 def test_find_project_root_from_subdirectory(tmp_path):
-    (tmp_path / ".copier-answers.yml").write_text("project_name: test")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "SPEC.md").write_text("# Spec")
     subdir = tmp_path / "src" / "pkg"
     subdir.mkdir(parents=True)
     assert find_project_root(subdir) == tmp_path
 
 
 def test_find_project_root_not_found(tmp_path):
-    assert find_project_root(tmp_path) is None
+    with pytest.raises(ProjectNotFoundError, match="no prothon project found"):
+        find_project_root(tmp_path)
 
 
 def test_launch_calls_subprocess(tmp_path):
@@ -94,28 +97,28 @@ def test_spec_fails_outside_project(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["spec"])
     assert result.exit_code != 0
-    assert "Not inside a prothon-generated project" in result.output
+    assert "no prothon project found" in result.output
 
 
 def test_design_fails_outside_project(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["design"])
     assert result.exit_code != 0
-    assert "Not inside a prothon-generated project" in result.output
+    assert "no prothon project found" in result.output
 
 
 def test_patterns_fails_outside_project(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["patterns"])
     assert result.exit_code != 0
-    assert "Not inside a prothon-generated project" in result.output
+    assert "no prothon project found" in result.output
 
 
 def test_compliance_fails_outside_project(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["compliance"])
     assert result.exit_code != 0
-    assert "Not inside a prothon-generated project" in result.output
+    assert "no prothon project found" in result.output
 
 
 def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):

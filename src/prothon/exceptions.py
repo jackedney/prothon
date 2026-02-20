@@ -11,6 +11,10 @@ class ProjectNotFoundError(ProthonError):
     """No prothon project root found walking up from cwd."""
 
 
+class ProjectAlreadyInitError(ProthonError):
+    """docs/SPEC.md already exists — project already initialized."""
+
+
 class PromiseError(ProthonError):
     """Promise file missing, malformed, or task index out of range."""
 

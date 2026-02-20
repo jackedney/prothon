@@ -31,14 +31,11 @@ app.add_typer(promise_app, name="promise")
 
 def _require_project_root() -> Path:
     """Find the project root or exit with an error."""
-    root = find_project_root()
-    if root is None:
-        typer.echo(
-            "Error: Not inside a prothon-generated project.\n"
-            "Generate one with: uvx prothon new my-project"
-        )
+    try:
+        return find_project_root()
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
-    return root
 
 
 def _require_promise_file(root: Path) -> Path:

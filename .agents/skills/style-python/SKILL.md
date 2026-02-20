@@ -20,8 +20,9 @@ user-invocable: false
 | Local variables | `snake_case` | `task_index`, `base_commit` |
 | Private members | `_leading_underscore` | `_registry`, `_parse_diff()` |
 | Type variables | `PascalCase` or single uppercase | `T`, `PathLike` |
-| Protocol classes | `PascalCase` ending in verb/noun | `GitDiffProvider` |
+| Protocol classes | `PascalCase` with descriptive name | `GitDiffProvider` |
 | Dataclasses | `PascalCase` | `Task`, `Metadata`, `Promise` |
+| Enum members | `UPPER_SNAKE_CASE` | `CheckStatus.PASS`, `CheckStatus.FAIL` |
 
 ## Import & Module Structure
 
@@ -48,9 +49,9 @@ from os.path import *  # never
 ```
 
 **Module layout:**
-1. Module docstring
+1. Module docstring (one sentence describing purpose)
 2. `__all__` (if public API is a subset of module contents)
-3. Imports
+3. Imports (grouped as above)
 4. Constants
 5. Type aliases / protocols
 6. Classes
@@ -82,12 +83,12 @@ def _parse_numstat_line(line: str) -> tuple[int, int, str]:
     ...
 ```
 
-**Modern syntax preferences:**
-- `X | Y` over `Union[X, Y]` (Python 3.10+)
-- `list[str]` over `List[str]` (Python 3.9+)
+**Modern syntax preferences (Python 3.11+ -- project minimum):**
+- `X | Y` over `Union[X, Y]`
+- `list[str]` over `List[str]`
 - `dict[str, Any]` over `Dict[str, Any]`
 - `tuple[int, ...]` over `Tuple[int, ...]`
-- Use `from __future__ import annotations` if targeting Python <3.10
+- No need for `from __future__ import annotations` (3.11+ supports PEP 604 natively)
 
 ## Documentation
 
@@ -129,8 +130,10 @@ def check_task(
 - Parenthesized line continuations over backslash
 
 **Manual conventions:**
-- One class per file is not required — group related classes (e.g., `Task`, `Metadata`, `Promise` in `promise.py`)
+- Group related classes in one module (e.g., `Task`, `Metadata`, `Promise` in `promise.py`)
 - Blank lines: 2 between top-level definitions, 1 between methods
 - f-strings preferred over `.format()` or `%`
 - `Path` objects over string paths throughout
 - Context managers (`with`) for file I/O and subprocesses
+- Keyword-only arguments (after `*`) for functions with >2 parameters
+- `@dataclass` for data containers; avoid raw `__init__` when fields are the primary concern

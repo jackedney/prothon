@@ -10,7 +10,7 @@ Flat module layout with all domain modules at one level under `src/prothon/`. CL
 src/prothon/
     __init__.py
     cli.py              # Typer app, command definitions, output formatting
-    scaffold.py         # Template rendering, copier answers, git init
+    scaffold.py         # Template rendering, copier answers, git init, project adoption
     skills.py           # Skill discovery, symlink management
     promise.py          # Promise data model, TOML I/O, git diff verification
     project.py          # Project root detection, shared project context
@@ -21,13 +21,13 @@ src/prothon/
     template/           # Bundled Copier project template (Jinja2)
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, doc agents, execution, compliance, promise system, skill management — requirements 1, 14, 17, 24, 32, 34) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
+This layout is driven by the number of subsystems in the SPEC (scaffolding, doc agents, execution, compliance, promise system, skill management — requirements 1, 22, 25, 32, 26, 42) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
 
 ### Module Dependencies
 
 ```
 cli.py
-  ├── scaffold.generate()
+  ├── scaffold.generate(), init_existing()
   ├── assistant.get_backend(), launch()
   └── promise.load_promise(), plan(), check_task(), status(), complete_task(), cleanup()
 
@@ -40,13 +40,13 @@ All modules
   └── exceptions.*
 ```
 
-`cli.py` is the only module that depends on Typer for command definitions. Domain modules (`scaffold.py`, `promise.py`, etc.) are plain Python and independently testable without invoking the CLI framework. This separation serves requirement 32 (all workflows invocable via CLI) while keeping domain logic framework-independent.
+`cli.py` is the only module that depends on Typer for command definitions. Domain modules (`scaffold.py`, `promise.py`, etc.) are plain Python and independently testable without invoking the CLI framework. This separation serves requirement 40 (all workflows invocable via CLI) while keeping domain logic framework-independent.
 
 ### Bundled Assets
 
 Two non-Python asset directories live inside the package:
 
-- `skills/` — 7 bundled skill directories, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 34 (skills bundled with package) and 14 (dedicated interactive agents).
+- `skills/` — 7 bundled skill directories, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 42 (skills bundled with package) and 22 (dedicated interactive agents).
 - `template/` — Copier project template with `copier.yml`, Jinja2-templated files, and post-generation tasks. Serves requirements 1-9 (project scaffolding).
 
 `skills/` is included automatically as part of the `src/prothon` package. `template/` is included via `[tool.hatch.build.targets.wheel.force-include]` since it lives outside the package root.
@@ -55,23 +55,23 @@ Two non-Python asset directories live inside the package:
 
 Each assistant backend encapsulates its binary name, invocation flags, skill sync target, and command construction. A shared launch lifecycle handles: binary detection, skill syncing, subprocess execution, and return code checking.
 
-A registry maps assistant names to backends. Currently only Claude Code is registered. Adding a new assistant requires one backend implementation (~20 lines) and one registry entry. No caller changes needed. This serves requirement 33 (Claude Code support) while preparing for the planned future expansion to other assistants.
+A registry maps assistant names to backends. Currently only Claude Code is registered. Adding a new assistant requires one backend implementation (~20 lines) and one registry entry. No caller changes needed. This serves requirement 41 (Claude Code support) while preparing for the planned future expansion to other assistants.
 
 ### Promise Verification
 
 The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) to represent the change contract declared in `docs/change_promise.toml`. Verification logic lives in a standalone `check_task()` function that accepts a `GitDiffProvider` protocol, enabling subprocess-free testing with a fake implementation.
 
-Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers. This serves requirements 17-23 (execution verification) and 24-27 (compliance verification).
+Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers. This serves requirements 25-31 (execution verification) and 32-35 (compliance verification).
 
 ## Technology Choices
 
 | Package | Purpose | Serves Requirement | Alternatives Considered |
 |---------|---------|-------------------|------------------------|
-| typer (>=0.15) | CLI framework with type-hint-driven parameter inference | R32: CLI-invocable workflows | click, argparse |
+| typer (>=0.15) | CLI framework with type-hint-driven parameter inference | R40: CLI-invocable workflows | click, argparse |
 | copier (>=9.0) | Project templating with native `copier update` support | R1-R9: project scaffolding | cookiecutter, custom Jinja2 |
-| tomlkit (>=0.13,<1.0) | TOML read/write with comment and formatting preservation | R17-R18: change promise contract | tomllib+tomli-w, toml |
-| rich (via typer) | Table rendering for promise plans, status, and compliance reports | R25: compliance report with PASS/FAIL status | tabulate, click echo/style |
-| subprocess (stdlib) | Git CLI interaction via thin typed wrapper | R7: git init, R21: promise verification | GitPython, pygit2, dulwich |
+| tomlkit (>=0.13,<1.0) | TOML read/write with comment and formatting preservation | R25-R26: change promise contract | tomllib+tomli-w, toml |
+| rich (via typer) | Table rendering for promise plans, status, and compliance reports | R33: compliance report with PASS/FAIL/SKIP status | tabulate, click echo/style |
+| subprocess (stdlib) | Git CLI interaction via thin typed wrapper | R7: git init, R29: promise verification | GitPython, pygit2, dulwich |
 
 ### Rationale
 
@@ -92,6 +92,7 @@ Verification checks file existence (for creates/removes), git diff analysis (for
 | Command | Input | Output | Subsystem |
 |---------|-------|--------|-----------|
 | `prothon new` | Interactive prompts: module name, description, author name, email, Python version, license | Scaffolded project directory with git repo | scaffold.py |
+| `prothon init` | None (validates cwd) | `docs/` scaffolds, `AGENTS.md`, agent symlinks, `.agents/skills/` | scaffold.py |
 | `prothon spec` | None (launches interactive session) | Populated `docs/SPEC.md` | cli.py → assistant.py (skill subprocess) |
 | `prothon design` | None (launches interactive session) | Populated `docs/DESIGN.md` + generated reference skills | cli.py → assistant.py (skill subprocess) |
 | `prothon patterns` | None (launches interactive session) | Populated `docs/PATTERNS.md` | cli.py → assistant.py (skill subprocess) |
@@ -148,7 +149,20 @@ A shared launch lifecycle handles: binary existence check, skill syncing, subpro
 
 ### Compliance Report Contract
 
-The compliance checker reads all three documentation levels and all source code, then produces three tables (SPEC compliance, DESIGN compliance, PATTERNS compliance). Each row contains: the checkable statement, a PASS/FAIL status, and `file:line` evidence. A summary section reports overall percentage and prioritized action items.
+The compliance checker reads all three documentation levels and all source code, then produces three tables (SPEC compliance, DESIGN compliance, PATTERNS compliance). Each row contains: the checkable statement, a PASS/FAIL/SKIP status, and `file:line` evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category). A summary section reports overall percentage and prioritized action items.
+
+### Adoption Contract
+
+`prothon init` overlays the documentation-driven workflow onto an existing Python project without touching its code, configuration, or git history. It performs the following steps in order:
+
+1. Verifies the current directory is a git repository (exits with error if not).
+2. Verifies `docs/SPEC.md` does not exist (exits with error if it does, directing the user to `prothon new` or manual setup).
+3. Creates `docs/` directory with empty scaffolds: `SPEC.md`, `DESIGN.md`, `PATTERNS.md` — each containing only markdown section headers, inlined in `scaffold.py`.
+4. Creates `AGENTS.md` at the project root with agent instruction content (inlined in `scaffold.py`), plus symlinks: `CLAUDE.md → AGENTS.md`, `GEMINI.md → AGENTS.md`, `AGENT.md → AGENTS.md`.
+5. Creates `.agents/skills/` directory for project-specific reference skills.
+6. Prints a summary of all created files and suggests `prothon spec` as the next step.
+
+The command must not modify existing files, `pyproject.toml`, dependencies, toolchain configuration, pre-commit hooks, CI workflows, or git history.
 
 ### Scaffolding Contract
 
@@ -170,3 +184,4 @@ Bundled skills live in `src/prothon/skills/` as directories containing `SKILL.md
 | Terminal output | Rich (via Typer dependency) | tabulate + print, Click echo/style | Already installed at zero marginal cost. Best-in-class tables. Adding tabulate would be a new dependency for worse output. |
 | Assistant invocation | Pluggable backends with shared launch lifecycle | Direct subprocess per-assistant, configuration-driven templates | Variation between assistants is structural (different CLIs, skill mechanisms, permissions), not parametric. A shared contract keeps callers backend-agnostic. Config templates break when assistants differ structurally. |
 | Promise verification | Typed dataclass models with `GitDiffProvider` protocol | Plain dict + subprocess, state machine | Protocol injection eliminates fragile mock patching in tests. Per-file `FileCheckDetail` enables structured error reporting. State machine overlaps with the execute skill's orchestrator. |
+| Init scaffold sourcing | Inline markdown headers in `scaffold.py` | Read from Copier template at runtime | Scaffolds are 3-5 lines each. Inlining avoids coupling init to Copier's internal file layout. Template restructuring cannot break init. |

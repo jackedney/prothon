@@ -1,6 +1,6 @@
 ---
 name: tech-tomlkit
-description: Reference guide for tomlkit — TOML read/write with comment and formatting preservation
+description: Reference guide for tomlkit -- TOML read/write with comment and formatting preservation
 user-invocable: false
 ---
 
@@ -14,6 +14,7 @@ user-invocable: false
 
 ```python
 import tomlkit
+from pathlib import Path
 
 # Read existing TOML (preserves comments, whitespace, ordering)
 content = Path("config.toml").read_text()
@@ -24,7 +25,7 @@ doc["metadata"]["completed"] = True
 Path("config.toml").write_text(tomlkit.dumps(doc))
 ```
 
-Or use `TOMLFile` for file I/O:
+Or use `TOMLFile` for cleaner file I/O:
 
 ```python
 from tomlkit import TOMLFile
@@ -74,17 +75,6 @@ tasks.append(task)
 doc.add("tasks", tasks)
 ```
 
-### TOMLFile for clean file I/O
-
-```python
-from tomlkit import TOMLFile
-
-f = TOMLFile("docs/change_promise.toml")
-doc = f.read()
-# ... modify doc ...
-f.write(doc)
-```
-
 ### Creating typed items explicitly
 
 ```python
@@ -102,21 +92,21 @@ tomlkit.nl()                                  # newline
 
 ## Gotchas & Pitfalls
 
-- **`tomlkit.parse()` returns a `TOMLDocument`, not a plain dict.** It looks and acts like a dict but carries formatting metadata. Passing it to code that checks `isinstance(x, dict)` will fail — use `isinstance(x, MutableMapping)` or duck typing.
-- **Assigning plain Python values auto-wraps them.** `doc["key"] = 42` works and creates a tomlkit `Integer`. But if you need specific formatting (e.g., literal strings, multiline), use explicit constructors like `tomlkit.string()`.
+- **`tomlkit.parse()` returns a `TOMLDocument`, not a plain dict.** It looks and acts like a dict but carries formatting metadata. Code that checks `isinstance(x, dict)` will fail -- use `isinstance(x, MutableMapping)` or duck typing instead.
 - **Array of tables (`[[section]]`) use `aot()`, not `array()`.** `array()` is for inline arrays (`key = [1, 2, 3]`). `aot()` is for repeated table headers. Mixing them up produces invalid TOML.
 - **`dumps()` returns a string, not bytes.** Write with `Path.write_text()`, not `write_bytes()`.
-- **Deleting keys preserves surrounding whitespace/comments.** This is usually desirable but can leave orphaned comments if the comment was meant to describe the deleted key.
-- **Performance: ~18x slower than `tomllib` for parsing.** Irrelevant for small config files (<100KB) but matters if parsing thousands of files. Use `tomllib` for read-only bulk parsing.
+- **Assigning plain Python values auto-wraps them.** `doc["key"] = 42` works. But for specific formatting (literal strings, multiline), use explicit constructors like `tomlkit.string()`.
+- **Deleting keys preserves surrounding whitespace/comments.** Usually desirable but can leave orphaned comments.
+- **Performance: ~18x slower than `tomllib` for parsing.** Irrelevant for small config files but matters for bulk parsing. Use stdlib `tomllib` for read-only access when formatting preservation is not needed.
 
 ## Idiomatic Usage
 
-**Do:** Use `tomlkit.parse()` + `tomlkit.dumps()` for roundtrip editing of human-authored files. This preserves the author's formatting choices.
+**Do:** Use `tomlkit.parse()` + `tomlkit.dumps()` for roundtrip editing of human-authored files.
 
-**Don't:** Use `tomlkit` for read-only access — use stdlib `tomllib` instead (faster, simpler, no dependency).
+**Don't:** Use `tomlkit` for read-only access -- use stdlib `tomllib` instead (faster, no dependency).
 
 **Do:** Use `tomlkit.document()` + builder helpers to construct new TOML files programmatically with clean formatting.
 
-**Don't:** Build TOML strings manually with f-strings or string concatenation. The builder API handles escaping and formatting correctly.
+**Don't:** Build TOML strings manually with f-strings or concatenation. The builder API handles escaping and formatting correctly.
 
-**Do:** Use `TOMLFile` when the read-modify-write cycle targets a single file path — it handles encoding consistently.
+**Do:** Use `TOMLFile` when the read-modify-write cycle targets a single file path.

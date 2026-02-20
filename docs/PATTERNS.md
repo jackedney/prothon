@@ -21,6 +21,7 @@ __version__ = "0.1.0"
 | Private helpers | `_verb_noun` | `_git_diff_names()`, `_within_tolerance()` |
 | Classes | PascalCase, no suffix noise | `CheckResult`, `Promise`, `Task` |
 | Constants | `UPPER_SNAKE` at module level | `PROMISE_PATH`, `DEFAULT_TOLERANCE` |
+| Inline content | `_UPPER_SNAKE` private constant | `_SPEC_SCAFFOLD`, `_AGENTS_CONTENT` |
 | Type aliases | PascalCase | `DiffStat = dict[str, tuple[int, int]]` |
 
 ### Import Order
@@ -56,6 +57,16 @@ def cleanup(path: Path = PROMISE_PATH) -> None: ...
 # Everything else is _private
 def _git_diff_names(base_commit: str) -> set[str]: ...
 def _within_tolerance(expected: int, actual: int) -> bool: ...
+```
+
+```python
+# scaffold.py — public API
+def generate(dest: Path, data: dict | None = None) -> None: ...
+def init_existing(cwd: Path | None = None) -> list[Path]: ...
+
+# Private
+def _template_dir() -> Path: ...
+def _post_generate(dest: Path) -> None: ...
 ```
 
 ## Design Patterns
@@ -183,6 +194,71 @@ def test_load_missing(tmp_path):
     report = load_promise(path=tmp_path / "nonexistent.toml")
 ```
 
+### Guard-Clause Preconditions
+
+Domain functions that require specific environmental conditions validate them upfront and raise domain exceptions. Guards come first, happy path follows. No nested `if/else` trees.
+
+```python
+def init_existing(cwd: Path | None = None) -> list[Path]:
+    root = Path(cwd) if cwd else Path.cwd()
+    if not (root / ".git").is_dir():
+        raise GitError(f"not a git repository: {root}")
+    if (root / "docs" / "SPEC.md").exists():
+        raise ProjectAlreadyInitError(f"docs/SPEC.md already exists in {root}")
+    ...
+```
+
+This keeps validation in the domain layer (not the CLI) and follows the existing "raise at source" error handling pattern.
+
+### Inline Content Constants
+
+Per the DESIGN key decision, doc scaffolds for `init` are inlined as module-level constants rather than read from the Copier template at runtime. This decouples `init` from Copier's file layout.
+
+```python
+_SPEC_SCAFFOLD = """\
+# Project Specification
+
+## Purpose
+## Requirements
+## Constraints
+## Out of Scope
+"""
+
+_DESIGN_SCAFFOLD = """\
+# Design Document
+...
+"""
+```
+
+Convention: `_UPPER_SNAKE` prefix, raw triple-quoted strings, kept together at the top of the module after imports.
+
+### Symlink Idempotent Creation
+
+Both `scaffold.py` and `skills.py` create symlinks. The shared pattern is: remove stale target (symlink or real dir), then create. This ensures re-running is safe.
+
+```python
+# Idempotent symlink: unlink stale, then create
+if dest.is_symlink():
+    dest.unlink()
+elif dest.exists():
+    shutil.rmtree(dest)
+dest.symlink_to(source)
+```
+
+`scaffold.py` uses relative symlinks (`os.symlink("AGENTS.md", link)`) for portability within a repo. `skills.py` uses absolute symlinks (`.symlink_to(skill_dir.resolve())`) because the source is outside the project tree.
+
+### Lazy Imports for Heavy Dependencies
+
+Copier is imported inside the function body, not at module level. This avoids loading Copier (and its transitive dependencies) when the module is imported for lightweight operations like `init_existing()`.
+
+```python
+def generate(dest: Path, data: dict | None = None) -> None:
+    from copier import run_copy   # lazy — heavy dependency
+    ...
+```
+
+This is an intentional exception to the standard import order. Use it only for genuinely heavy third-party packages where the import cost matters.
+
 ### Pattern Summary
 
 | Pattern | Where | Why |
@@ -193,6 +269,10 @@ def test_load_missing(tmp_path):
 | Standalone function | Shared lifecycle (`launch()`) | Keeps protocols pure interface, follows functions-first default |
 | Registry dict | Backend lookup by name | Explicit, debuggable, no magic |
 | Default args | Production vs test paths | Avoids monkeypatching |
+| Guard clauses | Domain precondition validation (`init_existing()`) | Fail fast, domain exceptions, no nested conditionals |
+| Inline constants | Doc scaffolds in `scaffold.py` | Decouples init from Copier template layout |
+| Idempotent symlinks | `scaffold.py`, `skills.py` | Safe re-runs, stale link cleanup |
+| Lazy imports | Copier in `scaffold.generate()` | Avoid heavy import for lightweight code paths |
 
 ## Error Handling
 
@@ -206,6 +286,9 @@ class ProthonError(Exception):
 
 class ProjectNotFoundError(ProthonError):
     """No prothon project root found walking up from cwd."""
+
+class ProjectAlreadyInitError(ProthonError):
+    """docs/SPEC.md already exists — project already initialized."""
 
 class PromiseError(ProthonError):
     """Promise file missing, malformed, or task index out of range."""
@@ -245,6 +328,23 @@ def status() -> None:
         raise typer.Exit(code=1)
 ```
 
+Adoption follows the same boundary pattern — `init_existing()` raises domain exceptions, `cli.py` catches and formats:
+
+```python
+# cli.py — init command
+@app.command()
+def init() -> None:
+    """Adopt an existing project into the docs-first workflow."""
+    try:
+        created = init_existing()
+        for path in created:
+            typer.echo(f"  created {path}")
+        typer.echo("\nNext step: uvx prothon spec")
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+```
+
 ### No Bare Exceptions, No Silent Swallowing
 
 Catch the specific failure, re-raise as a domain exception with context.
@@ -265,7 +365,7 @@ except Exception:
 
 ### Subprocess Error Wrapping
 
-The `git.py` wrapper converts subprocess failures immediately. Callers never see raw `subprocess.CalledProcessError`.
+The `git.py` wrapper converts subprocess failures immediately. Callers never see raw `subprocess.CalledProcessError`. Adoption reuses this — checking "is this a git repo" via `run_git("rev-parse", "--git-dir")` naturally raises `GitError` if the directory isn't a repo.
 
 ```python
 def diff_names(base_commit: str) -> set[str]:
@@ -373,6 +473,62 @@ def make_task(
         "attempts": 0,
     }
     return {**base, **overrides}
+```
+
+### Guard Clause Tests
+
+Each precondition in a domain function gets a dedicated test. Use `tmp_path` to create the exact failing condition, assert the specific exception. One test per guard, name encodes the failing condition (`_raises_when_{condition}`).
+
+```python
+def test_init_existing_raises_when_not_git_repo(tmp_path):
+    with pytest.raises(GitError, match="not a git repository"):
+        init_existing(cwd=tmp_path)
+
+def test_init_existing_raises_when_spec_exists(tmp_path):
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "SPEC.md").write_text("# existing")
+    with pytest.raises(ProjectAlreadyInitError):
+        init_existing(cwd=tmp_path)
+```
+
+### Filesystem Assertion Helpers
+
+Adoption creates files, directories, and symlinks. Use simple helpers in `conftest.py` to keep happy-path tests readable:
+
+```python
+# conftest.py
+def assert_symlink_to(link: Path, target_name: str) -> None:
+    """Assert that link is a symlink pointing to target_name."""
+    assert link.is_symlink(), f"{link} is not a symlink"
+    assert os.readlink(link) == target_name, (
+        f"{link} points to {os.readlink(link)}, expected {target_name}"
+    )
+
+# test_scaffold.py
+def test_init_existing_creates_all_artifacts(tmp_path):
+    run_git("init", cwd=tmp_path)
+    created = init_existing(cwd=tmp_path)
+
+    assert (tmp_path / "docs" / "SPEC.md").exists()
+    assert (tmp_path / "docs" / "DESIGN.md").exists()
+    assert (tmp_path / "docs" / "PATTERNS.md").exists()
+    assert (tmp_path / ".agents" / "skills").is_dir()
+    assert_symlink_to(tmp_path / "CLAUDE.md", "AGENTS.md")
+    assert_symlink_to(tmp_path / "GEMINI.md", "AGENTS.md")
+    assert_symlink_to(tmp_path / "AGENT.md", "AGENTS.md")
+```
+
+### Idempotency and Non-Destructiveness Tests
+
+Since R17 requires `init` must not modify existing files, test that pre-existing content survives:
+
+```python
+def test_init_existing_does_not_modify_existing_files(tmp_path):
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 88\n")
+    init_existing(cwd=tmp_path)
+    assert "[tool.ruff]" in (tmp_path / "pyproject.toml").read_text()
 ```
 
 ### Hypothesis for Boundary Logic

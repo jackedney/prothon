@@ -1,6 +1,6 @@
 ---
 name: tech-typer
-description: Reference guide for Typer — CLI framework with type-hint-driven parameter inference
+description: Reference guide for Typer -- CLI framework with type-hint-driven parameter inference
 user-invocable: false
 ---
 
@@ -19,13 +19,13 @@ app = typer.Typer()
 
 @app.command()
 def hello(name: str):
-    typer.echo(f"Hello {name}")
+    print(f"Hello {name}")
 
 if __name__ == "__main__":
     app()
 ```
 
-Typer reads function signatures — type hints become CLI parameters, defaults become optional flags, docstrings become help text.
+Typer reads function signatures -- type hints become CLI parameters, defaults become optional flags, docstrings become help text.
 
 ## Common Patterns
 
@@ -63,25 +63,28 @@ app.add_typer(promise_app, name="promise")
 # Usage: prothon promise plan
 ```
 
-### Options vs arguments
+### Options vs arguments with Annotated (modern style)
 
 ```python
+from typing import Annotated
+
 @app.command()
 def check(
-    task_index: int,                                    # positional argument
-    verbose: bool = typer.Option(False, "--verbose"),    # explicit option
-    retries: int = typer.Option(3, help="Max retries"), # option with help
+    task: Annotated[int, typer.Argument(help="Task index to verify")],
+    verbose: Annotated[bool, typer.Option("--verbose", help="Verbose output")] = False,
+    retries: Annotated[int, typer.Option(help="Max retries")] = 3,
 ):
     ...
 ```
 
-### Prompting for input
+### Prompting for interactive input
 
 ```python
 @app.command()
 def new():
     name = typer.prompt("Module name")
     desc = typer.prompt("Description", default="")
+    confirm = typer.confirm("Proceed?")
 ```
 
 ### Callbacks for app-level options
@@ -89,23 +92,24 @@ def new():
 ```python
 @app.callback()
 def main(verbose: bool = False):
-    """Prothon CLI — documentation-driven development."""
+    """Prothon CLI -- documentation-driven development."""
     if verbose:
         state["verbose"] = True
 ```
 
 ## Gotchas & Pitfalls
 
-- **Boolean flags generate `--flag/--no-flag` pairs by default.** If you only want `--flag`, use `typer.Option(False, "--flag", is_flag=True)` or annotate with `Annotated[bool, typer.Option("--flag")]`.
-- **`typer.echo()` is still valid** but the docs recommend `print()` for simple output and Rich for styled output, since Rich is always available via the Typer dependency.
-- **Typer wraps Click internally.** If you hit a Typer limitation, you can drop down to `click.get_current_context()` or access the underlying Click objects. But avoid mixing Typer decorators with raw Click decorators on the same function.
-- **Testing: use `typer.testing.CliRunner`**, not Click's runner directly. The Typer runner handles Rich output and Typer-specific context properly.
-- **Exit codes:** Raise `typer.Exit(code=1)` for non-zero exits. Unhandled exceptions produce code 1 automatically but with a traceback.
-- **`add_typer()` name parameter is required** for the subcommand group name. Without it, Typer infers from the module name, which is fragile.
+- **Boolean flags generate `--flag/--no-flag` pairs by default.** To get only `--flag`, use `Annotated[bool, typer.Option("--flag")]`.
+- **`typer.echo()` is deprecated in favor of `print()`.** For styled output, use Rich directly (always available via Typer dependency).
+- **Typer wraps Click internally.** You can access `click.get_current_context()` for advanced use, but avoid mixing Typer decorators with raw Click decorators on the same function.
+- **Testing: use `typer.testing.CliRunner`**, not Click's runner directly. The Typer runner handles Rich output properly.
+- **Exit codes:** Raise `typer.Exit(code=1)` for non-zero exits. Unhandled exceptions produce code 1 with traceback.
+- **`add_typer()` name parameter is required.** Without it, Typer infers from the module name, which is fragile.
+- **Rich markup in help strings.** Typer renders help strings with Rich, so literal square brackets in help text will be interpreted as markup. Use `\[` to escape.
 
 ## Idiomatic Usage
 
-**Do:** Keep command functions thin — call domain functions and format output.
+**Do:** Keep command functions thin -- call domain functions and format output.
 ```python
 @app.command()
 def compliance():
@@ -115,17 +119,10 @@ def compliance():
 
 **Don't:** Put business logic in command functions. They should be adapters between CLI input and domain code.
 
-**Do:** Use `Annotated` for complex parameter metadata (Python 3.9+).
-```python
-from typing import Annotated
+**Do:** Use `Annotated` for parameter metadata (preferred over positional defaults since Typer 0.9+).
 
-@app.command()
-def check(
-    task: Annotated[int, typer.Argument(help="Task index to verify")],
-):
-    ...
-```
+**Don't:** Use `typer.Argument()` as a default value -- the `Annotated` form is the modern convention.
 
-**Don't:** Use `typer.Argument()` as a default value — the `Annotated` form is preferred in modern Typer.
+**Do:** Use `rich_help_panel` to organize `--help` output into sections for commands with many options.
 
-**Do:** Use `rich_help_panel` to organize `--help` output into sections for complex commands.
+**Do:** Use `typer.Context` parameter for accessing the invoked subcommand or parent context when needed.

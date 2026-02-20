@@ -37,6 +37,15 @@ repos:
         language: system
         pass_filenames: false
 
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest tests/
+        language: system
+        pass_filenames: false
+        always_run: true
+
   - repo: https://github.com/rohaquinlop/complexipy-pre-commit
     rev: v5.1.0
     hooks:

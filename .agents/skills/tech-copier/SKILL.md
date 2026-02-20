@@ -1,6 +1,6 @@
 ---
 name: tech-copier
-description: Reference guide for Copier — project templating with native update support
+description: Reference guide for Copier -- project templating with native update support
 user-invocable: false
 ---
 
@@ -18,7 +18,7 @@ from copier import run_copy
 # Generate project from local template
 run_copy("path/to/template", "path/to/destination")
 
-# With pre-filled answers
+# With pre-filled answers (skip interactive prompts)
 run_copy(
     src_path="path/to/template",
     dst_path="./my-project",
@@ -26,26 +26,26 @@ run_copy(
 )
 ```
 
-Template directory must contain a `copier.yml` defining questions and settings.
+Template directory must contain a `copier.yml` (or `copier.yaml`) defining questions and settings.
 
 ## Common Patterns
 
-### Python API — three main functions
+### Python API -- three main functions
 
 ```python
 from copier import run_copy, run_update, run_recopy
 
 # Initial generation
-worker = run_copy(src_path, dst_path, data=answers, defaults=False)
+run_copy(src_path, dst_path, data=answers, defaults=False)
 
 # Update existing project (3-way merge, preserves user edits)
-worker = run_update(dst_path, conflict="rej", overwrite=True)
+run_update(dst_path, conflict="rej", overwrite=True)
 
 # Full regeneration (discards evolution history)
-worker = run_recopy(dst_path)
+run_recopy(dst_path)
 ```
 
-### Key parameters
+### Key parameters for run_copy
 
 | Parameter | Type | Purpose |
 |-----------|------|---------|
@@ -53,7 +53,7 @@ worker = run_recopy(dst_path)
 | `defaults` | `bool` | Accept all default values without prompting |
 | `overwrite` | `bool` | Overwrite existing files without asking |
 | `vcs_ref` | `str` | Git ref (tag/branch/SHA) to use for template |
-| `answers_file` | `str` | Path for `.copier-answers.yml` (default: `.copier-answers.yml`) |
+| `answers_file` | `str` | Path for `.copier-answers.yml` |
 | `unsafe` | `bool` | Allow running template tasks (required for post-gen scripts) |
 | `cleanup_on_error` | `bool` | Remove destination on failure (default: `True`) |
 | `quiet` | `bool` | Suppress output |
@@ -82,7 +82,7 @@ license:
 
 ### Template variables in files
 
-Files ending in `.jinja` are rendered. Use `{{ variable_name }}` syntax:
+Files ending in `.jinja` are rendered and the `.jinja` suffix is stripped. Use `{{ variable_name }}` syntax:
 
 ```jinja
 # {{ module_name }}
@@ -92,28 +92,36 @@ Files ending in `.jinja` are rendered. Use `{{ variable_name }}` syntax:
 
 Directory and file names can also be templated: `{{ module_name }}/`.
 
-### Global variables available in templates
+### Jinja2 raw blocks for literal braces
 
-- `_copier_answers` — current answers dict (excludes secrets, safe to use)
-- `_copier_conf` — serialized Copier Worker object containing configuration metadata. **Warning:** its `.data` key includes secret answers — do not render, log, or include in generated output
-- `_copier_operation` — `"copy"` or `"update"`
-- `_folder_name` — root directory name
+```jinja
+{% raw %}
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: ${{ github.event.pull_request.commits }}
+{% endraw %}
+```
+
+Required for files containing literal `{{ }}` syntax (GitHub Actions workflows, Jinja2 templates within the template).
 
 ## Gotchas & Pitfalls
 
-- **`unsafe=True` is required** to run post-generation tasks defined in `copier.yml`. Without it, tasks are silently skipped. This is a security measure — templates from untrusted sources could run arbitrary commands.
-- **Template updates require a git repo.** `run_update()` reads `.copier-answers.yml` and needs the template's git history for 3-way merge. Templates must be git repos (not plain directories) for update to work.
+- **`unsafe=True` is required** to run post-generation tasks defined in `copier.yml`. Without it, tasks are silently skipped.
+- **Template updates require a git repo.** `run_update()` reads `.copier-answers.yml` and needs the template's git history for 3-way merge. The template source must be a git repo (not a plain directory) for update to work.
 - **`.copier-answers.yml` must be committed.** It records which template version was used. If missing, `run_update()` cannot determine the base for merging.
-- **Jinja2 `{% raw %}` blocks** are needed for files that contain literal `{{ }}` syntax (e.g., GitHub Actions workflows, Jinja2 templates within the template).
-- **`conflict="rej"`** creates `.rej` files with rejected hunks. `conflict="inline"` inserts Git-style conflict markers. Choose `rej` for programmatic handling, `inline` for manual resolution.
-- **Question `type` matters for validation.** Use `str`, `int`, `float`, `bool`, `yaml`, or `json`. The `yaml` type with `multiselect: true` enables checkbox-style selection.
+- **`conflict="rej"`** creates `.rej` files with rejected hunks. `conflict="inline"` inserts Git-style conflict markers. Choose `rej` for programmatic handling.
+- **Question `type` matters for validation.** Supported types: `str`, `int`, `float`, `bool`, `yaml`, `json`.
+- **`_copier_conf.data` includes secret answers** -- never render, log, or include in generated output.
+- **`_subdirectory` in `copier.yml`** is needed when template files are in a subdirectory of the repo (common when the repo also contains docs/tests for the template itself).
 
 ## Idiomatic Usage
 
-**Do:** Keep template logic minimal — use `copier.yml` conditions to include/exclude files rather than complex Jinja2 logic inside files.
-
-**Do:** Use `_subdirectory` in `copier.yml` if template files are in a subdirectory of the repo (common when the repo also contains docs/tests for the template itself).
-
-**Don't:** Call `run_copy()` without catching exceptions — wrap in try/except for user-friendly error messages, especially for git-related failures.
+**Do:** Keep template logic minimal -- use `copier.yml` conditions to include/exclude files rather than complex Jinja2 logic inside files.
 
 **Do:** Pass `data` for non-interactive usage (testing, CI). Pass `defaults=True` to accept all defaults without prompts.
+
+**Don't:** Call `run_copy()` without catching exceptions -- wrap in try/except for user-friendly error messages, especially for git-related failures.
+
+**Do:** Use `when` conditions in `copier.yml` for conditional questions rather than Jinja2 `{% if %}` blocks in templates.
+
+**Don't:** Rely on `_copier_operation` for behavior changes inside templates -- keep copy and update behavior identical where possible.

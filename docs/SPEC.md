@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Prothon is a CLI tool that scaffolds opinionated Python projects and provides a structured documentation-driven workflow for keeping AI coding assistants aligned with project intent across sessions. It solves two problems: repetitive project setup (by generating a ready-to-use project with a fixed dev toolchain and pre-commit hooks), and AI drift (by establishing a three-level documentation hierarchy that serves as a durable source of truth for AI agents, with automated verification that code matches documented intent).
+Prothon is a CLI tool that scaffolds opinionated Python projects and provides a structured documentation-driven workflow for keeping AI coding assistants aligned with project intent across sessions. It solves two problems: repetitive project setup (by generating a ready-to-use project with a fixed dev toolchain and pre-commit hooks), and AI drift (by establishing a three-level documentation hierarchy that serves as a durable source of truth for AI agents, with automated verification that code matches documented intent). For existing Python projects, prothon can overlay just the documentation-driven workflow without touching the project's existing code, configuration, or toolchain.
 
 ## Requirements
 
@@ -18,46 +18,57 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 8. The scaffolded project must include agent instruction files that teach AI assistants the documentation hierarchy and development workflow.
 9. The scaffolded project must include empty doc scaffolds for SPEC.md, DESIGN.md, and PATTERNS.md.
 
+### Project Adoption
+
+10. The system must adopt an existing Python project into the documentation-driven workflow via a single CLI command (`prothon init`).
+11. The command must verify the current directory is a git repository and exit with an error if it is not.
+12. The command must verify that `docs/SPEC.md` does not already exist and exit with an error if it does, directing the user to `prothon new` or manual setup.
+13. The command must create a `docs/` directory with empty scaffolds for SPEC.md, DESIGN.md, and PATTERNS.md, identical to those created by `prothon new`.
+14. The command must create AGENTS.md and symlinks (CLAUDE.md, GEMINI.md, AGENT.md) pointing to AGENTS.md.
+15. The command must create a `.agents/skills/` directory for project-specific reference skills.
+16. The command must print a summary of created files and suggest running `prothon spec` as the next step.
+17. The command must not modify existing files, configuration, dependencies, toolchain, pre-commit hooks, CI workflows, or git history.
+
 ### Documentation Hierarchy
 
-10. The system must enforce a three-level documentation hierarchy: SPEC.md (requirements), DESIGN.md (architecture), and PATTERNS.md (conventions).
-11. SPEC.md must have the highest authority. When documents conflict, higher-level documents override lower-level documents.
-12. SPEC.md must exist before DESIGN.md can be written. DESIGN.md must exist before PATTERNS.md can be written.
-13. SPEC.md must only be modifiable through the spec-writer agent. No other agent may alter it.
-14. Each documentation level must have a dedicated interactive agent: spec-writer for SPEC.md, design-writer for DESIGN.md, patterns-writer for PATTERNS.md.
-15. Documentation agents must enforce separation of concerns — the spec-writer must refuse to include technology choices, the design-writer must refuse to include code patterns, and so on.
-16. The doc-harmonizer must detect conflicts between documentation levels and suggest amendments to the lower-authority document, requiring user approval before making changes.
+18. The system must enforce a three-level documentation hierarchy: SPEC.md (requirements), DESIGN.md (architecture), and PATTERNS.md (conventions).
+19. SPEC.md must have the highest authority. When documents conflict, higher-level documents override lower-level documents.
+20. SPEC.md must exist before DESIGN.md can be written. DESIGN.md must exist before PATTERNS.md can be written.
+21. SPEC.md must only be modifiable through the spec-writer agent. No other agent may alter it.
+22. Each documentation level must have a dedicated interactive agent: spec-writer for SPEC.md, design-writer for DESIGN.md, patterns-writer for PATTERNS.md.
+23. Documentation agents must enforce separation of concerns — the spec-writer must refuse to include technology choices, the design-writer must refuse to include code patterns, and so on.
+24. The doc-harmonizer must detect conflicts between documentation levels and suggest amendments to the lower-authority document, requiring user approval before making changes.
 
 ### Code Execution
 
-17. The system must provide an execute workflow that reads all documentation levels and generates a plan of implementation tasks.
-18. Each task in the plan must declare the files to be created, modified, or removed, along with predicted line counts.
-19. The user must approve the plan before any code is written.
-20. Each task must execute in an isolated agent context with only the files and skills relevant to that task.
-21. After each task completes, the system must verify the actual changes against the declared plan, including checking that files exist or were removed as expected and that line counts are within tolerance.
-22. The system must run all toolchain quality checks after each task.
-23. If a task fails verification or quality checks, the system must retry up to a configurable number of attempts before reporting failure.
+25. The system must provide an execute workflow that reads all documentation levels and generates a plan of implementation tasks.
+26. Each task in the plan must declare the files to be created, modified, or removed, along with predicted line counts.
+27. The user must approve the plan before any code is written.
+28. Each task must execute in an isolated agent context with only the files and skills relevant to that task.
+29. After each task completes, the system must verify the actual changes against the declared plan, including checking that files exist or were removed as expected and that line counts are within tolerance.
+30. The system must run all toolchain quality checks after each task.
+31. If a task fails verification or quality checks, the system must retry up to a configurable number of attempts before reporting failure.
 
 ### Compliance Verification
 
-24. The system must provide a compliance checker that verifies source code matches all requirements, design choices, and patterns documented across the three documentation levels.
-25. The compliance checker must produce a report listing each checkable item with a PASS, FAIL, or SKIP status and file-and-line evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category).
-26. Compliance checking must be mandatory before any implementation work is claimed complete.
-27. When compliance failures are found, the system must present them to the user for a decision on whether to update the code or update the documentation.
+32. The system must provide a compliance checker that verifies source code matches all requirements, design choices, and patterns documented across the three documentation levels.
+33. The compliance checker must produce a report listing each checkable item with a PASS, FAIL, or SKIP status and file-and-line evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category).
+34. Compliance checking must be mandatory before any implementation work is claimed complete.
+35. When compliance failures are found, the system must present them to the user for a decision on whether to update the code or update the documentation.
 
 ### Tech Research
 
-28. The system must automatically generate reference skills based on the technology choices made in DESIGN.md.
-29. Generated reference skills must be sourced from live documentation, not solely from the AI's training data.
-30. Reference skills must cover four categories: library usage, language style conventions, performance patterns, and domain knowledge.
-31. Generated reference skills must be stored in the project's local skills directory so they are available to all AI agents working on the project.
+36. The system must automatically generate reference skills based on the technology choices made in DESIGN.md.
+37. Generated reference skills must be sourced from live documentation, not solely from the AI's training data.
+38. Reference skills must cover four categories: library usage, language style conventions, performance patterns, and domain knowledge.
+39. Generated reference skills must be stored in the project's local skills directory so they are available to all AI agents working on the project.
 
 ### CLI and Agent Integration
 
-32. All documentation and execution workflows must be invocable via CLI commands (`prothon spec`, `prothon design`, `prothon patterns`, `prothon execute`, `prothon compliance`).
-33. The system must support Claude Code as the AI assistant for all agent workflows.
-34. Built-in skills must be bundled with the package and synced to the user's AI assistant skill directory on every CLI invocation.
-35. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
+40. All documentation and execution workflows must be invocable via CLI commands (`prothon spec`, `prothon design`, `prothon patterns`, `prothon execute`, `prothon compliance`).
+41. The system must support Claude Code as the AI assistant for all agent workflows.
+42. Built-in skills must be bundled with the package and synced to the user's AI assistant skill directory on every CLI invocation.
+43. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
 
 ## Constraints
 

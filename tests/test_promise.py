@@ -135,12 +135,15 @@ def test_load_save_roundtrip(promise_file: Path):
     promise = load_promise(promise_file)
     assert promise.tasks[0].title == "Add auth module"
     assert len(promise.tasks) == 2
+    assert promise.tasks[0].max_attempts == 3
 
     promise.tasks[0].completed = True
+    promise.tasks[0].max_attempts = 5
     save_promise(promise, promise_file)
 
     reloaded = load_promise(promise_file)
     assert reloaded.tasks[0].completed is True
+    assert reloaded.tasks[0].max_attempts == 5
     assert reloaded.tasks[1].completed is False
 
 

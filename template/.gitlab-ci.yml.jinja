@@ -9,7 +9,7 @@ check:
   image: python:${PYTHON_VERSION}
   before_script:
     - pip install uv
-    - uv sync
+    - uv sync --locked
   script:
     - uv run ruff check src/ tests/
     - uv run ruff format --check src/ tests/

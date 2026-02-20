@@ -47,6 +47,7 @@ def make_task(
         "dependencies": [],
         "completed": False,
         "attempts": 0,
+        "max_attempts": 3,
     }
     return {**base, **overrides}
 

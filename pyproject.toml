@@ -1,13 +1,14 @@
 [project]
 name = "prothon"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python project generator with docs-first AI workflow"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
     "typer>=0.15",
     "jinja2>=3.1",
-    "tomli-w>=1.0",
+    "tomlkit>=0.13,<1.0",
+    "copier>=9.0",
 ]
 
 [dependency-groups]
@@ -20,6 +21,7 @@ dev = [
     "vulture>=2.14",
     "complexipy>=5.1",
     "pre-commit>=4.0",
+    "hypothesis>=6.0",
 ]
 
 [build-system]
@@ -42,9 +44,16 @@ format = "ruff format --check src/ tests/"
 typecheck = "ty check"
 test = "pytest tests/"
 security = "bandit -c pyproject.toml -r src/"
-deadcode = "vulture src/ --min-confidence=61"
+deadcode = "vulture src/"
 complexity = "complexipy src/ --max-complexity-allowed 20"
 check = ["lint", "format", "typecheck", "test", "security", "deadcode", "complexity"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.vulture]
+paths = ["src"]
+min_confidence = 80
 
 [tool.bandit]
 exclude_dirs = ["tests"]

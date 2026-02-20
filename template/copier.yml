@@ -1,0 +1,45 @@
+_subdirectory: ""
+_answers_file: .copier-answers.yml
+
+project_name:
+  type: str
+  help: "Project name (derived from destination folder)"
+  default: "{{ _folder_name }}"
+  when: false
+
+module_name:
+  type: str
+  help: "Python module name (snake_case)"
+
+description:
+  type: str
+  help: "Project description"
+  default: "A Python project"
+
+author_name:
+  type: str
+  help: "Author name"
+  default: ""
+
+author_email:
+  type: str
+  help: "Author email"
+  default: ""
+
+python_version:
+  type: str
+  help: "Minimum Python version"
+  default: "3.13"
+  choices:
+    - "3.11"
+    - "3.12"
+    - "3.13"
+
+license:
+  type: str
+  help: "Project license"
+  default: "MIT"
+  choices:
+    - "MIT"
+    - "Apache-2.0"
+    - "None"

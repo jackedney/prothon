@@ -1,14 +1,23 @@
-"""Prothon CLI — Python project generator with docs-first AI workflow."""
+"""Prothon CLI — command definitions and output formatting."""
 
-import os
-import shutil
-import subprocess
+from __future__ import annotations
+
 from pathlib import Path
 
 import typer
-from jinja2 import Environment, BaseLoader
+from rich.console import Console
+from rich.markup import escape
+from rich.table import Table
+from rich.text import Text
 
 from prothon import promise
+from prothon.assistant import get_backend, launch
+from prothon.exceptions import AssistantNotFoundError, ProthonError
+from prothon.promise import CheckStatus, TaskCheckReport
+from prothon.project import find_project_root
+from prothon.scaffold import generate, init_existing
+
+console = Console()
 
 app = typer.Typer(
     add_completion=False,
@@ -19,158 +28,124 @@ app = typer.Typer(
 promise_app = typer.Typer(help="Manage change promises (plan, check, execute).")
 app.add_typer(promise_app, name="promise")
 
-COPIER_ANSWERS_TEMPLATE = "{{ _copier_conf.answers_file }}.jinja"
+
+def _require_project_root() -> Path:
+    """Find the project root or exit with an error."""
+    try:
+        return find_project_root()
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
 
 
-def _template_dir() -> Path:
-    """Return the path to the bundled template directory."""
-    # When installed as package, template is bundled alongside cli.py
-    pkg_template = Path(__file__).parent / "template"
-    if pkg_template.is_dir():
-        return pkg_template
-    # In development, template is at repo root
-    repo_root = Path(__file__).parent.parent.parent
-    return repo_root / "template"
+def _require_promise_file(root: Path) -> Path:
+    """Resolve promise path against project root, or exit if missing."""
+    promise_path = root / promise.PROMISE_PATH
+    if not promise_path.exists():
+        typer.echo(f"No promise file found at {promise_path}")
+        raise typer.Exit(1)
+    return promise_path
 
 
-def find_project_root(start: Path | None = None) -> Path | None:
-    """Walk up from start directory to find a prothon project root."""
-    current = (start or Path.cwd()).resolve()
-    while True:
-        if (current / ".copier-answers.yml").exists():
-            return current
-        parent = current.parent
-        if parent == current:
-            return None
-        current = parent
-
-
-def _skills_dir() -> Path:
-    """Return the path to the bundled skills directory."""
-    return Path(__file__).parent / "skills"
-
-
-def _sync_skills() -> None:
-    """Symlink bundled skills into ~/.claude/skills/ so Claude discovers them via /skill-name."""
-    bundled = _skills_dir()
-    if not bundled.is_dir():
-        return
-    target = Path.home() / ".claude" / "skills"
-    target.mkdir(parents=True, exist_ok=True)
-    for skill_dir in bundled.iterdir():
-        if not skill_dir.is_dir():
-            continue
-        dest = target / skill_dir.name
-        if dest.is_symlink():
-            dest.unlink()
-        elif dest.exists():
-            shutil.rmtree(dest)
-        dest.symlink_to(skill_dir.resolve())
-
-
-def launch_claude(skill_name: str, cwd: Path) -> None:
-    """Launch an interactive Claude Code session that invokes the given skill."""
-    if not shutil.which("claude"):
+def _launch_skill(skill_name: str, cwd: Path) -> None:
+    """Resolve the backend, launch the skill, and handle errors."""
+    try:
+        backend = get_backend()
+        rc = launch(backend, skill_name, cwd)
+        if rc != 0:
+            raise typer.Exit(rc)
+    except AssistantNotFoundError:
         typer.echo(
             "Error: Claude Code CLI not found.\n"
             "Install: https://docs.anthropic.com/en/docs/claude-code"
         )
         raise typer.Exit(1)
-    _sync_skills()
-    subprocess.run(
-        ["claude", "--dangerously-skip-permissions", f"/{skill_name}"],
-        cwd=cwd,
-    )
-
-
-def _require_project_root() -> Path:
-    """Find the project root or exit with an error."""
-    root = find_project_root()
-    if root is None:
-        typer.echo(
-            "Error: Not inside a prothon-generated project.\n"
-            "Generate one with: uvx prothon new my-project"
-        )
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}")
         raise typer.Exit(1)
-    return root
 
 
-def generate(dest: Path, context: dict) -> None:
-    """Generate a project from the template."""
-    env = Environment(
-        loader=BaseLoader(),
-        keep_trailing_newline=True,
+# --- Rich rendering helpers ---
+
+
+def _render_plan(p: promise.Promise) -> Table:
+    """Build a Rich table for the promise plan."""
+    base = p.metadata.base_commit or "unknown"
+    task_word = "task" if len(p.tasks) == 1 else "tasks"
+
+    table = Table(
+        title=f"PLAN: {len(p.tasks)} {task_word} (base: {base})",
+        show_lines=True,
     )
+    table.add_column("#", style="bold", width=3)
+    table.add_column("Title", style="bold")
+    table.add_column("Files", no_wrap=False)
+    table.add_column("Lines", justify="right")
+    table.add_column("Deps")
 
-    template_dir = _template_dir()
-    dest.mkdir(parents=True, exist_ok=True)
+    for i, task in enumerate(p.tasks):
+        files_parts: list[str] = []
+        if task.files_to_create:
+            files_parts.append(f"[green]+[/green] {', '.join(task.files_to_create)}")
+        if task.files_to_modify:
+            files_parts.append(f"[yellow]~[/yellow] {', '.join(task.files_to_modify)}")
+        if task.files_to_remove:
+            files_parts.append(f"[red]-[/red] {', '.join(task.files_to_remove)}")
+        files_cell = "\n".join(files_parts) if files_parts else "-"
 
-    for src_path in sorted(template_dir.rglob("*")):
-        if src_path.is_dir():
-            continue
+        lines_cell = f"+{task.expected_lines_added} / -{task.expected_lines_removed}"
 
-        rel_path = src_path.relative_to(template_dir)
+        deps_cell = (
+            ", ".join(str(d) for d in task.dependencies)
+            if task.dependencies
+            else "none"
+        )
 
-        # Skip the copier-specific answers template
-        if COPIER_ANSWERS_TEMPLATE in str(rel_path):
-            continue
+        table.add_row(str(i), escape(task.title), files_cell, lines_cell, deps_cell)
 
-        # Template the path itself (handles {{ module_name }} dirs)
-        rendered_rel = env.from_string(str(rel_path)).render(context)
-        dest_path = dest / rendered_rel
+    return table
 
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if src_path.suffix == ".jinja":
-            # Render Jinja template and strip .jinja suffix
-            dest_path = dest_path.with_suffix("")
-            content = src_path.read_text()
-            rendered = env.from_string(content).render(context)
-            dest_path.write_text(rendered)
+def _render_status(p: promise.Promise) -> Table:
+    """Build a Rich table for task completion status."""
+    done = sum(1 for t in p.tasks if t.completed)
+    table = Table(title=f"Status: {done}/{len(p.tasks)} completed")
+    table.add_column("#", style="bold", width=3)
+    table.add_column("Status", width=6)
+    table.add_column("Title")
+
+    for i, task in enumerate(p.tasks):
+        if task.completed:
+            status_cell = Text("\u2713", style="green")
         else:
-            # Copy as-is
-            shutil.copy2(src_path, dest_path)
+            status_cell = Text("\u2717", style="red")
+        table.add_row(str(i), status_cell, escape(task.title))
 
-    # Create symlinks for agent instruction files
-    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
-        link = dest / name
-        if not link.exists():
-            os.symlink("AGENTS.md", link)
+    return table
 
-    # Create .agents/skills for project-specific reference skills (tech-*, style-*, etc.)
-    (dest / ".agents" / "skills").mkdir(parents=True, exist_ok=True)
 
-    # Write .copier-answers.yml for copier update support
-    _write_copier_answers(dest, context)
+def _render_check_report(report: TaskCheckReport) -> Table:
+    """Build a Rich table for a task verification report."""
+    result_style = "green" if report.passed else "red"
+    result_label = "PASS" if report.passed else "DISCREPANCY"
 
-    # Initialize git
-    subprocess.run(["git", "init"], cwd=dest, capture_output=True, check=True)
-    subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "Initial commit from prothon template"],
-        cwd=dest,
-        capture_output=True,
-        check=True,
+    table = Table(
+        title=f'Task {report.task_index}: "{escape(report.title)}" \u2014 [{result_style}]{result_label}[/{result_style}]',
     )
+    table.add_column("Check", style="bold")
+    table.add_column("Result", width=6)
+    table.add_column("Detail")
 
+    _status_styles = {
+        CheckStatus.PASSED: ("PASS", "green"),
+        CheckStatus.FAILED: ("FAIL", "red"),
+        CheckStatus.SKIPPED: ("SKIP", "yellow"),
+    }
+    for c in report.checks:
+        label, style = _status_styles[c.status]
+        table.add_row(c.name, Text(label, style=style), c.detail)
 
-def _write_copier_answers(dest: Path, context: dict) -> None:
-    """Write .copier-answers.yml for copier update compatibility."""
-    lines = [
-        "# Changes here will be overwritten by Copier",
-        "_src_path: gh:jackedney/prothon",
-    ]
-    for key in (
-        "project_name",
-        "module_name",
-        "description",
-        "author_name",
-        "author_email",
-        "python_version",
-        "license",
-    ):
-        lines.append(f"{key}: {context[key]}")
-    (dest / ".copier-answers.yml").write_text("\n".join(lines) + "\n")
+    return table
 
 
 @app.callback(invoke_without_command=True)
@@ -212,7 +187,7 @@ def new(
         typer.echo("Must be MIT, Apache-2.0, or None")
         license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
 
-    context = {
+    data = {
         "project_name": project_name,
         "module_name": module_name,
         "description": description,
@@ -222,7 +197,7 @@ def new(
         "license": license_choice,
     }
 
-    generate(dest, context)
+    generate(dest, data)
     typer.echo(f"\nProject created at {dest}")
     typer.echo("Next steps:")
     typer.echo(f"  cd {dest.name}")
@@ -233,38 +208,51 @@ def new(
 
 
 @app.command()
+def init() -> None:
+    """Adopt an existing project into the docs-first workflow."""
+    try:
+        created = init_existing()
+        for path in created:
+            typer.echo(f"  created {path}")
+        typer.echo("\nNext step: uvx prothon spec")
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def spec() -> None:
     """Write or revise SPEC.md — extract requirements through probing questions."""
     root = _require_project_root()
-    launch_claude("prothon-spec-writer", root)
+    _launch_skill("prothon-spec-writer", root)
 
 
 @app.command()
 def design() -> None:
     """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
     root = _require_project_root()
-    launch_claude("prothon-design-writer", root)
+    _launch_skill("prothon-design-writer", root)
 
 
 @app.command()
 def patterns() -> None:
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
     root = _require_project_root()
-    launch_claude("prothon-patterns-writer", root)
+    _launch_skill("prothon-patterns-writer", root)
 
 
 @app.command()
 def execute() -> None:
     """Align source code to documentation — plan and implement with subagents."""
     root = _require_project_root()
-    launch_claude("prothon-execute", root)
+    _launch_skill("prothon-execute", root)
 
 
 @app.command()
 def compliance() -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
-    launch_claude("prothon-compliance-checker", root)
+    _launch_skill("prothon-compliance-checker", root)
 
 
 # --- Promise subcommands ---
@@ -273,21 +261,19 @@ def compliance() -> None:
 @promise_app.command("plan")
 def promise_plan() -> None:
     """Pretty-print the change promise plan."""
-    _require_project_root()
-    if not promise.PROMISE_PATH.exists():
-        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
-        raise typer.Exit(1)
-    typer.echo(promise.plan())
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
+    p = promise.load_promise(promise_path)
+    console.print(_render_plan(p))
 
 
 @promise_app.command("status")
 def promise_status() -> None:
     """Show completion status of all tasks."""
-    _require_project_root()
-    if not promise.PROMISE_PATH.exists():
-        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
-        raise typer.Exit(1)
-    typer.echo(promise.status())
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
+    p = promise.load_promise(promise_path)
+    console.print(_render_status(p))
 
 
 @promise_app.command("check")
@@ -295,12 +281,14 @@ def promise_check(
     task_index: int = typer.Argument(help="Zero-based task index to check"),
 ) -> None:
     """Verify a task's promises against git reality."""
-    _require_project_root()
-    if not promise.PROMISE_PATH.exists():
-        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
+    try:
+        report = promise.check_task(task_index, path=promise_path)
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}")
         raise typer.Exit(1)
-    report = promise.check_task(task_index)
-    typer.echo(report.format())
+    console.print(_render_check_report(report))
     if not report.passed:
         raise typer.Exit(1)
 
@@ -311,11 +299,13 @@ def promise_complete(
     attempts: int = typer.Argument(default=1, help="Number of attempts taken"),
 ) -> None:
     """Mark a task as completed and record attempt count."""
-    _require_project_root()
-    if not promise.PROMISE_PATH.exists():
-        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
+    try:
+        promise.complete_task(task_index, attempts=attempts, path=promise_path)
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}")
         raise typer.Exit(1)
-    promise.complete_task(task_index, attempts=attempts)
     suffix = "s" if attempts != 1 else ""
     typer.echo(f"Task {task_index} marked as completed ({attempts} attempt{suffix}).")
 
@@ -323,9 +313,7 @@ def promise_complete(
 @promise_app.command("cleanup")
 def promise_cleanup() -> None:
     """Remove the promise file after all tasks are complete."""
-    _require_project_root()
-    if not promise.PROMISE_PATH.exists():
-        typer.echo(f"No promise file found at {promise.PROMISE_PATH}")
-        raise typer.Exit(1)
-    promise.cleanup()
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
+    promise.cleanup(promise_path)
     typer.echo("Promise file removed.")

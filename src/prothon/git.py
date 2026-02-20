@@ -9,13 +9,15 @@ from typing import Protocol
 
 from prothon.exceptions import GitError
 
+DiffStat = dict[str, tuple[int, int]]
+
 
 class GitDiffProvider(Protocol):
     """Protocol for git diff data sources -- real or fake for testing."""
 
     def diff_names(self, base_commit: str) -> set[str]: ...
 
-    def diff_numstat(self, base_commit: str) -> dict[str, tuple[int, int]]: ...
+    def diff_numstat(self, base_commit: str) -> DiffStat: ...
 
 
 def run_git(*args: str, cwd: Path | None = None) -> str:
@@ -39,8 +41,10 @@ def run_git(*args: str, cwd: Path | None = None) -> str:
         env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
     )
     if result.returncode != 0:
-        cmd = args[0] if args else "<no subcommand>"
-        raise GitError(f"git {cmd} failed: {result.stderr.strip()}")
+        full_cmd = " ".join(["git", *args])
+        raise GitError(
+            f"{full_cmd} failed (exit {result.returncode}): {result.stderr.strip()}"
+        )
     return result.stdout
 
 
@@ -52,12 +56,12 @@ class SubprocessGitDiff:
         output = run_git("diff", base_commit, "--name-only")
         return {line for line in output.strip().splitlines() if line.strip()}
 
-    def diff_numstat(self, base_commit: str) -> dict[str, tuple[int, int]]:
+    def diff_numstat(self, base_commit: str) -> DiffStat:
         """Return ``{filepath: (lines_added, lines_removed)}`` since *base_commit*.
 
         Binary files (reported as ``-`` by git) are skipped.
         """
-        stats: dict[str, tuple[int, int]] = {}
+        stats: DiffStat = {}
         output = run_git("diff", base_commit, "--numstat")
         for line in output.strip().splitlines():
             parts = line.split("\t")

@@ -193,3 +193,178 @@ def test_init_existing_spec_scaffold_has_required_sections(tmp_path):
     assert "## Requirements" in content
     assert "## Constraints" in content
     assert "## Out of Scope" in content
+
+
+def test_init_existing_design_scaffold_has_sections(tmp_path):
+    """Scaffolded DESIGN.md has required sections."""
+    run_git("init", cwd=tmp_path)
+    init_existing(cwd=tmp_path)
+    content = (tmp_path / "docs" / "DESIGN.md").read_text()
+    assert "## Architecture" in content
+    assert "## Technology Choices" in content
+
+
+def test_init_existing_patterns_scaffold_has_sections(tmp_path):
+    """Scaffolded PATTERNS.md has required sections."""
+    run_git("init", cwd=tmp_path)
+    init_existing(cwd=tmp_path)
+    content = (tmp_path / "docs" / "PATTERNS.md").read_text()
+    assert "## Code Organization" in content
+    assert "## Testing Patterns" in content
+
+
+def test_init_existing_agents_md_content(tmp_path):
+    """AGENTS.md has doc hierarchy content."""
+    run_git("init", cwd=tmp_path)
+    init_existing(cwd=tmp_path)
+    content = (tmp_path / "AGENTS.md").read_text()
+    assert "Documentation Hierarchy" in content
+    assert "SPEC.md" in content
+
+
+def test_init_existing_symlinks_point_to_agents_md(tmp_path):
+    """Symlinks created by init_existing point to AGENTS.md."""
+    run_git("init", cwd=tmp_path)
+    init_existing(cwd=tmp_path)
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        link = tmp_path / name
+        assert os.readlink(str(link)) == "AGENTS.md"
+
+
+def test_init_existing_replaces_existing_symlinks(tmp_path):
+    """Existing symlinks are replaced (not duplicated)."""
+    run_git("init", cwd=tmp_path)
+    # Create initial symlinks pointing elsewhere
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        link = tmp_path / name
+        os.symlink("nonexistent", link)
+    init_existing(cwd=tmp_path)
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        link = tmp_path / name
+        assert os.readlink(str(link)) == "AGENTS.md"
+
+
+def test_init_existing_uses_cwd_when_none(tmp_path, monkeypatch):
+    """init_existing defaults to cwd when cwd arg is None."""
+    run_git("init", cwd=tmp_path)
+    monkeypatch.chdir(tmp_path)
+    created = init_existing(cwd=None)
+    assert len(created) > 0
+    assert (tmp_path / "docs" / "SPEC.md").exists()
+
+
+def test_template_dir_returns_dir_with_copier_yml():
+    """_template_dir returns a directory containing copier.yml."""
+    result = _template_dir()
+    assert result.is_dir()
+    assert (result / "copier.yml").exists()
+
+
+# --- _template_dir error path ---
+
+
+def test_template_dir_raises_when_not_found(tmp_path, monkeypatch):
+    """_template_dir raises FileNotFoundError with correct message when template missing."""
+    import prothon.scaffold
+
+    monkeypatch.setattr(prothon.scaffold, "__file__", str(tmp_path / "scaffold.py"))
+    with pytest.raises(FileNotFoundError, match="^Cannot locate template directory$"):
+        _template_dir()
+
+
+# --- generate copier args ---
+
+
+def test_generate_copier_kwargs_exact(tmp_path):
+    """Verify all kwargs passed to copier.run_copy (kills arg mutations)."""
+    from unittest.mock import MagicMock, patch
+
+    dest = tmp_path / "project"
+    data = {"module_name": "m"}
+
+    mock_run_copy = MagicMock()
+    with patch("copier.run_copy", mock_run_copy):
+        with patch("prothon.scaffold._post_generate"):
+            generate(dest, data)
+
+    mock_run_copy.assert_called_once()
+    kw = mock_run_copy.call_args.kwargs
+    assert kw["data"] is data
+    assert kw["defaults"] is True  # bool(data) where data is truthy
+    assert kw["unsafe"] is True
+    assert kw["vcs_ref"] == "HEAD"
+
+
+def test_generate_copier_defaults_false_when_no_data(tmp_path):
+    """defaults=bool(None) → False when data is None."""
+    from unittest.mock import MagicMock, patch
+
+    dest = tmp_path / "project"
+    mock_run_copy = MagicMock()
+    with patch("copier.run_copy", mock_run_copy):
+        with patch("prothon.scaffold._post_generate"):
+            generate(dest, None)
+
+    kw = mock_run_copy.call_args.kwargs
+    assert kw["defaults"] is False  # bool(None) = False
+
+
+# --- _post_generate idempotency ---
+
+
+def test_post_generate_agents_skills_exist_ok(tmp_path, scaffold_data):
+    """Calling generate on a dest where .agents/skills already exists must not crash."""
+    from unittest.mock import patch
+    from prothon.scaffold import _post_generate
+
+    dest = tmp_path / "test-project"
+    generate(dest, data=scaffold_data)
+    # .agents/skills now exists from first generate call
+    assert (dest / ".agents" / "skills").is_dir()
+
+    # Calling _post_generate again should NOT raise (exist_ok=True is needed)
+    # Mock git operations since repo is clean
+    with patch("prothon.scaffold.run_git"):
+        _post_generate(dest)
+    assert (dest / ".agents" / "skills").is_dir()
+
+
+# --- _post_generate commit message ---
+
+
+def test_post_generate_commit_message(generated_project):
+    """Git commit message must be exact (kills string case mutations)."""
+    import subprocess
+
+    result = subprocess.run(
+        ["git", "log", "--format=%s", "-1"],
+        capture_output=True,
+        text=True,
+        cwd=generated_project,
+    )
+    assert result.stdout.strip() == "Initial commit from prothon template"
+
+
+# --- init_existing with pre-existing dirs ---
+
+
+def test_init_existing_with_preexisting_docs_dir(tmp_path):
+    """init_existing succeeds when docs/ already exists (exist_ok=True needed)."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "docs").mkdir()  # docs/ exists but no SPEC.md
+
+    init_existing(cwd=tmp_path)
+
+    assert (tmp_path / "docs" / "SPEC.md").exists()
+    assert (tmp_path / "docs" / "DESIGN.md").exists()
+
+
+def test_init_existing_with_preexisting_agents_skills_dir(tmp_path):
+    """init_existing succeeds when .agents/skills/ already exists (exist_ok=True needed)."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
+
+    init_existing(cwd=tmp_path)
+
+    assert (tmp_path / ".agents" / "skills").is_dir()
+    assert (tmp_path / "docs" / "SPEC.md").exists()

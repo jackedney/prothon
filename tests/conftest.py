@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+from prothon.git import DiffStat
 
 
 class FakeGitDiff:
@@ -12,7 +13,7 @@ class FakeGitDiff:
     def __init__(
         self,
         names: set[str] | None = None,
-        stats: dict[str, tuple[int, int]] | None = None,
+        stats: DiffStat | None = None,
     ):
         self._names = names or set()
         self._stats = stats or {}
@@ -20,7 +21,7 @@ class FakeGitDiff:
     def diff_names(self, base_commit: str) -> set[str]:
         return self._names
 
-    def diff_numstat(self, base_commit: str) -> dict[str, tuple[int, int]]:
+    def diff_numstat(self, base_commit: str) -> DiffStat:
         return self._stats
 
 
@@ -46,6 +47,7 @@ def make_task(
         "dependencies": [],
         "completed": False,
         "attempts": 0,
+        "max_attempts": 3,
     }
     return {**base, **overrides}
 
@@ -53,6 +55,5 @@ def make_task(
 def assert_symlink_to(link: Path, target_name: str) -> None:
     """Assert that link is a symlink pointing to target_name."""
     assert link.is_symlink(), f"{link} is not a symlink"
-    assert os.readlink(link) == target_name, (
-        f"{link} points to {os.readlink(link)}, expected {target_name}"
-    )
+    actual = str(link.readlink())
+    assert actual == target_name, f"{link} points to {actual}, expected {target_name}"

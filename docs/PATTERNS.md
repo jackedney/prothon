@@ -400,8 +400,6 @@ tests/
     test_scaffold.py
     test_git.py
     test_assistant.py
-    test_compliance.py
-    test_execute.py
     test_cli.py          # integration tests via Typer CliRunner
 ```
 

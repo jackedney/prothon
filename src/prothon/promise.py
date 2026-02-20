@@ -88,6 +88,7 @@ class Task:
     dependencies: list[int] = field(default_factory=list)
     completed: bool = False
     attempts: int = 0
+    max_attempts: int = 3
 
 
 @dataclass
@@ -122,6 +123,7 @@ def _task_from_dict(d: dict) -> Task:
         reference_skills=list(d.get("reference_skills", [])),
         dependencies=list(d.get("dependencies", [])),
         completed=d.get("completed", False),
+        max_attempts=d.get("max_attempts", 3),
         attempts=d.get("attempts", 0),
     )
 
@@ -151,6 +153,7 @@ def _task_to_dict(task: Task) -> dict:
         "dependencies": task.dependencies,
         "completed": task.completed,
         "attempts": task.attempts,
+        "max_attempts": task.max_attempts,
     }
 
 
@@ -205,7 +208,7 @@ def _within_tolerance(expected: int, actual: int) -> bool:
     """Check if actual is within +/-30% or +/-30 lines of expected (whichever is greater)."""
     pct_tolerance = expected * 0.3
     abs_tolerance = 30
-    tolerance = max(pct_tolerance, abs_tolerance)
+    tolerance = int(max(pct_tolerance, abs_tolerance))
     return abs(actual - expected) <= tolerance
 
 
@@ -227,6 +230,7 @@ def _check_line_counts(
     remove_files = set(task.files_to_modify + task.files_to_remove)
 
     results: list[CheckResult] = []
+    numstat = diff.diff_numstat(base_commit)
 
     if not add_files or task.expected_lines_added <= 0:
         results.append(
@@ -235,7 +239,6 @@ def _check_line_counts(
             )
         )
     else:
-        numstat = diff.diff_numstat(base_commit)
         actual_added = sum(numstat.get(f, (0, 0))[0] for f in add_files)
         results.append(
             _check_line_count("lines_added", task.expected_lines_added, actual_added)
@@ -248,7 +251,6 @@ def _check_line_counts(
             )
         )
     else:
-        numstat = diff.diff_numstat(base_commit)
         actual_removed = sum(numstat.get(f, (0, 0))[1] for f in remove_files)
         results.append(
             _check_line_count(

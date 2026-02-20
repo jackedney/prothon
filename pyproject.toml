@@ -22,6 +22,7 @@ dev = [
     "complexipy>=5.1",
     "pre-commit>=4.0",
     "hypothesis>=6.0",
+    "mutmut>=3.0",
 ]
 
 [build-system]
@@ -43,6 +44,7 @@ lint = "ruff check src/ tests/"
 format = "ruff format --check src/ tests/"
 typecheck = "ty check"
 test = "pytest tests/"
+test-mut = { cmd = "mutmut run", help = "Run mutation testing" }
 security = "bandit -c pyproject.toml -r src/"
 deadcode = "vulture src/"
 complexity = "complexipy src/ --max-complexity-allowed 20"
@@ -54,6 +56,10 @@ testpaths = ["tests"]
 [tool.vulture]
 paths = ["src"]
 min_confidence = 80
+
+[tool.mutmut]
+paths_to_mutate = ["src/prothon/"]
+tests_dir = ["tests/"]
 
 [tool.bandit]
 exclude_dirs = ["tests"]

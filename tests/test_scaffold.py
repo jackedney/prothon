@@ -6,7 +6,10 @@ import os
 
 import pytest
 
-from prothon.scaffold import _template_dir, generate
+from prothon.exceptions import GitError, ProjectAlreadyInitError
+from prothon.git import run_git
+from prothon.scaffold import _template_dir, generate, init_existing
+from tests.conftest import assert_symlink_to
 
 
 @pytest.fixture
@@ -115,3 +118,78 @@ def test_creates_agents_md(generated_project):
     assert agents.exists()
     content = agents.read_text()
     assert "# test-project" in content
+
+
+# --- init_existing ---
+
+
+def test_init_existing_raises_when_not_git_repo(tmp_path):
+    """init_existing raises GitError when cwd is not a git repository."""
+    with pytest.raises(GitError, match="not a git repository"):
+        init_existing(cwd=tmp_path)
+
+
+def test_init_existing_raises_when_spec_exists(tmp_path):
+    """init_existing raises ProjectAlreadyInitError when docs/SPEC.md exists."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "SPEC.md").write_text("# existing")
+    with pytest.raises(ProjectAlreadyInitError):
+        init_existing(cwd=tmp_path)
+
+
+def test_init_existing_creates_all_artifacts(tmp_path):
+    """init_existing creates docs, AGENTS.md, symlinks, and skills dir."""
+    run_git("init", cwd=tmp_path)
+    init_existing(cwd=tmp_path)
+
+    assert (tmp_path / "docs" / "SPEC.md").exists()
+    assert (tmp_path / "docs" / "SPEC.md").stat().st_size > 0
+    assert (tmp_path / "docs" / "DESIGN.md").exists()
+    assert (tmp_path / "docs" / "DESIGN.md").stat().st_size > 0
+    assert (tmp_path / "docs" / "PATTERNS.md").exists()
+    assert (tmp_path / "docs" / "PATTERNS.md").stat().st_size > 0
+    assert (tmp_path / "AGENTS.md").exists()
+    assert (tmp_path / "AGENTS.md").stat().st_size > 0
+    assert (tmp_path / ".agents" / "skills").is_dir()
+    assert_symlink_to(tmp_path / "CLAUDE.md", "AGENTS.md")
+    assert_symlink_to(tmp_path / "GEMINI.md", "AGENTS.md")
+    assert_symlink_to(tmp_path / "AGENT.md", "AGENTS.md")
+
+
+def test_init_existing_returns_created_paths(tmp_path):
+    """init_existing returns a list containing all created paths."""
+    run_git("init", cwd=tmp_path)
+    created = init_existing(cwd=tmp_path)
+
+    expected_names = {
+        "SPEC.md",
+        "DESIGN.md",
+        "PATTERNS.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "GEMINI.md",
+        "AGENT.md",
+        "skills",
+    }
+    created_names = {p.name for p in created}
+    assert expected_names == created_names
+
+
+def test_init_existing_does_not_modify_existing_files(tmp_path):
+    """init_existing leaves pre-existing files untouched."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 88\n")
+    init_existing(cwd=tmp_path)
+    assert "[tool.ruff]" in (tmp_path / "pyproject.toml").read_text()
+
+
+def test_init_existing_spec_scaffold_has_required_sections(tmp_path):
+    """Scaffolded SPEC.md contains all required section headings."""
+    run_git("init", cwd=tmp_path)
+    init_existing(cwd=tmp_path)
+    content = (tmp_path / "docs" / "SPEC.md").read_text()
+    assert "## Purpose" in content
+    assert "## Requirements" in content
+    assert "## Constraints" in content
+    assert "## Out of Scope" in content

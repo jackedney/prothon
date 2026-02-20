@@ -145,11 +145,18 @@ Run `poe check` before committing to verify all quality checks pass.
 
 def _template_dir() -> Path:
     """Return the path to the bundled template directory."""
-    pkg_template = Path(__file__).parent / "template"
+    pkg_template = Path(__file__).resolve().parent / "template"
     if pkg_template.is_dir():
         return pkg_template
-    repo_root = Path(__file__).parent.parent.parent
-    return repo_root / "template"
+    # Development / mutmut: walk up to find template/ with copier.yml
+    current = Path(__file__).resolve().parent
+    while current != current.parent:
+        candidate = current / "template"
+        if candidate.is_dir() and (candidate / "copier.yml").exists():
+            return candidate
+        current = current.parent
+    msg = "Cannot locate template directory"
+    raise FileNotFoundError(msg)
 
 
 def generate(dest: Path, data: dict | None = None) -> None:

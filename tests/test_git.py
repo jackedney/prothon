@@ -166,6 +166,57 @@ def test_diff_numstat_calls_git_diff_numstat(mock_run: MagicMock) -> None:
     assert args[0] == ["git", "diff", "abc1234", "--numstat"]
 
 
+@patch("prothon.git.subprocess.run")
+def test_diff_numstat_ignores_malformed_lines(mock_run: MagicMock) -> None:
+    """Lines with != 3 tab-separated parts are ignored."""
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout="50\t10\tsrc/app.py\nmalformed line\n"
+    )
+    provider = SubprocessGitDiff()
+    result = provider.diff_numstat("abc1234")
+    assert result == {"src/app.py": (50, 10)}
+
+
+@patch("prothon.git.subprocess.run")
+def test_diff_numstat_added_removed_order(mock_run: MagicMock) -> None:
+    """First column is lines added, second is lines removed."""
+    mock_run.return_value = MagicMock(returncode=0, stdout="100\t5\tsrc/app.py\n")
+    provider = SubprocessGitDiff()
+    result = provider.diff_numstat("abc1234")
+    assert result["src/app.py"][0] == 100  # added
+    assert result["src/app.py"][1] == 5  # removed
+
+
+@patch("prothon.git.subprocess.run")
+def test_diff_numstat_binary_only_added_dash(mock_run: MagicMock) -> None:
+    """Skip when only added column is binary marker."""
+    mock_run.return_value = MagicMock(returncode=0, stdout="-\t10\tsrc/app.bin\n")
+    provider = SubprocessGitDiff()
+    result = provider.diff_numstat("abc1234")
+    assert result == {}
+
+
+@patch("prothon.git.subprocess.run")
+def test_diff_numstat_binary_only_removed_dash(mock_run: MagicMock) -> None:
+    """Skip when only removed column is binary marker."""
+    mock_run.return_value = MagicMock(returncode=0, stdout="10\t-\tsrc/app.bin\n")
+    provider = SubprocessGitDiff()
+    result = provider.diff_numstat("abc1234")
+    assert result == {}
+
+
+@patch("prothon.git.subprocess.run")
+def test_diff_numstat_filepath_with_spaces(mock_run: MagicMock) -> None:
+    """Filepath with spaces is parsed correctly (tab-separated, not whitespace)."""
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout="50\t10\tpath with spaces/file.py\n"
+    )
+    provider = SubprocessGitDiff()
+    result = provider.diff_numstat("abc1234")
+    assert "path with spaces/file.py" in result
+    assert result["path with spaces/file.py"] == (50, 10)
+
+
 # --- rev_parse_head ---
 
 

@@ -33,10 +33,9 @@ repos:
     hooks:
       - id: vulture
         name: vulture
-        entry: uv run vulture
+        entry: uv run vulture src/
         language: system
-        types: [python]
-        args: ["--min-confidence=61"]
+        pass_filenames: false
 
   - repo: https://github.com/rohaquinlop/complexipy-pre-commit
     rev: v5.1.0

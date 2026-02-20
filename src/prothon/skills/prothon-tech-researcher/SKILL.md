@@ -255,4 +255,3 @@ A set of skill files in `.agents/skills/`, grouped by category:
 - `domain-*` — one per relevant domain knowledge topic
 
 Plus a summary of what was generated.
-

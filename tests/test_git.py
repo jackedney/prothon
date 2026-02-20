@@ -192,5 +192,5 @@ def test_rev_parse_head_raises_git_error_outside_repo(mock_run: MagicMock) -> No
     mock_run.return_value = MagicMock(
         returncode=128, stderr="fatal: not a git repository"
     )
-    with pytest.raises(GitError, match="git rev-parse failed"):
+    with pytest.raises(GitError, match="git rev-parse HEAD failed"):
         rev_parse_head()

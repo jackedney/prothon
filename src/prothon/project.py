@@ -25,9 +25,12 @@ def find_project_root(start: Path | None = None) -> Path:
             finding a project marker.
     """
     current = (start or Path.cwd()).resolve()
-    for parent in [current, *current.parents]:
-        if (parent / "docs" / "SPEC.md").exists():
-            return parent
+    while True:
+        if (current / "docs" / "SPEC.md").is_file():
+            return current
+        if current.parent == current:
+            break
+        current = current.parent
     raise ProjectNotFoundError(
         "no prothon project found (no docs/SPEC.md in parent directories)"
     )

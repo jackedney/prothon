@@ -33,6 +33,8 @@ def sync_skills(target: Path | None = None) -> None:
         dest = target / skill_dir.name
         if dest.is_symlink():
             dest.unlink()
-        elif dest.exists():
+        elif dest.is_dir():
             shutil.rmtree(dest)
+        elif dest.exists():
+            dest.unlink()
         dest.symlink_to(skill_dir.resolve())

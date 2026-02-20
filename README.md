@@ -1,6 +1,6 @@
 <div align="center">
 
-```
+```text
 1 █▀▀▄ █▀▀▄ ▄▀▀▄ ▀█▀ █  █ ▄▀▀▄ █▄  █
 2 █▄▄█ █▄▄▀ █  █  █  █▄▄█ █  █ █ █ █
   3 █    █  █ ▀▄▄▀  █  █  █ ▀▄▄▀ █  ▀█ ●
@@ -18,7 +18,7 @@
 
 AI alignment isn't about better prompts — it's about giving AI a **durable source of truth** and a **verification loop** that catches when code drifts from intent.
 
-```
+```text
     SPEC.md  ──→  DESIGN.md  ──→  PATTERNS.md  ──→  code
   requirements    architecture     conventions      implementation
    (highest)                                         (verified)
@@ -51,7 +51,7 @@ prothon execute    # implement code from docs
 ```bash
 cd your-existing-repo
 prothon init       # overlay docs-first workflow (creates docs/, AGENTS.md, symlinks)
-prothon spec → prothon design → prothon patterns → prothon execute
+prothon spec && prothon design && prothon patterns && prothon execute
 ```
 
 Each command launches a Claude Code session with a dedicated skill. The skill asks you questions, researches options, and writes the doc. You make the decisions.
@@ -62,7 +62,7 @@ Each command launches a Claude Code session with a dedicated skill. The skill as
 
 Three documents with strict authority. Higher overrides lower. Each has a dedicated conversational skill that presents one decision at a time and **hard-rejects** content belonging at a different level.
 
-```
+```text
 docs/
 ├── SPEC.md        # requirements & constraints        (highest authority)
 ├── DESIGN.md      # architecture & technology choices
@@ -76,7 +76,7 @@ docs/
 
 ### changes cascade top-down
 
-```
+```text
 requirement changes  →  prothon spec  →  prothon design  →  prothon patterns  →  implement
 design changes       →                   prothon design  →  prothon patterns  →  implement
 convention changes   →                                      prothon patterns  →  implement
@@ -98,7 +98,7 @@ Three independent verification loops, all automatic.
 
 When you make technology choices in DESIGN.md, the **tech-researcher** fires automatically — queries Context7 live docs, falls back to web search, then training knowledge. Generates reference skills for your exact stack:
 
-```
+```text
 .agents/skills/
 ├── tech-*.md      # library usage, idioms, gotchas, version-specific APIs
 ├── style-*.md     # naming conventions, import organization, type annotations
@@ -129,7 +129,7 @@ Fresh-context subagents are the key design decision — each task gets a clean c
 
 Each command launches a dedicated session. You make the decisions; the skill handles structure, research, and verification.
 
-```
+```text
 command              skill                 what it does
 ─────────────────────────────────────────────────────────────────────────────
 prothon new          —                     scaffold a new project with full toolchain
@@ -153,7 +153,7 @@ Three additional skills run automatically as quality gates — never invoked dir
 
 Full quality toolchain enforced on every commit and every push. AI-generated code gets the same scrutiny as human code.
 
-```
+```text
 ruff           lint & format
 ty             type checking
 pytest         tests (+ hypothesis for property-based)
@@ -178,7 +178,7 @@ complexipy     complexity analysis
 
 `AGENTS.md` is the canonical instruction file, symlinked for automatic discovery:
 
-```
+```text
 AGENTS.md              ← canonical
 CLAUDE.md  → AGENTS.md    Claude Code
 GEMINI.md  → AGENTS.md    Gemini

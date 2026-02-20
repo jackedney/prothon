@@ -44,9 +44,13 @@ format = "ruff format --check src/ tests/"
 typecheck = "ty check"
 test = "pytest tests/"
 security = "bandit -c pyproject.toml -r src/"
-deadcode = "vulture src/ --min-confidence=61"
+deadcode = "vulture src/"
 complexity = "complexipy src/ --max-complexity-allowed 20"
 check = ["lint", "format", "typecheck", "test", "security", "deadcode", "complexity"]
+
+[tool.vulture]
+paths = ["src"]
+min_confidence = 80
 
 [tool.bandit]
 exclude_dirs = ["tests"]

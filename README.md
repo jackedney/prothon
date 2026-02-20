@@ -31,17 +31,7 @@ AI alignment isn't about better prompts — it's about giving AI a **durable sou
 Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
-# run directly (no install needed)
-uvx --from "git+https://github.com/jackedney/prothon" prothon new my-project
-
-# install globally
 uv tool install "git+https://github.com/jackedney/prothon"
-
-# pin to a specific version
-uv tool install "git+https://github.com/jackedney/prothon@v0.1.0"
-
-# one-liner (always pulls latest from master)
-curl -fsSL https://raw.githubusercontent.com/jackedney/prothon/master/install.sh | sh
 ```
 
 ### quickstart
@@ -82,7 +72,7 @@ docs/
 → Skills **hard-reject** content from other levels — the spec-writer won't discuss technology, the design-writer won't include code snippets
 → SPEC change triggers DESIGN review, then PATTERNS review
 → Conflicts resolve at doc level **before** code is written
-→ After design or patterns, the **harmonizer** cross-references all three levels automatically
+→ After `design` or `patterns`, the **harmonizer** cross-references all three levels automatically
 
 ### changes cascade top-down
 
@@ -98,7 +88,7 @@ convention changes   →                                      prothon patterns  
 
 Three independent verification loops, all automatic.
 
-→ **doc-harmonizer** — catches contradictions, scope creep, unchosen tech between doc levels. Amends lower docs. SPEC is never touched.
+→ **doc-harmonizer** — fires after `design` or `patterns` to catch contradictions, scope creep, unchosen tech between doc levels. Amends lower docs. SPEC is never touched.
 → **compliance-checker** — reads every checkable statement from docs and verifies code implements it. Produces PASS/FAIL/PARTIAL tables with `file:line` evidence. Always-on quality gate.
 → **change promises** — `change_promise.toml` declares exactly what files each task will create, modify, or remove with expected line counts. `prothon promise check` diffs against the base commit to verify what actually happened.
 
@@ -153,7 +143,7 @@ prothon compliance   compliance-checker    verify code matches documentation
 
 Three additional skills run automatically as quality gates — never invoked directly:
 
-→ **doc-harmonizer** — cross-references all doc levels, amends lower docs to resolve conflicts
+→ **doc-harmonizer** — cross-references all doc levels after `design` or `patterns`, amends lower docs to resolve conflicts
 → **tech-researcher** — generates reference skills from Context7 docs with web search fallback
 → **promise system** — `prothon promise {plan,status,check,complete,cleanup}` tracks and verifies tasks
 

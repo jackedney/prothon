@@ -1,10 +1,6 @@
 <div align="center">
 
-```text
-1 █▀▀▄ █▀▀▄ ▄▀▀▄ ▀█▀ █  █ ▄▀▀▄ █▄  █
-2 █▄▄█ █▄▄▀ █  █  █  █▄▄█ █  █ █ █ █
-  3 █    █  █ ▀▄▄▀  █  █  █ ▀▄▄▀ █  ▀█ ●
-```
+<img src="docs/logo.svg" alt="PROTHON" width="480"/>
 
 **docs-first project generator for AI-assisted Python development**
 

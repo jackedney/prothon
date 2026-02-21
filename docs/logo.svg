@@ -1,0 +1,37 @@
+<svg viewBox="0 0 420 90" xmlns="http://www.w3.org/2000/svg">
+  <rect width="420" height="90" rx="6" fill="#0a0e1a"/>
+  <text fill="#4ade80" x="20" y="29" font-size="10" font-family="ui-monospace,'Cascadia Mono','SF Mono',Menlo,Consolas,'DejaVu Sans Mono',monospace">1</text>
+  <text fill="#4ade80" x="20" y="49" font-size="10" font-family="ui-monospace,'Cascadia Mono','SF Mono',Menlo,Consolas,'DejaVu Sans Mono',monospace">2</text>
+  <text fill="#4ade80" x="20" y="69" font-size="10" font-family="ui-monospace,'Cascadia Mono','SF Mono',Menlo,Consolas,'DejaVu Sans Mono',monospace">3</text>
+  <circle fill="#4ade80" cx="390" cy="65" r="3"/>
+  <g fill="#eef2f6" transform="translate(35,15)">
+    <rect x="0" y="0" width="10" height="60"/>
+    <rect x="50" y="0" width="10" height="60"/>
+    <rect x="160" y="0" width="10" height="60"/>
+    <rect x="190" y="0" width="10" height="60"/>
+    <rect x="220" y="0" width="10" height="60"/>
+    <rect x="290" y="0" width="10" height="60"/>
+    <rect x="330" y="0" width="10" height="60"/>
+    <rect x="10" y="0" width="20" height="10"/>
+    <rect x="10" y="30" width="20" height="10"/>
+    <rect x="30" y="10" width="10" height="30"/>
+    <rect x="60" y="0" width="20" height="10"/>
+    <rect x="60" y="30" width="20" height="10"/>
+    <rect x="80" y="10" width="10" height="20"/>
+    <rect x="80" y="40" width="10" height="20"/>
+    <rect x="100" y="10" width="10" height="40"/>
+    <rect x="130" y="10" width="10" height="40"/>
+    <rect x="110" y="0" width="20" height="10"/>
+    <rect x="110" y="50" width="20" height="10"/>
+    <rect x="150" y="0" width="10" height="10"/>
+    <rect x="170" y="0" width="10" height="10"/>
+    <rect x="200" y="30" width="20" height="10"/>
+    <rect x="240" y="10" width="10" height="40"/>
+    <rect x="270" y="10" width="10" height="40"/>
+    <rect x="250" y="0" width="20" height="10"/>
+    <rect x="250" y="50" width="20" height="10"/>
+    <rect x="300" y="10" width="10" height="10"/>
+    <rect x="310" y="20" width="10" height="20"/>
+    <rect x="320" y="40" width="10" height="10"/>
+  </g>
+</svg>

@@ -199,9 +199,9 @@ copier copy --trust --vcs-ref HEAD /path/to/prothon /tmp/test-project
 
 ## future
 
-→ **additional coding agents** — currently built for Claude Code. Planned support for [Codex](https://github.com/openai/codex) and [OpenCode](https://github.com/opencode-ai/opencode), bringing docs-first development to more agent backends.
+→ **additional coding agents** — currently built for Claude Code. Planned support for [Codex](https://github.com/openai/codex) and [Crush](https://github.com/charmbracelet/crush) (successor to OpenCode), bringing docs-first development to more agent backends.
 → **code review integration** — integrate with [CodeRabbit](https://coderabbit.ai) and [Greptile](https://greptile.com) to bring automated, doc-aware code review into the workflow.
-→ **continuous agentic development** — [RALPH loop](https://www.reddit.com/r/ClaudeAI/comments/1kw3ss3/ralph_loop_continuous_agentic_coding/) style autonomous development cycles — agents read docs, plan, implement, verify, and loop until the task is complete, with minimal human intervention.
+→ **continuous agentic development** — [RALPH loop](https://ghuntley.com/loop/) style autonomous development cycles — agents read docs, plan, implement, verify, and loop until the task is complete, with minimal human intervention.
 
 ---
 

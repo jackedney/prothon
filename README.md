@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/user/repo/main/docs/logo.svg" alt="PROTHON" width="480"/>
+<img src="https://raw.githubusercontent.com/jackedney/prothon/master/docs/logo.svg" alt="PROTHON" width="480"/>
 
 **docs-first project generator for AI-assisted Python development**
 

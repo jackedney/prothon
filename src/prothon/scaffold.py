@@ -109,7 +109,7 @@ subagent's findings to the user.
 If the compliance check reports failures, fix the code or update docs and \
 re-check.
 
-For explicit full compliance scans, the user can run `uvx prothon compliance`.
+For explicit full compliance scans, the user can run `prothon compliance`.
 
 ## Skills Directory
 
@@ -202,6 +202,47 @@ def _post_generate(dest: Path) -> None:
     run_git("commit", "-m", "Initial commit from prothon template", cwd=dest)
 
 
+def _collect_project_details() -> dict:
+    """Collect project details interactively using Typer prompts.
+
+    Returns:
+        Dict with module_name, description, author_name, author_email,
+        python_version, and license.
+    """
+    import typer
+
+    return {
+        "module_name": typer.prompt("Module name"),
+        "description": typer.prompt("Description"),
+        "author_name": typer.prompt("Author name"),
+        "author_email": typer.prompt("Author email"),
+        "python_version": typer.prompt("Python version", default="3.12"),
+        "license": typer.prompt("License", default="MIT"),
+    }
+
+
+def _run_copier_init(dest: Path, data: dict) -> None:
+    """Run Copier for project adoption (no git init, no commits).
+
+    Args:
+        dest: Destination directory for the generated files.
+        data: Pre-filled answers dict from _collect_project_details().
+    """
+    from copier import run_copy
+
+    run_copy(
+        str(_template_dir()),
+        str(dest),
+        data=data,
+        defaults=True,
+        unsafe=True,
+        skip_tasks=True,
+        skip_if_exists=["*"],
+        exclude=["docs/*", "AGENTS.md*"],
+        vcs_ref="HEAD",
+    )
+
+
 def init_existing(cwd: Path | None = None) -> list[Path]:
     """Overlay the docs-first workflow onto an existing project.
 
@@ -229,6 +270,11 @@ def init_existing(cwd: Path | None = None) -> list[Path]:
         raise ProjectAlreadyInitError(f"docs/SPEC.md already exists in {root}")
 
     created: list[Path] = []
+
+    # Path A: no pyproject.toml -> scaffold Python structure via Copier
+    if not (root / "pyproject.toml").exists():
+        answers = _collect_project_details()
+        _run_copier_init(root, answers)
 
     # Create docs/ directory and write scaffolds
     docs_dir = root / "docs"

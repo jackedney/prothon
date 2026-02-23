@@ -414,7 +414,7 @@ def test_init_existing_path_a_calls_copier(tmp_path):
     assert kw["defaults"] is True
     assert kw["unsafe"] is True
     assert kw["skip_tasks"] is True
-    assert kw["skip_if_exists"] == ["*"]
+    assert kw["skip_if_exists"] == ["**"]
     assert kw["exclude"] == ["docs/*", "AGENTS.md*"]
     assert kw["vcs_ref"] == "HEAD"
 

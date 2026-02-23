@@ -221,7 +221,7 @@ def _collect_project_details() -> dict[str, str]:
     }
 
 
-def _run_copier_init(dest: Path, data: dict) -> None:
+def _run_copier_init(dest: Path, data: dict[str, str]) -> None:
     """Run Copier for project adoption (no git init, no commits).
 
     Args:
@@ -237,7 +237,7 @@ def _run_copier_init(dest: Path, data: dict) -> None:
         defaults=True,
         unsafe=True,
         skip_tasks=True,
-        skip_if_exists=["*"],
+        skip_if_exists=["**"],
         exclude=["docs/*", "AGENTS.md*"],
         vcs_ref="HEAD",
     )

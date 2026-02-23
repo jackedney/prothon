@@ -139,8 +139,9 @@ def test_init_existing_raises_when_spec_exists(tmp_path):
 
 
 def test_init_existing_creates_all_artifacts(tmp_path):
-    """init_existing creates docs, AGENTS.md, symlinks, and skills dir."""
+    """init_existing creates docs, AGENTS.md, symlinks, and skills dir (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     init_existing(cwd=tmp_path)
 
     assert (tmp_path / "docs" / "SPEC.md").exists()
@@ -158,8 +159,9 @@ def test_init_existing_creates_all_artifacts(tmp_path):
 
 
 def test_init_existing_returns_created_paths(tmp_path):
-    """init_existing returns a list containing all created paths."""
+    """init_existing returns a list containing all created paths (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     created = init_existing(cwd=tmp_path)
 
     expected_names = {
@@ -185,8 +187,9 @@ def test_init_existing_does_not_modify_existing_files(tmp_path):
 
 
 def test_init_existing_spec_scaffold_has_required_sections(tmp_path):
-    """Scaffolded SPEC.md contains all required section headings."""
+    """Scaffolded SPEC.md contains all required section headings (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     init_existing(cwd=tmp_path)
     content = (tmp_path / "docs" / "SPEC.md").read_text()
     assert "## Purpose" in content
@@ -196,8 +199,9 @@ def test_init_existing_spec_scaffold_has_required_sections(tmp_path):
 
 
 def test_init_existing_design_scaffold_has_sections(tmp_path):
-    """Scaffolded DESIGN.md has required sections."""
+    """Scaffolded DESIGN.md has required sections (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     init_existing(cwd=tmp_path)
     content = (tmp_path / "docs" / "DESIGN.md").read_text()
     assert "## Architecture" in content
@@ -205,8 +209,9 @@ def test_init_existing_design_scaffold_has_sections(tmp_path):
 
 
 def test_init_existing_patterns_scaffold_has_sections(tmp_path):
-    """Scaffolded PATTERNS.md has required sections."""
+    """Scaffolded PATTERNS.md has required sections (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     init_existing(cwd=tmp_path)
     content = (tmp_path / "docs" / "PATTERNS.md").read_text()
     assert "## Code Organization" in content
@@ -214,8 +219,9 @@ def test_init_existing_patterns_scaffold_has_sections(tmp_path):
 
 
 def test_init_existing_agents_md_content(tmp_path):
-    """AGENTS.md has doc hierarchy content."""
+    """AGENTS.md has doc hierarchy content (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     init_existing(cwd=tmp_path)
     content = (tmp_path / "AGENTS.md").read_text()
     assert "Documentation Hierarchy" in content
@@ -223,8 +229,9 @@ def test_init_existing_agents_md_content(tmp_path):
 
 
 def test_init_existing_symlinks_point_to_agents_md(tmp_path):
-    """Symlinks created by init_existing point to AGENTS.md."""
+    """Symlinks created by init_existing point to AGENTS.md (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     init_existing(cwd=tmp_path)
     for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
         link = tmp_path / name
@@ -232,8 +239,9 @@ def test_init_existing_symlinks_point_to_agents_md(tmp_path):
 
 
 def test_init_existing_replaces_existing_symlinks(tmp_path):
-    """Existing symlinks are replaced (not duplicated)."""
+    """Existing symlinks are replaced (not duplicated) (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     # Create initial symlinks pointing elsewhere
     for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
         link = tmp_path / name
@@ -245,8 +253,9 @@ def test_init_existing_replaces_existing_symlinks(tmp_path):
 
 
 def test_init_existing_uses_cwd_when_none(tmp_path, monkeypatch):
-    """init_existing defaults to cwd when cwd arg is None."""
+    """init_existing defaults to cwd when cwd arg is None (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     monkeypatch.chdir(tmp_path)
     created = init_existing(cwd=None)
     assert len(created) > 0
@@ -349,8 +358,9 @@ def test_post_generate_commit_message(generated_project):
 
 
 def test_init_existing_with_preexisting_docs_dir(tmp_path):
-    """init_existing succeeds when docs/ already exists (exist_ok=True needed)."""
+    """init_existing succeeds when docs/ already exists (exist_ok=True needed) (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     (tmp_path / "docs").mkdir()  # docs/ exists but no SPEC.md
 
     init_existing(cwd=tmp_path)
@@ -360,11 +370,90 @@ def test_init_existing_with_preexisting_docs_dir(tmp_path):
 
 
 def test_init_existing_with_preexisting_agents_skills_dir(tmp_path):
-    """init_existing succeeds when .agents/skills/ already exists (exist_ok=True needed)."""
+    """init_existing succeeds when .agents/skills/ already exists (exist_ok=True needed) (Path B)."""
     run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     (tmp_path / ".agents" / "skills").mkdir(parents=True)
 
     init_existing(cwd=tmp_path)
 
     assert (tmp_path / ".agents" / "skills").is_dir()
     assert (tmp_path / "docs" / "SPEC.md").exists()
+
+
+# --- init_existing Path A (no pyproject.toml) ---
+
+
+def test_init_existing_path_a_calls_copier(tmp_path):
+    """Path A: when pyproject.toml absent, copier.run_copy is called with correct args."""
+    from unittest.mock import MagicMock, patch
+
+    run_git("init", cwd=tmp_path)
+
+    mock_run_copy = MagicMock()
+    with patch("copier.run_copy", mock_run_copy):
+        with patch(
+            "prothon.scaffold._collect_project_details",
+            return_value={
+                "module_name": "testmod",
+                "description": "test desc",
+                "author_name": "Test Author",
+                "author_email": "test@example.com",
+                "python_version": "3.12",
+                "license": "MIT",
+            },
+        ):
+            init_existing(cwd=tmp_path)
+
+    mock_run_copy.assert_called_once()
+    args = mock_run_copy.call_args.args
+    assert args[0] == str(_template_dir())
+    assert args[1] == str(tmp_path)
+    kw = mock_run_copy.call_args.kwargs
+    assert kw["data"]["module_name"] == "testmod"
+    assert kw["defaults"] is True
+    assert kw["unsafe"] is True
+    assert kw["skip_tasks"] is True
+    assert kw["skip_if_exists"] == ["**"]
+    assert kw["exclude"] == ["docs/*", "AGENTS.md*"]
+    assert kw["vcs_ref"] == "HEAD"
+
+
+def test_init_existing_path_a_creates_common_overlay(tmp_path):
+    """Path A: common overlay (docs, AGENTS.md, symlinks, skills) still created."""
+    from unittest.mock import patch
+
+    run_git("init", cwd=tmp_path)
+
+    with patch("copier.run_copy"):
+        with patch(
+            "prothon.scaffold._collect_project_details",
+            return_value={
+                "module_name": "testmod",
+                "description": "test",
+                "author_name": "Test",
+                "author_email": "test@example.com",
+                "python_version": "3.12",
+                "license": "MIT",
+            },
+        ):
+            init_existing(cwd=tmp_path)
+
+    assert (tmp_path / "docs" / "SPEC.md").exists()
+    assert (tmp_path / "AGENTS.md").exists()
+    assert (tmp_path / ".agents" / "skills").is_dir()
+    assert_symlink_to(tmp_path / "CLAUDE.md", "AGENTS.md")
+
+
+def test_init_existing_path_b_skips_copier(tmp_path):
+    """Path B: when pyproject.toml present, copier.run_copy is NOT called."""
+    from unittest.mock import MagicMock, patch
+
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+
+    mock_run_copy = MagicMock()
+    with patch("copier.run_copy", mock_run_copy):
+        init_existing(cwd=tmp_path)
+
+    mock_run_copy.assert_not_called()

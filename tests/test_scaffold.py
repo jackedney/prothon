@@ -406,6 +406,9 @@ def test_init_existing_path_a_calls_copier(tmp_path):
             init_existing(cwd=tmp_path)
 
     mock_run_copy.assert_called_once()
+    args = mock_run_copy.call_args.args
+    assert args[0] == str(_template_dir())
+    assert args[1] == str(tmp_path)
     kw = mock_run_copy.call_args.kwargs
     assert kw["data"]["module_name"] == "testmod"
     assert kw["defaults"] is True

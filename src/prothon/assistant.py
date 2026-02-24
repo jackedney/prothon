@@ -106,7 +106,10 @@ def get_backend(name: str = "claude-code") -> AssistantBackend:
     """Return a backend instance for *name*, or raise UnknownBackendError."""
     cls = _BACKENDS.get(name)
     if cls is None:
-        raise UnknownBackendError(f"no backend registered for '{name}'")
+        registered = ", ".join(sorted(_BACKENDS.keys()))
+        raise UnknownBackendError(
+            f"no backend registered for '{name}' (available: {registered})"
+        )
     return cls()
 
 

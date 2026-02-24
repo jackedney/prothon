@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import tomlkit
 import typer
 from rich.console import Console
 from rich.markup import escape
@@ -12,12 +14,14 @@ from rich.text import Text
 
 from prothon import promise
 from prothon.assistant import get_backend, launch
-from prothon.exceptions import AssistantNotFoundError, ProthonError
+from prothon.exceptions import ProthonError
 from prothon.promise import CheckStatus, TaskCheckReport
 from prothon.project import find_project_root
 from prothon.scaffold import generate, init_existing
 
 console = Console()
+
+_state: dict[str, str | None] = {"assistant": None}
 
 app = typer.Typer(
     add_completion=False,
@@ -47,21 +51,51 @@ def _require_promise_file(root: Path) -> Path:
     return promise_path
 
 
+def resolve_assistant() -> str:
+    """Resolve assistant backend name via 5-level precedence chain.
+
+    Priority: CLI flag > env var > pyproject.toml > global config > default.
+    Levels 1-2 are handled by Typer (--assistant flag + PROTHON_ASSISTANT envvar).
+    """
+    # Levels 1-2: CLI flag / env var (already resolved by Typer into _state)
+    if _state["assistant"]:
+        return _state["assistant"]
+
+    # Level 3: pyproject.toml [tool.prothon].assistant
+    try:
+        root = find_project_root()
+        pyproject = root / "pyproject.toml"
+        if pyproject.exists():
+            doc = tomlkit.parse(pyproject.read_text(encoding="utf-8"))
+            val = doc.get("tool", {}).get("prothon", {}).get("assistant")
+            if val:
+                return str(val)
+    except ProthonError:
+        pass  # No project root found — fall through
+
+    # Level 4: global config ~/.config/prothon/config.toml
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    global_config = xdg / "prothon" / "config.toml"
+    if global_config.exists():
+        doc = tomlkit.parse(global_config.read_text(encoding="utf-8"))
+        val = doc.get("assistant")
+        if val:
+            return str(val)
+
+    # Level 5: default
+    return "claude-code"
+
+
 def _launch_skill(skill_name: str, cwd: Path) -> None:
     """Resolve the backend, launch the skill, and handle errors."""
     try:
-        backend = get_backend()
+        name = resolve_assistant()
+        backend = get_backend(name)
         rc = launch(backend, skill_name, cwd)
         if rc != 0:
             raise typer.Exit(rc)
-    except AssistantNotFoundError:
-        typer.echo(
-            "Error: Claude Code CLI not found.\n"
-            "Install: https://docs.anthropic.com/en/docs/claude-code"
-        )
-        raise typer.Exit(1)
     except ProthonError as exc:
-        typer.echo(f"Error: {exc}")
+        typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
 
 
@@ -149,8 +183,18 @@ def _render_check_report(report: TaskCheckReport) -> Table:
 
 
 @app.callback(invoke_without_command=True)
-def callback(ctx: typer.Context) -> None:
+def callback(
+    ctx: typer.Context,
+    assistant: str | None = typer.Option(
+        None,
+        "--assistant",
+        "-a",
+        envvar="PROTHON_ASSISTANT",
+        help="AI assistant backend (claude-code, opencode)",
+    ),
+) -> None:
     """Python project generator with docs-first AI workflow."""
+    _state["assistant"] = assistant
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
 

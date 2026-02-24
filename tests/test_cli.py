@@ -165,12 +165,16 @@ def test_launch_skill_assistant_not_found(tmp_path, monkeypatch, context):
     generate(dest, context)
     monkeypatch.chdir(dest)
     with patch(
-        "prothon.cli.get_backend",
-        side_effect=AssistantNotFoundError("not found"),
+        "prothon.cli.launch",
+        side_effect=AssistantNotFoundError(
+            "Claude Code (claude) not found on PATH. "
+            "Install: https://docs.anthropic.com/en/docs/claude-code"
+        ),
     ):
-        result = runner.invoke(app, ["spec"])
+        with patch("prothon.cli.get_backend"):
+            result = runner.invoke(app, ["spec"])
     assert result.exit_code == 1
-    assert "Claude Code CLI not found" in result.output
+    assert "not found on PATH" in result.output
 
 
 def test_launch_skill_prothon_error(tmp_path, monkeypatch, context):
@@ -219,15 +223,19 @@ def test_launch_skill_exit_code_one_is_nonzero(tmp_path, monkeypatch, context):
 
 
 def test_launch_skill_assistant_not_found_install_url(tmp_path, monkeypatch, context):
-    """Error message includes Install URL."""
+    """Error message includes Install URL from backend's install_hint."""
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
     with patch(
-        "prothon.cli.get_backend",
-        side_effect=AssistantNotFoundError("not found"),
+        "prothon.cli.launch",
+        side_effect=AssistantNotFoundError(
+            "Claude Code (claude) not found on PATH. "
+            "Install: https://docs.anthropic.com/en/docs/claude-code"
+        ),
     ):
-        result = runner.invoke(app, ["spec"])
+        with patch("prothon.cli.get_backend"):
+            result = runner.invoke(app, ["spec"])
     assert "Install:" in result.output
     assert "anthropic.com" in result.output
 
@@ -238,8 +246,12 @@ def test_launch_skill_assistant_not_found_no_xx_prefix(tmp_path, monkeypatch, co
     generate(dest, context)
     monkeypatch.chdir(dest)
     with patch(
-        "prothon.cli.get_backend",
-        side_effect=AssistantNotFoundError("not found"),
+        "prothon.cli.launch",
+        side_effect=AssistantNotFoundError(
+            "Claude Code (claude) not found on PATH. "
+            "Install: https://docs.anthropic.com/en/docs/claude-code"
+        ),
     ):
-        result = runner.invoke(app, ["spec"])
+        with patch("prothon.cli.get_backend"):
+            result = runner.invoke(app, ["spec"])
     assert "XX" not in result.output

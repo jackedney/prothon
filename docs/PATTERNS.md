@@ -282,7 +282,10 @@ def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int:
             f"{backend.name} ({backend.cli_command}) not found on PATH. "
             f"Install: {backend.install_hint}"
         )
-    backend.sync_skills()
+    try:
+        backend.sync_skills()
+    except (IOError, OSError) as exc:
+        raise ProthonError(f"failed to sync skills for {backend.name}: {exc}") from exc
     env = {**os.environ, **backend.env_overrides()}
     return subprocess.run(
         backend.build_command(skill_name, cwd), cwd=cwd, env=env,
@@ -414,6 +417,26 @@ This pattern matches `ruff --config` and `uv --config-file` — global options o
 `resolve_assistant()` implements a 5-level precedence chain where the first non-empty value wins. Each level is a simple `if val: return val` guard, falling through to the next. The function lives in `cli.py` (not `assistant.py`) because levels 1-2 depend on Typer state and levels 3-4 read config files — these are CLI concerns, not backend concerns.
 
 ```python
+def _read_toml(path: Path) -> dict:
+    """Read a TOML file, returning an empty dict on parse error or missing file."""
+    if not path.exists():
+        return {}
+    try:
+        return tomlkit.parse(path.read_text(encoding="utf-8"))
+    except tomlkit.exceptions.TOMLKitError:
+        return {}
+
+
+def _nested_get(doc: dict, *keys: str) -> str | None:
+    """Walk *keys* through nested dicts, returning None if any level is not a mapping."""
+    current: object = doc
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return str(current) if current is not None else None
+
+
 def resolve_assistant() -> str:
     # Levels 1-2: CLI flag / env var (from Typer into _state)
     if _state["assistant"]:
@@ -422,24 +445,18 @@ def resolve_assistant() -> str:
     # Level 3: pyproject.toml [tool.prothon].assistant
     try:
         root = find_project_root()
-        pyproject = root / "pyproject.toml"
-        if pyproject.exists():
-            doc = tomlkit.parse(pyproject.read_text(encoding="utf-8"))
-            val = doc.get("tool", {}).get("prothon", {}).get("assistant")
-            if val:
-                return str(val)
+        val = _nested_get(_read_toml(root / "pyproject.toml"), "tool", "prothon", "assistant")
+        if val:
+            return val
     except ProthonError:
         pass  # No project root — fall through
 
     # Level 4: global config
     raw_xdg = os.environ.get("XDG_CONFIG_HOME")
     xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
-    global_config = xdg / "prothon" / "config.toml"
-    if global_config.exists():
-        doc = tomlkit.parse(global_config.read_text(encoding="utf-8"))
-        val = doc.get("assistant")
-        if val:
-            return str(val)
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "assistant")
+    if val:
+        return val
 
     # Level 5: default
     return "claude-code"

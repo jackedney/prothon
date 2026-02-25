@@ -52,6 +52,26 @@ def _require_promise_file(root: Path) -> Path:
     return promise_path
 
 
+def _read_toml(path: Path) -> dict:
+    """Read a TOML file, returning an empty dict on parse error or missing file."""
+    if not path.exists():
+        return {}
+    try:
+        return tomlkit.parse(path.read_text(encoding="utf-8"))
+    except tomlkit.exceptions.TOMLKitError:
+        return {}
+
+
+def _nested_get(doc: dict, *keys: str) -> str | None:
+    """Walk *keys* through nested dicts, returning None if any level is not a mapping."""
+    current: object = doc
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return str(current) if current is not None else None
+
+
 def resolve_assistant() -> str:
     """Resolve assistant backend name via 5-level precedence chain.
 
@@ -65,15 +85,11 @@ def resolve_assistant() -> str:
     # Level 3: pyproject.toml [tool.prothon].assistant
     try:
         root = find_project_root()
-        pyproject = root / "pyproject.toml"
-        if pyproject.exists():
-            try:
-                doc = tomlkit.parse(pyproject.read_text(encoding="utf-8"))
-            except tomlkit.exceptions.TOMLKitError:
-                doc = {}  # fallback on parse error
-            val = doc.get("tool", {}).get("prothon", {}).get("assistant")
-            if val:
-                return str(val)
+        val = _nested_get(
+            _read_toml(root / "pyproject.toml"), "tool", "prothon", "assistant"
+        )
+        if val:
+            return val
     except ProthonError:
         pass  # No project root found — fall through
 
@@ -84,15 +100,9 @@ def resolve_assistant() -> str:
         if raw_xdg and Path(raw_xdg).is_absolute()
         else Path.home() / ".config"
     )
-    global_config = xdg / "prothon" / "config.toml"
-    if global_config.exists():
-        try:
-            doc = tomlkit.parse(global_config.read_text(encoding="utf-8"))
-        except tomlkit.exceptions.TOMLKitError:
-            doc = {}  # fallback on parse error
-        val = doc.get("assistant")
-        if val:
-            return str(val)
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "assistant")
+    if val:
+        return val
 
     # Level 5: default
     return "claude-code"

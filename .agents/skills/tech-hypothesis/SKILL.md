@@ -94,6 +94,9 @@ def test_task_roundtrip(task):
 ### Composite strategies with dependent values
 
 ```python
+from hypothesis import given
+from hypothesis import strategies as st
+
 @st.composite
 def ordered_pair(draw):
     """Generate two integers where n1 <= n2."""

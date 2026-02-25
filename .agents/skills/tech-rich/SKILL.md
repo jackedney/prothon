@@ -112,7 +112,7 @@ with console.status("[bold green]Working on tasks...") as status:
         console.log(f"Starting {task}")
         process(task)
         console.log(f"[green]Completed {task}[/]")
-        status.update(f"[bold green]Processing {next_task}...")
+        status.update(f"[bold green]Processing {task}...")
 ```
 
 `console.log()` inside `console.status()` prints timestamped lines above the spinner.

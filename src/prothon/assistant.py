@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Protocol
 
-from prothon.exceptions import AssistantNotFoundError, UnknownBackendError
+from prothon.exceptions import AssistantNotFoundError, ProthonError, UnknownBackendError
 
 
 class AssistantBackend(Protocol):
@@ -83,7 +83,12 @@ class OpenCodeBackend:
         """Symlink bundled skills into opencode's discovery directory."""
         from prothon.skills import sync_skills
 
-        xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+        xdg = (
+            Path(raw_xdg)
+            if raw_xdg and Path(raw_xdg).is_absolute()
+            else Path.home() / ".config"
+        )
         sync_skills(target=xdg / "opencode" / "skills")
 
     def env_overrides(self) -> dict[str, str]:
@@ -120,7 +125,10 @@ def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int:
             f"{backend.name} ({backend.cli_command}) not found on PATH. "
             f"Install: {backend.install_hint}"
         )
-    backend.sync_skills()
+    try:
+        backend.sync_skills()
+    except (IOError, OSError) as exc:
+        raise ProthonError(f"failed to sync skills for {backend.name}: {exc}") from exc
     env = {**os.environ, **backend.env_overrides()}
     return subprocess.run(
         backend.build_command(skill_name, cwd), cwd=cwd, env=env

@@ -144,8 +144,8 @@ from hypothesis import given, assume
 from hypothesis.strategies import floats
 import pytest
 
-@given(value=floats(0, 1))
 @pytest.mark.parametrize("threshold", [0.5, 1])
+@given(value=floats(0, 1))
 def test_foo(threshold, value):
     assume(value < threshold)
     ...

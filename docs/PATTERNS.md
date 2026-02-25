@@ -225,7 +225,8 @@ class OpenCodeBackend:
 
     def sync_skills(self) -> None:
         from prothon.skills import sync_skills
-        xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+        xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
         sync_skills(target=xdg / "opencode" / "skills")
 
     def env_overrides(self) -> dict[str, str]:
@@ -237,10 +238,11 @@ class OpenCodeBackend:
 Backends and configuration readers that access user-level directories respect `$XDG_CONFIG_HOME` with a `~/.config` fallback. Use a one-liner pattern:
 
 ```python
-xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
 ```
 
-This applies to `OpenCodeBackend.sync_skills()` and `resolve_assistant()` (global config lookup).
+Empty or relative `XDG_CONFIG_HOME` values fall back to `~/.config` to avoid syncing into repo-relative paths. This applies to `OpenCodeBackend.sync_skills()` and `resolve_assistant()` (global config lookup).
 
 ### Registry for Backend Lookup
 
@@ -276,7 +278,10 @@ The shared launch lifecycle is a plain function that accepts anything satisfying
 def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int:
     """Shared assistant launch lifecycle."""
     if not shutil.which(backend.cli_command):
-        raise AssistantNotFoundError(backend.cli_command, backend.install_hint)
+        raise AssistantNotFoundError(
+            f"{backend.name} ({backend.cli_command}) not found on PATH. "
+            f"Install: {backend.install_hint}"
+        )
     backend.sync_skills()
     env = {**os.environ, **backend.env_overrides()}
     return subprocess.run(
@@ -427,7 +432,8 @@ def resolve_assistant() -> str:
         pass  # No project root — fall through
 
     # Level 4: global config
-    xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
     global_config = xdg / "prothon" / "config.toml"
     if global_config.exists():
         doc = tomlkit.parse(global_config.read_text(encoding="utf-8"))

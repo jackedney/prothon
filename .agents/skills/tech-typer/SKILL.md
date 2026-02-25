@@ -8,7 +8,7 @@ user-invocable: false
 
 > Purpose: CLI framework with type-hint-driven parameter inference (R40: CLI-invocable workflows)
 > Docs: https://typer.tiangolo.com/
-> Version researched: >=0.15 (latest 0.24.0, Feb 2026)
+> Version researched: >=0.15 (latest 0.24.1, Feb 2026)
 
 ## Quick Start
 
@@ -91,7 +91,7 @@ def new():
 ### Callbacks for app-level (global) options
 
 ```python
-state = {"verbose": False}
+state = {"verbose": False, "assistant": None}
 
 @app.callback()
 def main(

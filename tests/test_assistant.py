@@ -12,11 +12,12 @@ from prothon.assistant import (
     AssistantBackend,
     ClaudeCodeBackend,
     OpenCodeBackend,
+    _BACKENDS,
     get_backend,
     launch,
     register_backend,
 )
-from prothon.exceptions import AssistantNotFoundError, UnknownBackendError
+from prothon.exceptions import AssistantNotFoundError, ProthonError, UnknownBackendError
 
 
 class FakeBackend:
@@ -92,8 +93,11 @@ def test_get_backend_unknown_raises() -> None:
 def test_register_backend_adds_to_registry() -> None:
     """register_backend makes a new backend available via get_backend."""
     register_backend("fake-test", FakeBackend)
-    backend = get_backend("fake-test")
-    assert isinstance(backend, FakeBackend)
+    try:
+        backend = get_backend("fake-test")
+        assert isinstance(backend, FakeBackend)
+    finally:
+        _BACKENDS.pop("fake-test", None)
 
 
 # --- ClaudeCodeBackend ---
@@ -246,6 +250,36 @@ def test_opencode_sync_skills_respects_xdg_config_home(
     )
 
 
+@patch("prothon.skills.sync_skills")
+def test_opencode_sync_skills_ignores_relative_xdg_config_home(
+    mock_sync: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenCodeBackend.sync_skills() falls back to ~/.config when XDG_CONFIG_HOME is relative."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", "relative/path")
+    backend = OpenCodeBackend()
+    backend.sync_skills()
+
+    mock_sync.assert_called_once_with(
+        target=Path.home() / ".config" / "opencode" / "skills"
+    )
+
+
+@patch("prothon.skills.sync_skills")
+def test_opencode_sync_skills_ignores_empty_xdg_config_home(
+    mock_sync: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenCodeBackend.sync_skills() falls back to ~/.config when XDG_CONFIG_HOME is empty."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", "")
+    backend = OpenCodeBackend()
+    backend.sync_skills()
+
+    mock_sync.assert_called_once_with(
+        target=Path.home() / ".config" / "opencode" / "skills"
+    )
+
+
 # --- Launch lifecycle verification ---
 
 
@@ -285,6 +319,22 @@ def test_launch_merges_env_overrides_into_subprocess_env(
 
     call_env = mock_run.call_args.kwargs["env"]
     assert call_env["CUSTOM_VAR"] == "custom_value"
+
+
+@patch("prothon.assistant.shutil.which", return_value="/usr/bin/fake-assistant")
+def test_launch_wraps_sync_skills_os_error(
+    mock_which: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """launch() wraps OSError from sync_skills() in ProthonError."""
+
+    class FailingSyncBackend(FakeBackend):
+        def sync_skills(self) -> None:
+            raise OSError("permission denied")
+
+    backend = FailingSyncBackend()
+    with pytest.raises(ProthonError, match="failed to sync skills for Fake"):
+        launch(backend, "my-skill", cwd=tmp_path)
 
 
 def test_get_backend_unknown_error_lists_registered_backends() -> None:

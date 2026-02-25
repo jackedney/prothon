@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import tomlkit
+import tomlkit.exceptions
 import typer
 from rich.console import Console
 from rich.markup import escape
@@ -66,7 +67,10 @@ def resolve_assistant() -> str:
         root = find_project_root()
         pyproject = root / "pyproject.toml"
         if pyproject.exists():
-            doc = tomlkit.parse(pyproject.read_text(encoding="utf-8"))
+            try:
+                doc = tomlkit.parse(pyproject.read_text(encoding="utf-8"))
+            except tomlkit.exceptions.TOMLKitError:
+                doc = {}  # fallback on parse error
             val = doc.get("tool", {}).get("prothon", {}).get("assistant")
             if val:
                 return str(val)
@@ -74,10 +78,18 @@ def resolve_assistant() -> str:
         pass  # No project root found — fall through
 
     # Level 4: global config ~/.config/prothon/config.toml
-    xdg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = (
+        Path(raw_xdg)
+        if raw_xdg and Path(raw_xdg).is_absolute()
+        else Path.home() / ".config"
+    )
     global_config = xdg / "prothon" / "config.toml"
     if global_config.exists():
-        doc = tomlkit.parse(global_config.read_text(encoding="utf-8"))
+        try:
+            doc = tomlkit.parse(global_config.read_text(encoding="utf-8"))
+        except tomlkit.exceptions.TOMLKitError:
+            doc = {}  # fallback on parse error
         val = doc.get("assistant")
         if val:
             return str(val)

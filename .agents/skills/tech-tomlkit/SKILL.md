@@ -8,7 +8,7 @@ user-invocable: false
 
 > Purpose: TOML read/write with comment and formatting preservation (R25-R26: change promise contract)
 > Docs: https://tomlkit.readthedocs.io/
-> Version researched: >=0.13,<1.0 (latest 0.13.2)
+> Version researched: >=0.13,<1.0 (latest 0.14.0)
 
 ## Quick Start
 
@@ -148,6 +148,10 @@ output = tomlkit.dumps(doc)  # do NOT use sort_keys on human-authored files
 
 **Do:** Use `item().comment("...")` to attach inline comments when scaffolding TOML from scratch.
 ```python
+import tomlkit
+
+doc = tomlkit.document()
+doc["server"] = tomlkit.table()
 doc["server"]["ssl"] = True
 doc["server"].item("ssl").comment("Enable SSL")
 ```

@@ -200,3 +200,98 @@ def test_launch_returns_nonzero_exit_code(
     code = launch(backend, "my-skill", cwd=tmp_path)
 
     assert code == 1
+
+
+# --- Backend sync_skills ---
+
+
+@patch("prothon.skills.sync_skills")
+def test_claude_code_sync_skills_calls_with_home_claude_skills(
+    mock_sync: MagicMock,
+) -> None:
+    """ClaudeCodeBackend.sync_skills() targets ~/.claude/skills/."""
+    backend = ClaudeCodeBackend()
+    backend.sync_skills()
+
+    mock_sync.assert_called_once_with(target=Path.home() / ".claude" / "skills")
+
+
+@patch("prothon.skills.sync_skills")
+def test_opencode_sync_skills_calls_with_xdg_default(
+    mock_sync: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenCodeBackend.sync_skills() defaults to ~/.config/opencode/skills/."""
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    backend = OpenCodeBackend()
+    backend.sync_skills()
+
+    mock_sync.assert_called_once_with(
+        target=Path.home() / ".config" / "opencode" / "skills"
+    )
+
+
+@patch("prothon.skills.sync_skills")
+def test_opencode_sync_skills_respects_xdg_config_home(
+    mock_sync: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenCodeBackend.sync_skills() uses XDG_CONFIG_HOME when set."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/custom/config")
+    backend = OpenCodeBackend()
+    backend.sync_skills()
+
+    mock_sync.assert_called_once_with(
+        target=Path("/custom/config") / "opencode" / "skills"
+    )
+
+
+# --- Launch lifecycle verification ---
+
+
+@patch("prothon.assistant.subprocess.run")
+@patch("prothon.assistant.shutil.which", return_value="/usr/bin/fake-assistant")
+def test_launch_calls_sync_skills_on_backend(
+    mock_which: MagicMock,
+    mock_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """launch() calls sync_skills() on the backend during the lifecycle."""
+    mock_run.return_value = MagicMock(returncode=0)
+    backend = FakeBackend()
+
+    with patch.object(backend, "sync_skills") as mock_sync:
+        launch(backend, "my-skill", cwd=tmp_path)
+
+    mock_sync.assert_called_once()
+
+
+@patch("prothon.assistant.subprocess.run")
+@patch("prothon.assistant.shutil.which", return_value="/usr/bin/fake-assistant")
+def test_launch_merges_env_overrides_into_subprocess_env(
+    mock_which: MagicMock,
+    mock_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """launch() merges env_overrides into the subprocess environment."""
+    mock_run.return_value = MagicMock(returncode=0)
+
+    class EnvBackend(FakeBackend):
+        def env_overrides(self) -> dict[str, str]:
+            return {"CUSTOM_VAR": "custom_value"}
+
+    backend = EnvBackend()
+    launch(backend, "my-skill", cwd=tmp_path)
+
+    call_env = mock_run.call_args.kwargs["env"]
+    assert call_env["CUSTOM_VAR"] == "custom_value"
+
+
+def test_get_backend_unknown_error_lists_registered_backends() -> None:
+    """UnknownBackendError message lists all registered backend names."""
+    with pytest.raises(UnknownBackendError) as exc_info:
+        get_backend("nonexistent")
+
+    msg = str(exc_info.value)
+    assert "claude-code" in msg
+    assert "opencode" in msg

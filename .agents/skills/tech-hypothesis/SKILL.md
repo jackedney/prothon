@@ -6,9 +6,9 @@ user-invocable: false
 
 # Hypothesis
 
-> Purpose: Property-based testing to complement example-based pytest tests (R4: scaffolded toolchain)
+> Purpose: Property-based testing to complement example-based pytest tests (R4: scaffolded toolchain; used for promise verification and data model invariants)
 > Docs: https://hypothesis.readthedocs.io/
-> Version researched: >=6.0 (latest 6.151.8)
+> Version researched: >=6.0 (latest 6.x)
 
 ## Quick Start
 
@@ -71,7 +71,6 @@ def test_task_line_count_tolerance(title: str, lines_added: int, lines_removed: 
 ### Composite strategies for complex objects
 
 ```python
-from hypothesis import strategies as st
 from hypothesis.strategies import composite
 
 @composite
@@ -90,6 +89,22 @@ def task_strategy(draw):
 def test_task_roundtrip(task):
     """Serializing and deserializing preserves all fields."""
     ...
+```
+
+### Composite strategies with dependent values
+
+```python
+@st.composite
+def ordered_pair(draw):
+    """Generate two integers where n1 <= n2."""
+    n1 = draw(st.integers())
+    n2 = draw(st.integers(min_value=n1))
+    return (n1, n2)
+
+@given(ordered_pair())
+def test_ordered(value):
+    n1, n2 = value
+    assert n1 <= n2
 ```
 
 ### Filtering with assume()
@@ -122,12 +137,28 @@ def test_expensive_operation(text: str):
     ...
 ```
 
+### Combining with pytest.mark.parametrize
+
+```python
+from hypothesis import given, assume
+from hypothesis.strategies import floats
+import pytest
+
+@given(value=floats(0, 1))
+@pytest.mark.parametrize("threshold", [0.5, 1])
+def test_foo(threshold, value):
+    assume(value < threshold)
+    ...
+```
+
+Note: `@pytest.mark.parametrize` goes above `@given`. The parametrized values are fixed; Hypothesis generates the `@given` values.
+
 ## Gotchas & Pitfalls
 
 - **Hypothesis tests are slower than example-based tests.** Default is 100 examples per test. Use `@settings(max_examples=N)` to tune. Consider `deadline=None` for tests involving I/O.
 - **`assume()` discards test cases, not fails them.** Too many `assume()` calls make tests slow (Hypothesis must generate many candidates to find valid ones). Prefer constrained strategies over filtering.
 - **Flaky test detection.** Hypothesis re-runs failing cases from a database (`.hypothesis/` directory). Add `.hypothesis/` to `.gitignore`. If a test passes locally but fails in CI, the database divergence is usually the cause.
-- **`@given` does not compose with `@pytest.mark.parametrize`.** Use `st.sampled_from()` inside the strategy instead.
+- **`@given` composes with `@pytest.mark.parametrize`** but the parametrized decorator must go above `@given`. Use `st.sampled_from()` inside the strategy as an alternative.
 - **Stateful testing exists but is advanced.** Use `RuleBasedStateMachine` for testing stateful APIs. Overkill for most prothon modules.
 - **Text strategy can generate surprising Unicode.** If your code only handles ASCII, use `st.text(alphabet=st.characters(categories=("L", "N")))` or `st.from_regex()`.
 

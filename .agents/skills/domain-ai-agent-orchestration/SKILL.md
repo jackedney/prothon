@@ -33,11 +33,13 @@ Bundled skills use `prothon-` prefix. Project skills use category prefixes (`tec
 
 **Context isolation:** Each agent session starts fresh with no inherited state from previous sessions. All context comes through: (a) the skill content, (b) files on disk, (c) agent instruction files. This is why documentation is the source of truth -- it persists between sessions.
 
-**Backend abstraction:** The `AssistantBackend` uses `typing.Protocol` for structural typing. Each backend encapsulates: binary name, CLI flags, skill installation path, and command construction. The contract has four members:
-- `name` -- human-readable name for error messages
-- `cli_command` -- binary name to look up on PATH
-- `build_command(skill_name)` -- constructs subprocess argv
-- `sync_skills()` -- installs/symlinks bundled skills
+**Backend abstraction:** The `AssistantBackend` uses `typing.Protocol` for structural typing. Each backend encapsulates: binary name, CLI flags, skill installation path, and command construction. The contract has six members:
+- `name` -- human-readable name for error messages (e.g. "Claude Code", "opencode")
+- `cli_command` -- binary name to look up on PATH (e.g. "claude", "opencode")
+- `install_hint` -- installation URL or command for actionable error messages when binary is missing
+- `build_command(skill_name, cwd)` -- constructs subprocess argv for launching a session
+- `sync_skills()` -- installs/symlinks bundled skills to the assistant's discovery location
+- `env_overrides()` -- returns dict of extra environment variables for non-interactive execution
 
 ## Mental Models
 
@@ -47,7 +49,9 @@ Bundled skills use `prothon-` prefix. Project skills use category prefixes (`tec
 
 **Execute workflow is a verified task queue.** The orchestrator dispatches tasks sequentially (respecting dependency order), verifies each task's output before proceeding. Analogous to a CI pipeline where each stage must pass.
 
-**Skill sync is installation, not runtime.** Skills are symlinked before launching. They do not change during a session.
+**Skill sync is installation, not runtime.** Skills are symlinked before launching. They do not change during a session. Per DESIGN.md, each backend maintains its own set of direct symlinks -- no shared central location.
+
+**Assistant selection is a 5-level precedence chain.** CLI flag > env var > pyproject.toml > global config > default ("claude-code"). The first non-empty value wins. This matches the convention used by uv, ruff, and pip.
 
 **Context scoping is a quality lever.** The promise contract's `context_files` and `reference_skills` fields limit what each task's agent sees. Narrow context aids focus; broad context aids cross-cutting understanding.
 
@@ -66,7 +70,7 @@ Bundled skills use `prothon-` prefix. Project skills use category prefixes (`tec
 
 - Every bundled skill directory must contain a `SKILL.md` file.
 - `sync_skills()` must be idempotent -- running it twice produces the same result.
-- Agent launch must fail with `AssistantNotFoundError` if the binary is not on PATH.
+- Agent launch must fail with `AssistantNotFoundError` (including `install_hint`) if the binary is not on PATH.
 - The execute workflow must not proceed to task N+1 until task N is verified.
 - Task retry count must never exceed the configured maximum.
 - Bundled skills must use the `prothon-` prefix. Project skills must not.

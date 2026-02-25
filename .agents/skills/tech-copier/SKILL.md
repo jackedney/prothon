@@ -8,7 +8,7 @@ user-invocable: false
 
 > Purpose: Project templating with native `copier update` support (R1-R9: project scaffolding)
 > Docs: https://copier.readthedocs.io/
-> Version researched: >=9.0
+> Version researched: >=9.0 (latest 9.6.x)
 
 ## Quick Start
 
@@ -36,13 +36,13 @@ Template directory must contain a `copier.yml` (or `copier.yaml`) defining quest
 from copier import run_copy, run_update, run_recopy
 
 # Initial generation
-run_copy(src_path, dst_path, data=answers, defaults=False)
+worker = run_copy(src_path, dst_path, data=answers, defaults=False)
 
 # Update existing project (3-way merge, preserves user edits)
-run_update(dst_path, conflict="rej", overwrite=True)
+worker = run_update(dst_path, conflict="rej", overwrite=True)
 
 # Full regeneration (discards evolution history)
-run_recopy(dst_path)
+worker = run_recopy(dst_path)
 ```
 
 ### Key parameters for run_copy
@@ -57,6 +57,24 @@ run_recopy(dst_path)
 | `unsafe` | `bool` | Allow running template tasks (required for post-gen scripts) |
 | `cleanup_on_error` | `bool` | Remove destination on failure (default: `True`) |
 | `quiet` | `bool` | Suppress output |
+| `skip_if_exists` | `list[str]` | Paths to skip if they already exist in destination |
+| `exclude` | `list[str]` | Glob patterns to exclude from rendering |
+| `pretend` | `bool` | Dry run -- show what would happen without making changes |
+
+### run_update with advanced options
+
+```python
+worker = run_update(
+    "./my-project",
+    overwrite=True,              # Required for updates via API
+    defaults=True,               # Use default/previous answers
+    vcs_ref="v2.0.0",           # Update to specific template version
+    conflict="inline",           # Conflict resolution mode
+    context_lines=3,             # Lines of context for diff
+    skip_answered=True,          # Skip already-answered questions
+    unsafe=True,                 # Allow tasks/migrations
+)
+```
 
 ### copier.yml question definition
 
@@ -80,14 +98,36 @@ license:
   choices: ["MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause"]
 ```
 
+### copier.yml settings (underscore-prefixed)
+
+```yaml
+_min_copier_version: "9.0.0"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+_exclude:
+    - "*.pyc"
+    - "__pycache__"
+_skip_if_exists:
+    - ".env"
+_tasks:
+    - "git init"
+    - command: "pre-commit install"
+      when: "{{ use_precommit }}"
+```
+
 ### Template variables in files
 
 Files ending in `.jinja` are rendered and the `.jinja` suffix is stripped. Use `{{ variable_name }}` syntax:
 
 ```jinja
-# {{ module_name }}
-
-{{ description }}
+[project]
+name = "{{ module_name }}"
+version = "{{ version }}"
+authors = [
+    { name = "{{ author }}", email = "{{ email }}" }
+]
+requires-python = ">={{ python_version }}"
 ```
 
 Directory and file names can also be templated: `{{ module_name }}/`.
@@ -104,6 +144,13 @@ Directory and file names can also be templated: `{{ module_name }}/`.
 
 Required for files containing literal `{{ }}` syntax (GitHub Actions workflows, Jinja2 templates within the template).
 
+### Accessing answers after copy
+
+```python
+worker = run_copy(src_path, dst_path, data=answers)
+print(f"Project created with answers: {worker.answers.combined}")
+```
+
 ## Gotchas & Pitfalls
 
 - **`unsafe=True` is required** to run post-generation tasks defined in `copier.yml`. Without it, tasks are silently skipped.
@@ -111,8 +158,8 @@ Required for files containing literal `{{ }}` syntax (GitHub Actions workflows, 
 - **`.copier-answers.yml` must be committed.** It records which template version was used. If missing, `run_update()` cannot determine the base for merging.
 - **`conflict="rej"`** creates `.rej` files with rejected hunks. `conflict="inline"` inserts Git-style conflict markers. Choose `rej` for programmatic handling.
 - **Question `type` matters for validation.** Supported types: `str`, `int`, `float`, `bool`, `yaml`, `json`.
-- **`_copier_conf.data` includes secret answers** -- never render, log, or include in generated output.
 - **`_subdirectory` in `copier.yml`** is needed when template files are in a subdirectory of the repo (common when the repo also contains docs/tests for the template itself).
+- **Copier strips `.jinja` suffix after rendering.** A file named `pyproject.toml.jinja` becomes `pyproject.toml`. The template repo cannot contain both `foo.txt` and `foo.txt.jinja` -- they would conflict in the output.
 
 ## Idiomatic Usage
 

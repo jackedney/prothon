@@ -6,9 +6,9 @@ user-invocable: false
 
 # tomlkit
 
-> Purpose: TOML read/write with comment and formatting preservation (R17-R18: change promise contract)
+> Purpose: TOML read/write with comment and formatting preservation (R25-R26: change promise contract)
 > Docs: https://tomlkit.readthedocs.io/
-> Version researched: >=0.13,<1.0 (latest 0.13.2)
+> Version researched: >=0.13,<1.0 (latest 0.14.0)
 
 ## Quick Start
 
@@ -35,6 +35,8 @@ doc = f.read()
 doc["key"] = "value"
 f.write(doc)
 ```
+
+`tomlkit.loads()` and `tomlkit.parse()` are aliases -- both accept a TOML string or bytes and return a `TOMLDocument`.
 
 ## Common Patterns
 
@@ -75,6 +77,26 @@ tasks.append(task)
 doc.add("tasks", tasks)
 ```
 
+### Adding comments and whitespace
+
+```python
+doc = tomlkit.document()
+
+# Standalone comment
+doc.add(tomlkit.comment("Configuration file"))
+doc.add(tomlkit.nl())
+
+# Inline comment on a value
+doc["debug"] = True
+doc.item("debug").comment("Set to false in production")
+
+# Comment inside a table
+server = tomlkit.table()
+server.add(tomlkit.comment("Server settings"))
+server["host"] = "localhost"
+doc["server"] = server
+```
+
 ### Creating typed items explicitly
 
 ```python
@@ -90,6 +112,18 @@ tomlkit.comment("This is a comment")
 tomlkit.nl()                                  # newline
 ```
 
+### Serialization with sort_keys
+
+```python
+# From a plain Python dict (no formatting metadata)
+config = {"server": {"host": "0.0.0.0", "port": 3000}}
+output = tomlkit.dumps(config, sort_keys=True)
+
+# From a TOMLDocument (preserves original ordering)
+doc = tomlkit.parse(content)
+output = tomlkit.dumps(doc)  # do NOT use sort_keys on human-authored files
+```
+
 ## Gotchas & Pitfalls
 
 - **`tomlkit.parse()` returns a `TOMLDocument`, not a plain dict.** It looks and acts like a dict but carries formatting metadata. Code that checks `isinstance(x, dict)` will fail -- use `isinstance(x, MutableMapping)` or duck typing instead.
@@ -98,6 +132,7 @@ tomlkit.nl()                                  # newline
 - **Assigning plain Python values auto-wraps them.** `doc["key"] = 42` works. But for specific formatting (literal strings, multiline), use explicit constructors like `tomlkit.string()`.
 - **Deleting keys preserves surrounding whitespace/comments.** Usually desirable but can leave orphaned comments.
 - **Performance: ~18x slower than `tomllib` for parsing.** Irrelevant for small config files but matters for bulk parsing. Use stdlib `tomllib` for read-only access when formatting preservation is not needed.
+- **`as_string()` and `dumps()` produce the same output** for a `TOMLDocument`. Use `dumps()` for consistency with the `loads()`/`dumps()` naming convention.
 
 ## Idiomatic Usage
 
@@ -110,3 +145,15 @@ tomlkit.nl()                                  # newline
 **Don't:** Build TOML strings manually with f-strings or concatenation. The builder API handles escaping and formatting correctly.
 
 **Do:** Use `TOMLFile` when the read-modify-write cycle targets a single file path.
+
+**Do:** Use `item().comment("...")` to attach inline comments when scaffolding TOML from scratch.
+```python
+import tomlkit
+
+doc = tomlkit.document()
+doc["server"] = tomlkit.table()
+doc["server"]["ssl"] = True
+doc["server"].item("ssl").comment("Enable SSL")
+```
+
+**Don't:** Use `sort_keys=True` on `dumps()` for human-authored files -- it destroys intentional ordering. Reserve sorting for machine-generated output only.

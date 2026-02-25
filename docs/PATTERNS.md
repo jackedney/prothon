@@ -67,6 +67,42 @@ def init_existing(cwd: Path | None = None) -> list[Path]: ...
 # Private
 def _template_dir() -> Path: ...
 def _post_generate(dest: Path) -> None: ...
+def _collect_project_details() -> dict[str, str]: ...
+def _run_copier_init(dest: Path, data: dict[str, str]) -> None: ...
+```
+
+```python
+# project.py — public API
+def find_project_root(start: Path | None = None) -> Path: ...
+```
+
+```python
+# git.py — public API
+DiffStat = dict[str, tuple[int, int]]
+
+def run_git(*args: str, cwd: Path | None = None) -> str: ...
+def rev_parse_head(cwd: Path | None = None) -> str: ...
+
+# Protocol + real implementation (also public)
+class GitDiffProvider(Protocol): ...
+class SubprocessGitDiff: ...
+```
+
+```python
+# skills.py — public API
+def bundled_skills_dir() -> Path: ...
+def sync_skills(target: Path | None = None) -> None: ...
+```
+
+```python
+# assistant.py — public API
+class AssistantBackend(Protocol): ...   # 6-member contract
+class ClaudeCodeBackend: ...            # Category A backend
+class OpenCodeBackend: ...              # Category A backend (XDG-aware)
+
+def register_backend(name: str, cls: type) -> None: ...
+def get_backend(name: str = "claude-code") -> AssistantBackend: ...
+def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int: ...
 ```
 
 ## Design Patterns
@@ -109,14 +145,20 @@ Protocol implementations are standalone classes — they satisfy the contract st
 ```python
 class SubprocessGitDiff:
     def diff_names(self, base_commit: str) -> set[str]:
-        result = subprocess.run(
-            ["git", "diff", base_commit, "--name-only"],
-            capture_output=True, text=True,
-        )
-        return {l for l in result.stdout.splitlines() if l}
+        output = run_git("diff", base_commit, "--name-only")
+        return {line for line in output.strip().splitlines() if line.strip()}
 
-    def diff_numstat(self, base_commit: str) -> dict[str, tuple[int, int]]:
-        ...
+    def diff_numstat(self, base_commit: str) -> DiffStat:
+        stats: DiffStat = {}
+        output = run_git("diff", base_commit, "--numstat")
+        for line in output.strip().splitlines():
+            parts = line.split("\t")
+            if len(parts) == 3:
+                added_str, removed_str, filepath = parts
+                if added_str == "-" or removed_str == "-":
+                    continue  # binary file
+                stats[filepath] = (int(added_str), int(removed_str))
+        return stats
 ```
 
 ### Protocol for Assistant Backends
@@ -131,9 +173,14 @@ class AssistantBackend(Protocol):
     @property
     def cli_command(self) -> str: ...
 
-    def build_command(self, skill_name: str) -> list[str]: ...
+    @property
+    def install_hint(self) -> str: ...
+
+    def build_command(self, skill_name: str, cwd: Path) -> list[str]: ...
 
     def sync_skills(self) -> None: ...
+
+    def env_overrides(self) -> dict[str, str]: ...
 
 
 class ClaudeCodeBackend:
@@ -145,12 +192,57 @@ class ClaudeCodeBackend:
     def cli_command(self) -> str:
         return "claude"
 
-    def build_command(self, skill_name: str) -> list[str]:
-        return [self.cli_command, "--skill", skill_name]
+    @property
+    def install_hint(self) -> str:
+        return "https://docs.anthropic.com/en/docs/claude-code"
+
+    def build_command(self, skill_name: str, cwd: Path) -> list[str]:
+        return [self.cli_command, "--dangerously-skip-permissions", f"/{skill_name}"]
 
     def sync_skills(self) -> None:
-        ...
+        from prothon.skills import sync_skills
+        sync_skills(target=Path.home() / ".claude" / "skills")
+
+    def env_overrides(self) -> dict[str, str]:
+        return {}
+
+
+class OpenCodeBackend:
+    @property
+    def name(self) -> str:
+        return "opencode"
+
+    @property
+    def cli_command(self) -> str:
+        return "opencode"
+
+    @property
+    def install_hint(self) -> str:
+        return "https://opencode.ai"
+
+    def build_command(self, skill_name: str, cwd: Path) -> list[str]:
+        return [self.cli_command, f"/{skill_name}"]
+
+    def sync_skills(self) -> None:
+        from prothon.skills import sync_skills
+        raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+        xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
+        sync_skills(target=xdg / "opencode" / "skills")
+
+    def env_overrides(self) -> dict[str, str]:
+        return {}
 ```
+
+### XDG_CONFIG_HOME Resolution
+
+Backends and configuration readers that access user-level directories respect `$XDG_CONFIG_HOME` with a `~/.config` fallback. Use a one-liner pattern:
+
+```python
+raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
+```
+
+Empty or relative `XDG_CONFIG_HOME` values fall back to `~/.config` to avoid syncing into repo-relative paths. This applies to `OpenCodeBackend.sync_skills()` and `resolve_assistant()` (global config lookup).
 
 ### Registry for Backend Lookup
 
@@ -159,12 +251,22 @@ A simple dict maps names to factory callables. Used where a user or config strin
 ```python
 _BACKENDS: dict[str, type[AssistantBackend]] = {
     "claude-code": ClaudeCodeBackend,
+    "opencode": OpenCodeBackend,
 }
+
+
+def register_backend(name: str, cls: type) -> None:
+    """Public extension hook for programmatic use and testing."""
+    _BACKENDS[name] = cls
+
 
 def get_backend(name: str = "claude-code") -> AssistantBackend:
     cls = _BACKENDS.get(name)
     if cls is None:
-        raise UnknownBackendError(name)
+        registered = ", ".join(sorted(_BACKENDS.keys()))
+        raise UnknownBackendError(
+            f"no backend registered for '{name}' (available: {registered})"
+        )
     return cls()
 ```
 
@@ -176,9 +278,18 @@ The shared launch lifecycle is a plain function that accepts anything satisfying
 def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int:
     """Shared assistant launch lifecycle."""
     if not shutil.which(backend.cli_command):
-        raise AssistantNotFoundError(backend.cli_command)
-    backend.sync_skills()
-    return subprocess.run(backend.build_command(skill_name), cwd=cwd).returncode
+        raise AssistantNotFoundError(
+            f"{backend.name} ({backend.cli_command}) not found on PATH. "
+            f"Install: {backend.install_hint}"
+        )
+    try:
+        backend.sync_skills()
+    except (IOError, OSError) as exc:
+        raise ProthonError(f"failed to sync skills for {backend.name}: {exc}") from exc
+    env = {**os.environ, **backend.env_overrides()}
+    return subprocess.run(
+        backend.build_command(skill_name, cwd), cwd=cwd, env=env,
+    ).returncode
 ```
 
 ### Default Arguments for Production, Parameters for Testing
@@ -247,6 +358,174 @@ dest.symlink_to(source)
 
 `scaffold.py` uses relative symlinks (`os.symlink("AGENTS.md", link)`) for portability within a repo. `skills.py` uses absolute symlinks (`.symlink_to(skill_dir.resolve())`) because the source is outside the project tree.
 
+### Rich Table Rendering as Private Helpers
+
+`cli.py` builds tables via private `_render_*` functions that return `Table` objects. Commands print them. This separates rendering logic from I/O.
+
+```python
+def _render_plan(p: Promise) -> Table:
+    table = Table(title=f"PLAN: {len(p.tasks)} tasks (base: {base})")
+    table.add_column("#", style="bold", width=3)
+    table.add_column("Title", style="bold")
+    ...
+    return table
+
+@promise_app.command("plan")
+def promise_plan() -> None:
+    p = promise.load_promise(promise_path)
+    console.print(_render_plan(p))
+```
+
+Status styling uses a dict mapping enum values to `(label, style)` tuples — avoids branching:
+
+```python
+_status_styles = {
+    CheckStatus.PASSED: ("PASS", "green"),
+    CheckStatus.FAILED: ("FAIL", "red"),
+    CheckStatus.SKIPPED: ("SKIP", "yellow"),
+}
+for c in report.checks:
+    label, style = _status_styles[c.status]
+    table.add_row(c.name, Text(label, style=style), c.detail)
+```
+
+### Global Typer Option with Module-Level State
+
+The `--assistant`/`-a` flag is global (on the app callback), not per-command. Typer's `envvar=` parameter handles env var resolution automatically. A module-level `_state` dict shares the callback's value with other functions without threading it through every command signature.
+
+```python
+_state: dict[str, str | None] = {"assistant": None}
+
+@app.callback(invoke_without_command=True)
+def callback(
+    ctx: typer.Context,
+    assistant: str | None = typer.Option(
+        None, "--assistant", "-a",
+        envvar="PROTHON_ASSISTANT",
+        help="AI assistant backend (claude-code, opencode)",
+    ),
+) -> None:
+    _state["assistant"] = assistant
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+```
+
+This pattern matches `ruff --config` and `uv --config-file` — global options on the callback, not per-command.
+
+### Fallthrough Precedence Chain
+
+`resolve_assistant()` implements a 5-level precedence chain where the first non-empty value wins. Each level is a simple `if val: return val` guard, falling through to the next. The function lives in `cli.py` (not `assistant.py`) because levels 1-2 depend on Typer state and levels 3-4 read config files — these are CLI concerns, not backend concerns.
+
+```python
+def _read_toml(path: Path) -> dict:
+    """Read a TOML file, returning an empty dict on parse error or missing file."""
+    if not path.exists():
+        return {}
+    try:
+        return tomlkit.parse(path.read_text(encoding="utf-8"))
+    except tomlkit.exceptions.TOMLKitError:
+        return {}
+
+
+def _nested_get(doc: dict, *keys: str) -> str | None:
+    """Walk *keys* through nested dicts, returning None if any level is not a mapping."""
+    current: object = doc
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return str(current) if current is not None else None
+
+
+def resolve_assistant() -> str:
+    # Levels 1-2: CLI flag / env var (from Typer into _state)
+    if _state["assistant"]:
+        return _state["assistant"]
+
+    # Level 3: pyproject.toml [tool.prothon].assistant
+    try:
+        root = find_project_root()
+        val = _nested_get(_read_toml(root / "pyproject.toml"), "tool", "prothon", "assistant")
+        if val:
+            return val
+    except ProthonError:
+        pass  # No project root — fall through
+
+    # Level 4: global config
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "assistant")
+    if val:
+        return val
+
+    # Level 5: default
+    return "claude-code"
+```
+
+Level 3 wraps `find_project_root()` in a `try/except ProthonError` because it's valid to run prothon outside a project (the resolution just falls through to level 4).
+
+### CLI Guard and Launch Helpers
+
+Repeated "find-or-exit" and "resolve-launch-or-exit" logic is extracted into private helpers that catch domain exceptions and raise `typer.Exit`. Keeps command bodies clean.
+
+```python
+def _require_project_root() -> Path:
+    try:
+        return find_project_root()
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+def _require_promise_file(root: Path) -> Path:
+    promise_path = root / promise.PROMISE_PATH
+    if not promise_path.exists():
+        typer.echo(f"No promise file found at {promise_path}")
+        raise typer.Exit(1)
+    return promise_path
+
+def _launch_skill(skill_name: str, cwd: Path) -> None:
+    """Resolve backend, launch skill, handle errors."""
+    try:
+        name = resolve_assistant()
+        backend = get_backend(name)
+        rc = launch(backend, skill_name, cwd)
+        if rc != 0:
+            raise typer.Exit(rc)
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+```
+
+`_launch_skill()` is the single call site for the resolve → get → launch chain. All five assistant commands (`spec`, `design`, `patterns`, `execute`, `compliance`) delegate to it.
+
+### Interactive Prompt with Validation Loop
+
+`prothon new` collects inputs via `typer.prompt()` with while-loop validation for constrained fields. No validation library — just re-prompt until acceptable.
+
+```python
+python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
+while python_version not in ("3.11", "3.12", "3.13"):
+    typer.echo("Must be 3.11, 3.12, or 3.13")
+    python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
+```
+
+### Conditional Path Branching in Domain Functions
+
+`init_existing()` branches on whether `pyproject.toml` exists — Path A (absent) scaffolds via Copier, Path B (present) skips it. Both paths converge on the common overlay. Guards come first, branching after.
+
+```python
+def init_existing(cwd: Path | None = None) -> list[Path]:
+    root = Path(cwd) if cwd else Path.cwd()
+    # Guards first
+    ...
+    # Branch on project state
+    if not (root / "pyproject.toml").exists():
+        answers = _collect_project_details()
+        _run_copier_init(root, answers)
+    # Common overlay (both paths)
+    ...
+```
+
 ### Lazy Imports for Heavy Dependencies
 
 Copier is imported inside the function body, not at module level. This avoids loading Copier (and its transitive dependencies) when the module is imported for lightweight operations like `init_existing()`.
@@ -267,12 +546,19 @@ This is an intentional exception to the standard import order. Use it only for g
 | Dataclasses | Data carriers (`Promise`, `CheckResult`, `Task`) | Typed, immutable-friendly, no boilerplate |
 | Protocols | All dependency injection boundaries (`GitDiffProvider`, `AssistantBackend`) | Structural typing, no inheritance, swappable for testing |
 | Standalone function | Shared lifecycle (`launch()`) | Keeps protocols pure interface, follows functions-first default |
-| Registry dict | Backend lookup by name | Explicit, debuggable, no magic |
+| Registry dict + `register_backend()` | Backend lookup by name | Explicit, debuggable, extensible without caller changes |
 | Default args | Production vs test paths | Avoids monkeypatching |
 | Guard clauses | Domain precondition validation (`init_existing()`) | Fail fast, domain exceptions, no nested conditionals |
 | Inline constants | Doc scaffolds in `scaffold.py` | Decouples init from Copier template layout |
 | Idempotent symlinks | `scaffold.py`, `skills.py` | Safe re-runs, stale link cleanup |
 | Lazy imports | Copier in `scaffold.generate()` | Avoid heavy import for lightweight code paths |
+| Rich table helpers | `_render_*` in `cli.py` | Separate rendering from I/O, enum-to-style dicts avoid branching |
+| CLI guard/launch helpers | `_require_project_root()`, `_require_promise_file()`, `_launch_skill()` | Extract repeated find-or-exit and resolve-launch-or-exit into reusable helpers |
+| Global Typer option + `_state` dict | `--assistant`/`-a` on app callback | Global option shared across commands without threading through signatures |
+| Fallthrough precedence | `resolve_assistant()` 5-level chain | First non-empty value wins; each level is a guard with fallthrough |
+| XDG_CONFIG_HOME resolution | `OpenCodeBackend.sync_skills()`, `resolve_assistant()` | Respect user's XDG override with `~/.config` fallback |
+| Prompt validation loops | `prothon new` constrained inputs | Simple while-loop re-prompt, no validation library |
+| Conditional path branching | `init_existing()` Path A/B | Guards first, branch on state, converge on common overlay |
 
 ## Error Handling
 
@@ -365,17 +651,28 @@ except Exception:
 
 ### Subprocess Error Wrapping
 
-The `git.py` wrapper converts subprocess failures immediately. Callers never see raw `subprocess.CalledProcessError`. Adoption reuses this — checking "is this a git repo" via `run_git("rev-parse", "--git-dir")` naturally raises `GitError` if the directory isn't a repo.
+All git interaction goes through `run_git()` which converts subprocess failures immediately. Callers never see raw `subprocess.CalledProcessError`. `GIT_TERMINAL_PROMPT=0` prevents interactive auth prompts from hanging the process. Adoption reuses this — checking "is this a git repo" via `run_git("rev-parse", "--git-dir")` naturally raises `GitError` if the directory isn't a repo.
 
 ```python
-def diff_names(base_commit: str) -> set[str]:
+def run_git(*args: str, cwd: Path | None = None) -> str:
     result = subprocess.run(
-        ["git", "diff", base_commit, "--name-only"],
-        capture_output=True, text=True,
+        ["git", *args],
+        capture_output=True, text=True, cwd=cwd,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
     )
     if result.returncode != 0:
-        raise GitError(f"git diff failed: {result.stderr.strip()}")
-    return {l for l in result.stdout.splitlines() if l}
+        full_cmd = " ".join(["git", *args])
+        raise GitError(f"{full_cmd} failed (exit {result.returncode}): {result.stderr.strip()}")
+    return result.stdout
+```
+
+When re-raising a caught exception as a domain error but the original traceback is noise, use `from None` to suppress chaining:
+
+```python
+try:
+    run_git("rev-parse", "--git-dir", cwd=root)
+except GitError:
+    raise GitError(f"not a git repository: {root}") from None
 ```
 
 ### Error Message Convention
@@ -384,7 +681,7 @@ Lowercase, specific, include the value that caused the problem.
 
 ```python
 raise PromiseError(f"task index {task_index} out of range (0-{len(tasks) - 1})")
-raise UnknownBackendError(f"no backend registered for '{name}'")
+raise UnknownBackendError(f"no backend registered for '{name}' (available: {registered})")
 ```
 
 ## Testing Patterns
@@ -396,10 +693,12 @@ Mirror the source tree under `tests/`, one test file per module.
 ```
 tests/
     conftest.py          # shared fixtures, fakes, factories
-    test_promise.py
-    test_scaffold.py
-    test_git.py
-    test_assistant.py
+    test_project.py      # project root detection
+    test_git.py          # git wrapper, SubprocessGitDiff
+    test_skills.py       # skill discovery and symlink sync
+    test_scaffold.py     # init_existing, generate, Copier integration
+    test_promise.py      # promise model, verification
+    test_assistant.py    # backend protocol, registry, launch
     test_cli.py          # integration tests via Typer CliRunner
 ```
 

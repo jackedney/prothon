@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import tomlkit
+import tomlkit.exceptions
 import typer
 from rich.console import Console
 from rich.markup import escape
@@ -12,12 +15,14 @@ from rich.text import Text
 
 from prothon import promise
 from prothon.assistant import get_backend, launch
-from prothon.exceptions import AssistantNotFoundError, ProthonError
+from prothon.exceptions import ProthonError
 from prothon.promise import CheckStatus, TaskCheckReport
 from prothon.project import find_project_root
 from prothon.scaffold import generate, init_existing
 
 console = Console()
+
+_state: dict[str, str | None] = {"assistant": None}
 
 app = typer.Typer(
     add_completion=False,
@@ -47,21 +52,72 @@ def _require_promise_file(root: Path) -> Path:
     return promise_path
 
 
+def _read_toml(path: Path) -> dict:
+    """Read a TOML file, returning an empty dict on parse error or missing file."""
+    if not path.exists():
+        return {}
+    try:
+        return tomlkit.parse(path.read_text(encoding="utf-8"))
+    except tomlkit.exceptions.TOMLKitError:
+        return {}
+
+
+def _nested_get(doc: dict, *keys: str) -> str | None:
+    """Walk *keys* through nested dicts, returning None if any level is not a mapping."""
+    current: object = doc
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return str(current) if current is not None else None
+
+
+def resolve_assistant() -> str:
+    """Resolve assistant backend name via 5-level precedence chain.
+
+    Priority: CLI flag > env var > pyproject.toml > global config > default.
+    Levels 1-2 are handled by Typer (--assistant flag + PROTHON_ASSISTANT envvar).
+    """
+    # Levels 1-2: CLI flag / env var (already resolved by Typer into _state)
+    if _state["assistant"]:
+        return _state["assistant"]
+
+    # Level 3: pyproject.toml [tool.prothon].assistant
+    try:
+        root = find_project_root()
+        val = _nested_get(
+            _read_toml(root / "pyproject.toml"), "tool", "prothon", "assistant"
+        )
+        if val:
+            return val
+    except ProthonError:
+        pass  # No project root found — fall through
+
+    # Level 4: global config ~/.config/prothon/config.toml
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = (
+        Path(raw_xdg)
+        if raw_xdg and Path(raw_xdg).is_absolute()
+        else Path.home() / ".config"
+    )
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "assistant")
+    if val:
+        return val
+
+    # Level 5: default
+    return "claude-code"
+
+
 def _launch_skill(skill_name: str, cwd: Path) -> None:
     """Resolve the backend, launch the skill, and handle errors."""
     try:
-        backend = get_backend()
+        name = resolve_assistant()
+        backend = get_backend(name)
         rc = launch(backend, skill_name, cwd)
         if rc != 0:
             raise typer.Exit(rc)
-    except AssistantNotFoundError:
-        typer.echo(
-            "Error: Claude Code CLI not found.\n"
-            "Install: https://docs.anthropic.com/en/docs/claude-code"
-        )
-        raise typer.Exit(1)
     except ProthonError as exc:
-        typer.echo(f"Error: {exc}")
+        typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
 
 
@@ -149,8 +205,18 @@ def _render_check_report(report: TaskCheckReport) -> Table:
 
 
 @app.callback(invoke_without_command=True)
-def callback(ctx: typer.Context) -> None:
+def callback(
+    ctx: typer.Context,
+    assistant: str | None = typer.Option(
+        None,
+        "--assistant",
+        "-a",
+        envvar="PROTHON_ASSISTANT",
+        help="AI assistant backend (claude-code, opencode)",
+    ),
+) -> None:
     """Python project generator with docs-first AI workflow."""
+    _state["assistant"] = assistant
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
 

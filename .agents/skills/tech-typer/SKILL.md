@@ -6,9 +6,9 @@ user-invocable: false
 
 # Typer
 
-> Purpose: CLI framework with type-hint-driven parameter inference (R32: CLI-invocable workflows)
+> Purpose: CLI framework with type-hint-driven parameter inference (R40: CLI-invocable workflows)
 > Docs: https://typer.tiangolo.com/
-> Version researched: >=0.15 (latest 0.24.0, Feb 2026)
+> Version researched: >=0.15 (latest 0.24.1, Feb 2026)
 
 ## Quick Start
 
@@ -35,12 +35,13 @@ Typer reads function signatures -- type hints become CLI parameters, defaults be
 app = typer.Typer()
 
 @app.command()
-def create(name: str):
-    ...
+def create(username: str):
+    print(f"Creating user: {username}")
 
 @app.command()
-def delete(name: str, force: bool = False):
-    ...
+def delete(username: str, force: bool = False):
+    if force:
+        print(f"Deleting user: {username}")
 ```
 
 ### Subcommand groups with add_typer
@@ -87,14 +88,63 @@ def new():
     confirm = typer.confirm("Proceed?")
 ```
 
-### Callbacks for app-level options
+### Callbacks for app-level (global) options
 
 ```python
+state = {"verbose": False, "assistant": None}
+
 @app.callback()
-def main(verbose: bool = False):
+def main(
+    assistant: Annotated[
+        str | None,
+        typer.Option("--assistant", "-a", envvar="PROTHON_ASSISTANT", help="AI assistant backend"),
+    ] = None,
+    verbose: Annotated[bool, typer.Option("--verbose")] = False,
+):
     """Prothon CLI -- documentation-driven development."""
+    if assistant:
+        state["assistant"] = assistant
     if verbose:
         state["verbose"] = True
+```
+
+Global options on `@app.callback()` apply to all subcommands. Typer natively handles env var fallback via `envvar=`.
+
+### Rich markup mode for help text
+
+```python
+app = typer.Typer(rich_markup_mode="rich")
+
+@app.command()
+def create(
+    username: Annotated[str, typer.Argument(help="The username to create")],
+    lastname: Annotated[
+        str,
+        typer.Argument(help="The last name", rich_help_panel="Secondary Arguments"),
+    ] = "",
+    age: Annotated[
+        int | None,
+        typer.Option(help="User age", rich_help_panel="Additional Data"),
+    ] = None,
+):
+    """[green]Create[/green] a new user."""
+    print(f"Creating user: {username}")
+```
+
+Use `rich_help_panel` to organize `--help` output into sections. Use `rich_markup_mode="rich"` on the app for Rich markup in docstrings, or `rich_markup_mode="markdown"` for Markdown.
+
+### Testing with CliRunner
+
+```python
+from typer.testing import CliRunner
+from myapp.cli import app
+
+runner = CliRunner()
+
+def test_app():
+    result = runner.invoke(app, ["Camila", "--city", "Berlin"])
+    assert result.exit_code == 0
+    assert "Hello Camila" in result.output
 ```
 
 ## Gotchas & Pitfalls
@@ -106,6 +156,7 @@ def main(verbose: bool = False):
 - **Exit codes:** Raise `typer.Exit(code=1)` for non-zero exits. Unhandled exceptions produce code 1 with traceback.
 - **`add_typer()` name parameter is required.** Without it, Typer infers from the module name, which is fragile.
 - **Rich markup in help strings.** Typer renders help strings with Rich, so literal square brackets in help text will be interpreted as markup. Use `\[` to escape.
+- **Option with `prompt=True` and `confirmation_prompt=True`** can be used for sensitive inputs like emails that need double-entry verification.
 
 ## Idiomatic Usage
 

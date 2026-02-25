@@ -137,3 +137,11 @@ def check_task(
 - Context managers (`with`) for file I/O and subprocesses
 - Keyword-only arguments (after `*`) for functions with >2 parameters
 - `@dataclass` for data containers; avoid raw `__init__` when fields are the primary concern
+- Keyword-only arguments enforce named parameter passing for clarity at call sites
+```python
+def check_task(
+    task_index: int,
+    *,
+    diff: GitDiffProvider | None = None,
+) -> TaskCheckReport:
+```

@@ -6,7 +6,7 @@ user-invocable: false
 
 # Subprocess Management Optimisation
 
-> Relevance: Prothon shells out to git for every verification check and to AI assistants for every agent session. Poor subprocess handling causes hangs, orphaned processes, and confusing error messages. (SPEC R7, R21, R25)
+> Relevance: Prothon shells out to git for every verification check and to AI assistants for every agent session. Poor subprocess handling causes hangs, orphaned processes, and confusing error messages. (SPEC R7, R29, R40; DESIGN: git.py wrapper, assistant backend contract)
 
 ## Key Principles
 
@@ -62,36 +62,51 @@ output = run_git("diff", "--name-only")     # one file path per line
 output = run_git("status", "--porcelain")   # fixed-width status codes
 ```
 
-### Assistant subprocess lifecycle
+### Assistant subprocess lifecycle (shared launch lifecycle per DESIGN.md)
 
 ```python
 # Naive: fire and forget
 subprocess.Popen(["claude", "--skill", skill_name])
 
-# Optimised: wait for completion, check exit code, handle interrupts
+# Optimised: shared launch lifecycle per DESIGN.md backend contract
+# 1. Check binary existence (shutil.which)
+# 2. Sync skills (backend.sync_skills())
+# 3. Merge environment (os.environ + backend.env_overrides())
+# 4. Execute subprocess
+# 5. Check return code
+
 try:
+    env = {**os.environ, **backend.env_overrides()}
+    command = backend.build_command(skill_name, cwd=project_root)
     result = subprocess.run(
         command,
         cwd=project_root,
+        env=env,
         check=False,
     )
     if result.returncode != 0:
-        raise AssistantError(f"{name} exited with code {result.returncode}")
+        raise AssistantError(f"{backend.name} exited with code {result.returncode}")
 except KeyboardInterrupt:
     raise  # let the subprocess handle its own cleanup
 ```
 
-### Binary existence check
+### Binary existence check with install hints
 
 ```python
 import shutil
 
-def _check_binary(name: str) -> Path:
-    path = shutil.which(name)
+def _check_binary(backend: AssistantBackend) -> Path:
+    """Check binary exists on PATH. Provide install_hint on failure."""
+    path = shutil.which(backend.cli_command)
     if path is None:
-        raise AssistantNotFoundError(f"{name} not found on PATH. Install it first.")
+        raise AssistantNotFoundError(
+            f"{backend.name} ({backend.cli_command}) not found on PATH. "
+            f"Install: {backend.install_hint}"
+        )
     return Path(path)
 ```
+
+Per DESIGN.md, every backend has `install_hint` for actionable error messages.
 
 ## Data Structure Choices
 

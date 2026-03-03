@@ -72,12 +72,13 @@ subprocess.Popen(["claude", "--skill", skill_name])
 # 1. Check binary existence (shutil.which)
 # 2. Sync skills (backend.sync_skills())
 # 3. Merge environment (os.environ + backend.env_overrides())
-# 4. Execute subprocess
-# 5. Check return code
+# 4. Build command (backend.build_command(skill, cwd, model=resolved_model))
+# 5. Execute subprocess
+# 6. Check return code
 
 try:
     env = {**os.environ, **backend.env_overrides()}
-    command = backend.build_command(skill_name, cwd=project_root)
+    command = backend.build_command(skill_name, cwd=project_root, model=resolved_model)
     result = subprocess.run(
         command,
         cwd=project_root,

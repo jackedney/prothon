@@ -70,6 +70,7 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 42. The user must be able to select their preferred AI assistant via CLI flag, environment variable, project-level configuration, and global user-level configuration.
 43. Built-in skills must be bundled with the package and synced to the active assistant's skill directory on every CLI invocation.
 44. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
+45. When opencode is the selected assistant, the user must be able to configure a model and provider via the same configuration hierarchy (CLI flag, environment variable, project-level configuration, global user-level configuration). If neither is configured, prothon must invoke opencode without specifying model or provider, deferring to opencode's own defaults.
 
 ## Constraints
 

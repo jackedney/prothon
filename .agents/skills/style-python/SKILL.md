@@ -122,12 +122,18 @@ def check_task(
 
 ## Formatting Rules
 
-**Auto-enforced by ruff format:**
+**Auto-enforced by ruff format (configured in `pyproject.toml`):**
 - Line length: 88 characters (Black default)
 - Indentation: 4 spaces (no tabs)
 - String quotes: double quotes (`"string"`)
 - Trailing commas: preserved (magic trailing comma respected)
 - Parenthesized line continuations over backslash
+
+**Ruff lint rules in this project:**
+- `ruff check src/ tests/` runs linting
+- `ruff format --check src/ tests/` checks formatting
+- All checks run via `poe check` and pre-commit hooks
+- Bandit security checks skip `B404` (subprocess import), `B603` (subprocess call), `B607` (partial executable path), `B701` (Jinja2 autoescape) -- these are intentional patterns in this codebase
 
 **Manual conventions:**
 - Group related classes in one module (e.g., `Task`, `Metadata`, `Promise` in `promise.py`)

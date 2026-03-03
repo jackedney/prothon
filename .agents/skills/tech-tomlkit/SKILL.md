@@ -112,17 +112,25 @@ tomlkit.comment("This is a comment")
 tomlkit.nl()                                  # newline
 ```
 
-### Serialization with sort_keys
+### Reading TOML config files for agent/model resolution
 
 ```python
-# From a plain Python dict (no formatting metadata)
-config = {"server": {"host": "0.0.0.0", "port": 3000}}
-output = tomlkit.dumps(config, sort_keys=True)
+import tomlkit
+from pathlib import Path
 
-# From a TOMLDocument (preserves original ordering)
-doc = tomlkit.parse(content)
-output = tomlkit.dumps(doc)  # do NOT use sort_keys on human-authored files
+def read_project_config(pyproject: Path) -> dict:
+    """Read [tool.prothon] from pyproject.toml."""
+    doc = tomlkit.parse(pyproject.read_text())
+    return dict(doc.get("tool", {}).get("prothon", {}))
+
+def read_global_config(config_path: Path) -> dict:
+    """Read ~/.config/prothon/config.toml."""
+    if not config_path.exists():
+        return {}
+    return dict(tomlkit.parse(config_path.read_text()))
 ```
+
+Per DESIGN.md, both `pyproject.toml` (`[tool.prothon]`) and `~/.config/prothon/config.toml` store agent, model, and provider settings. tomlkit reads both.
 
 ## Gotchas & Pitfalls
 
@@ -136,7 +144,7 @@ output = tomlkit.dumps(doc)  # do NOT use sort_keys on human-authored files
 
 ## Idiomatic Usage
 
-**Do:** Use `tomlkit.parse()` + `tomlkit.dumps()` for roundtrip editing of human-authored files.
+**Do:** Use `tomlkit.parse()` + `tomlkit.dumps()` for roundtrip editing of human-authored files (like `change_promise.toml`).
 
 **Don't:** Use `tomlkit` for read-only access -- use stdlib `tomllib` instead (faster, no dependency).
 
@@ -147,13 +155,5 @@ output = tomlkit.dumps(doc)  # do NOT use sort_keys on human-authored files
 **Do:** Use `TOMLFile` when the read-modify-write cycle targets a single file path.
 
 **Do:** Use `item().comment("...")` to attach inline comments when scaffolding TOML from scratch.
-```python
-import tomlkit
-
-doc = tomlkit.document()
-doc["server"] = tomlkit.table()
-doc["server"]["ssl"] = True
-doc["server"].item("ssl").comment("Enable SSL")
-```
 
 **Don't:** Use `sort_keys=True` on `dumps()` for human-authored files -- it destroys intentional ordering. Reserve sorting for machine-generated output only.

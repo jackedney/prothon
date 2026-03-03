@@ -94,14 +94,14 @@ success_criteria = "All five session commands accept --model/-m and --provider/-
 files_to_create = []
 files_to_modify = ["src/prothon/cli.py"]
 files_to_remove = []
-expected_lines_added = 15
+expected_lines_added = 108
 expected_lines_removed = 5
 context_files = ["src/prothon/assistant.py"]
 doc_sections = ["DESIGN.md#Model Configuration Contract", "PATTERNS.md#Per-Command Model/Provider Options with Annotated Types"]
 reference_skills = ["tech-typer", "style-python"]
 dependencies = [3]
-completed = false
-attempts = 0
+completed = true
+attempts = 1
 
 # -----------------------------------------------------------------------------
 # Task 5: Update _launch_skill to resolve and pass model
@@ -111,10 +111,10 @@ title = "Update _launch_skill to resolve and pass model"
 goal = "Add model/provider params, call resolve_model(), pass resolved model to launch()"
 success_criteria = "_launch_skill resolves model/provider and passes result to launch()"
 files_to_create = []
-files_to_modify = ["src/prothon/cli.py"]
+files_to_modify = ["src/prothon/cli.py", "tests/test_cli.py"]
 files_to_remove = []
-expected_lines_added = 8
-expected_lines_removed = 3
+expected_lines_added = 150
+expected_lines_removed = 13
 context_files = ["src/prothon/assistant.py"]
 doc_sections = ["DESIGN.md#Model Configuration Contract", "PATTERNS.md#CLI Guard and Launch Helpers"]
 reference_skills = ["style-python"]

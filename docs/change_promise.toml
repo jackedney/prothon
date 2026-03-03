@@ -119,8 +119,8 @@ context_files = ["src/prothon/assistant.py"]
 doc_sections = ["DESIGN.md#Model Configuration Contract", "PATTERNS.md#CLI Guard and Launch Helpers"]
 reference_skills = ["style-python"]
 dependencies = [2, 4]
-completed = false
-attempts = 0
+completed = true
+attempts = 1
 
 # -----------------------------------------------------------------------------
 # Task 6: Add tests for assistant module updates

@@ -237,8 +237,14 @@ def _file_hash(path: Path) -> str | None:
         return None
 
 
-def _launch_skill(skill_name: str, cwd: Path, agent: str | None = None) -> None:
-    """Resolve the backend, launch the skill, and handle errors."""
+def _launch_skill(
+    skill_name: str,
+    cwd: Path,
+    agent: str | None = None,
+    model: str | None = None,
+    provider: str | None = None,
+) -> None:
+    """Resolve backend, launch skill, handle errors."""
     spec_path = cwd / "docs" / "SPEC.md"
     guard_spec = skill_name != "prothon-spec-writer"
     spec_hash = _file_hash(spec_path) if guard_spec else None
@@ -246,7 +252,8 @@ def _launch_skill(skill_name: str, cwd: Path, agent: str | None = None) -> None:
     try:
         name = resolve_agent(agent)
         backend = get_backend(name)
-        rc = launch(backend, skill_name, cwd)
+        resolved_model = resolve_model(model, provider)
+        rc = launch(backend, skill_name, cwd, model=resolved_model)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
@@ -425,7 +432,7 @@ def spec(
 ) -> None:
     """Write or revise SPEC.md — extract requirements through probing questions."""
     root = _require_project_root()
-    _launch_skill("prothon-spec-writer", root, agent)
+    _launch_skill("prothon-spec-writer", root, agent, model, provider)
 
 
 @app.command()
@@ -437,7 +444,7 @@ def design(
     """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
     root = _require_project_root()
     _require_doc(root, "SPEC.md")
-    _launch_skill("prothon-design-writer", root, agent)
+    _launch_skill("prothon-design-writer", root, agent, model, provider)
 
 
 @app.command()
@@ -449,7 +456,7 @@ def patterns(
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
     root = _require_project_root()
     _require_doc(root, "DESIGN.md")
-    _launch_skill("prothon-patterns-writer", root, agent)
+    _launch_skill("prothon-patterns-writer", root, agent, model, provider)
 
 
 @app.command()
@@ -460,7 +467,7 @@ def execute(
 ) -> None:
     """Align source code to documentation — plan and implement with subagents."""
     root = _require_project_root()
-    _launch_skill("prothon-execute", root, agent)
+    _launch_skill("prothon-execute", root, agent, model, provider)
 
 
 @app.command()
@@ -471,7 +478,7 @@ def compliance(
 ) -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
-    _launch_skill("prothon-compliance-checker", root, agent)
+    _launch_skill("prothon-compliance-checker", root, agent, model, provider)
 
 
 # --- Promise subcommands ---

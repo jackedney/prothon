@@ -136,7 +136,9 @@ def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):
         with patch("prothon.cli.get_backend") as mock_get_backend:
             mock_backend = mock_get_backend.return_value
             runner.invoke(app, ["spec"])
-    mock_launch.assert_called_once_with(mock_backend, "prothon-spec-writer", dest)
+    mock_launch.assert_called_once_with(
+        mock_backend, "prothon-spec-writer", dest, model=None
+    )
 
 
 def test_design_launches_single_session(tmp_path, monkeypatch, context):
@@ -147,7 +149,9 @@ def test_design_launches_single_session(tmp_path, monkeypatch, context):
         with patch("prothon.cli.get_backend") as mock_get_backend:
             mock_backend = mock_get_backend.return_value
             runner.invoke(app, ["design"])
-    mock_launch.assert_called_once_with(mock_backend, "prothon-design-writer", dest)
+    mock_launch.assert_called_once_with(
+        mock_backend, "prothon-design-writer", dest, model=None
+    )
 
 
 # --- _require_project_root ---
@@ -231,7 +235,9 @@ def test_launch_skill_passes_correct_skill_name(tmp_path, monkeypatch, context):
         with patch("prothon.cli.launch", return_value=0) as mock_launch:
             with patch("prothon.cli.get_backend") as mock_backend:
                 runner.invoke(app, [cmd])
-        mock_launch.assert_called_once_with(mock_backend.return_value, skill_name, dest)
+        mock_launch.assert_called_once_with(
+            mock_backend.return_value, skill_name, dest, model=None
+        )
 
 
 def test_launch_skill_exit_code_one_is_nonzero(tmp_path, monkeypatch, context):

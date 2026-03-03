@@ -81,8 +81,8 @@ context_files = []
 doc_sections = ["DESIGN.md#Model Configuration Contract", "PATTERNS.md#Per-Command Model/Provider Options with Annotated Types"]
 reference_skills = ["tech-typer", "style-python"]
 dependencies = []
-completed = false
-attempts = 0
+completed = true
+attempts = 1
 
 # -----------------------------------------------------------------------------
 # Task 4: Update session commands to accept model/provider

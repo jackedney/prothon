@@ -418,14 +418,22 @@ def init() -> None:
 
 
 @app.command()
-def spec(agent: AgentOption = None) -> None:
+def spec(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
     """Write or revise SPEC.md — extract requirements through probing questions."""
     root = _require_project_root()
     _launch_skill("prothon-spec-writer", root, agent)
 
 
 @app.command()
-def design(agent: AgentOption = None) -> None:
+def design(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
     """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
     root = _require_project_root()
     _require_doc(root, "SPEC.md")
@@ -433,7 +441,11 @@ def design(agent: AgentOption = None) -> None:
 
 
 @app.command()
-def patterns(agent: AgentOption = None) -> None:
+def patterns(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
     root = _require_project_root()
     _require_doc(root, "DESIGN.md")
@@ -441,14 +453,22 @@ def patterns(agent: AgentOption = None) -> None:
 
 
 @app.command()
-def execute(agent: AgentOption = None) -> None:
+def execute(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
     """Align source code to documentation — plan and implement with subagents."""
     root = _require_project_root()
     _launch_skill("prothon-execute", root, agent)
 
 
 @app.command()
-def compliance(agent: AgentOption = None) -> None:
+def compliance(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
     _launch_skill("prothon-compliance-checker", root, agent)

@@ -23,7 +23,9 @@ class AssistantBackend(Protocol):
     @property
     def install_hint(self) -> str: ...
 
-    def build_command(self, skill_name: str, cwd: Path) -> list[str]: ...
+    def build_command(
+        self, skill_name: str, cwd: Path, model: str | None = None
+    ) -> list[str]: ...
 
     def sync_skills(self) -> None: ...
 
@@ -45,7 +47,9 @@ class ClaudeCodeBackend:
     def install_hint(self) -> str:
         return "https://docs.anthropic.com/en/docs/claude-code"
 
-    def build_command(self, skill_name: str, cwd: Path) -> list[str]:
+    def build_command(
+        self, skill_name: str, cwd: Path, model: str | None = None
+    ) -> list[str]:
         """Return subprocess argv for a Claude Code session with *skill_name*."""
         return [self.cli_command, "--dangerously-skip-permissions", f"/{skill_name}"]
 
@@ -75,9 +79,14 @@ class OpenCodeBackend:
     def install_hint(self) -> str:
         return "https://opencode.ai"
 
-    def build_command(self, skill_name: str, cwd: Path) -> list[str]:
+    def build_command(
+        self, skill_name: str, cwd: Path, model: str | None = None
+    ) -> list[str]:
         """Return subprocess argv for an opencode session with *skill_name*."""
-        return [self.cli_command, "--prompt", f"/{skill_name}"]
+        cmd = [self.cli_command, "--prompt", f"/{skill_name}"]
+        if model is not None:
+            cmd.extend(["--model", model])
+        return cmd
 
     def sync_skills(self) -> None:
         """Symlink bundled skills into opencode's discovery directory."""
@@ -118,7 +127,9 @@ def get_backend(name: str = "claude-code") -> AssistantBackend:
     return cls()
 
 
-def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int:
+def launch(
+    backend: AssistantBackend, skill_name: str, cwd: Path, model: str | None = None
+) -> int:
     """Check binary, sync skills, run the assistant, and return exit code."""
     if not shutil.which(backend.cli_command):
         raise AssistantNotFoundError(
@@ -132,7 +143,7 @@ def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int:
     env = {**os.environ, **backend.env_overrides()}
     try:
         return subprocess.run(
-            backend.build_command(skill_name, cwd), cwd=cwd, env=env
+            backend.build_command(skill_name, cwd, model=model), cwd=cwd, env=env
         ).returncode
     except OSError as exc:
         raise ProthonError(f"failed to launch {backend.name}: {exc}") from exc

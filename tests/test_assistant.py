@@ -35,7 +35,9 @@ class FakeBackend:
     def install_hint(self) -> str:
         return "https://example.com/install"
 
-    def build_command(self, skill_name: str, cwd: Path) -> list[str]:
+    def build_command(
+        self, skill_name: str, cwd: Path, model: str | None = None
+    ) -> list[str]:
         return [self.cli_command, f"/{skill_name}"]
 
     def sync_skills(self) -> None:

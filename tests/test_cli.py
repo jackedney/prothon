@@ -457,11 +457,11 @@ def test_resolve_model_both_none_returns_none(tmp_path, monkeypatch):
 
 
 def test_resolve_model_model_with_slash_passthrough(tmp_path, monkeypatch):
-    """Model contains '/' -> treated as complete provider/model, provider ignored."""
+    """Model contains '/' with matching provider -> accepts."""
     monkeypatch.chdir(tmp_path)
     from prothon.cli import resolve_model
 
-    result = resolve_model("z-ai/glm-5", "other-provider")
+    result = resolve_model("z-ai/glm-5", "z-ai")
     assert result == "z-ai/glm-5"
 
 
@@ -514,6 +514,24 @@ def test_resolve_model_only_provider_raises(tmp_path, monkeypatch):
 
     with pytest.raises(ProthonError, match="--provider requires --model"):
         resolve_model(None, "z-ai")
+
+
+def test_resolve_model_qualified_with_matching_provider(tmp_path, monkeypatch):
+    """Qualified model with matching provider -> accepts."""
+    monkeypatch.chdir(tmp_path)
+    from prothon.cli import resolve_model
+
+    result = resolve_model("z-ai/glm-5", "z-ai")
+    assert result == "z-ai/glm-5"
+
+
+def test_resolve_model_qualified_with_conflicting_provider(tmp_path, monkeypatch):
+    """Qualified model with conflicting provider -> raises ProthonError."""
+    monkeypatch.chdir(tmp_path)
+    from prothon.cli import resolve_model
+
+    with pytest.raises(ProthonError, match="conflicting providers"):
+        resolve_model("providerA/modelX", "providerB")
 
 
 # --- _resolve_model_value precedence chain ---
@@ -660,7 +678,7 @@ def test_opencode_receives_resolved_model(tmp_path, monkeypatch, context):
 
 
 def test_opencode_receives_slash_model_as_is(tmp_path, monkeypatch, context):
-    """opencode receives model with '/' as-is, ignoring provider."""
+    """opencode receives model with '/' as-is when no provider specified."""
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
@@ -676,8 +694,6 @@ def test_opencode_receives_slash_model_as_is(tmp_path, monkeypatch, context):
                     "opencode",
                     "--model",
                     "z-ai/glm-5",
-                    "--provider",
-                    "ignored",
                 ],
             )
     assert result.exit_code == 0
@@ -841,3 +857,33 @@ def test_launch_skill_opencode_accepts_both_model_provider(
     assert result.exit_code == 0
     mock_launch.assert_called_once()
     assert mock_launch.call_args.kwargs["model"] == "z-ai/glm-5"
+
+
+def test_launch_skill_opencode_conflicting_qualified_model_provider(
+    tmp_path, monkeypatch, context
+):
+    """opencode rejects qualified model when provider conflicts."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    with patch("prothon.cli.launch", return_value=0) as mock_launch:
+        with patch("prothon.cli.get_backend") as mock_get_backend:
+            mock_get_backend.return_value.name = "opencode"
+            result = runner.invoke(
+                app,
+                [
+                    "spec",
+                    "--model",
+                    "providerA/modelX",
+                    "--provider",
+                    "providerB",
+                    "--agent",
+                    "opencode",
+                ],
+            )
+    assert result.exit_code == 1
+    mock_launch.assert_not_called()
+    assert "conflicting providers" in result.output
+    assert "providerA" in result.output
+    assert "providerB" in result.output

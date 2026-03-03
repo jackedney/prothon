@@ -106,8 +106,8 @@ def test_missing_binary(monkeypatch):
         check_binary("claude")
 
 def test_env_variable(monkeypatch):
-    monkeypatch.setenv("PROTHON_ASSISTANT", "opencode")
-    assert resolve_assistant() == "opencode"
+    monkeypatch.setenv("PROTHON_AGENT", "opencode")
+    assert resolve_agent() == "opencode"
 
 def test_chdir(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)

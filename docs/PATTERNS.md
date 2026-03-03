@@ -102,7 +102,7 @@ class OpenCodeBackend: ...              # Category A backend (XDG-aware)
 
 def register_backend(name: str, cls: type) -> None: ...
 def get_backend(name: str = "claude-code") -> AssistantBackend: ...
-def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int: ...
+def launch(backend: AssistantBackend, skill_name: str, cwd: Path, model: str | None = None) -> int: ...
 ```
 
 ## Design Patterns
@@ -176,7 +176,7 @@ class AssistantBackend(Protocol):
     @property
     def install_hint(self) -> str: ...
 
-    def build_command(self, skill_name: str, cwd: Path) -> list[str]: ...
+    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]: ...
 
     def sync_skills(self) -> None: ...
 
@@ -196,7 +196,8 @@ class ClaudeCodeBackend:
     def install_hint(self) -> str:
         return "https://docs.anthropic.com/en/docs/claude-code"
 
-    def build_command(self, skill_name: str, cwd: Path) -> list[str]:
+    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]:
+        # model is silently ignored — Claude Code does not support model selection via prothon
         return [self.cli_command, "--dangerously-skip-permissions", f"/{skill_name}"]
 
     def sync_skills(self) -> None:
@@ -220,8 +221,11 @@ class OpenCodeBackend:
     def install_hint(self) -> str:
         return "https://opencode.ai"
 
-    def build_command(self, skill_name: str, cwd: Path) -> list[str]:
-        return [self.cli_command, f"/{skill_name}"]
+    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]:
+        cmd = [self.cli_command, f"/{skill_name}"]
+        if model is not None:
+            cmd.extend(["--model", model])
+        return cmd
 
     def sync_skills(self) -> None:
         from prothon.skills import sync_skills
@@ -275,7 +279,7 @@ def get_backend(name: str = "claude-code") -> AssistantBackend:
 The shared launch lifecycle is a plain function that accepts anything satisfying `AssistantBackend`. This follows the "functions first" default — shared behavior doesn't require a base class.
 
 ```python
-def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int:
+def launch(backend: AssistantBackend, skill_name: str, cwd: Path, model: str | None = None) -> int:
     """Shared assistant launch lifecycle."""
     if not shutil.which(backend.cli_command):
         raise AssistantNotFoundError(
@@ -288,7 +292,7 @@ def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int:
         raise ProthonError(f"failed to sync skills for {backend.name}: {exc}") from exc
     env = {**os.environ, **backend.env_overrides()}
     return subprocess.run(
-        backend.build_command(skill_name, cwd), cwd=cwd, env=env,
+        backend.build_command(skill_name, cwd, model=model), cwd=cwd, env=env,
     ).returncode
 ```
 
@@ -380,9 +384,9 @@ Status styling uses a dict mapping enum values to `(label, style)` tuples — av
 
 ```python
 _status_styles = {
-    CheckStatus.PASSED: ("PASS", "green"),
-    CheckStatus.FAILED: ("FAIL", "red"),
-    CheckStatus.SKIPPED: ("SKIP", "yellow"),
+    CheckStatus.PASS: ("PASS", "green"),
+    CheckStatus.FAIL: ("FAIL", "red"),
+    CheckStatus.SKIP: ("SKIP", "yellow"),
 }
 for c in report.checks:
     label, style = _status_styles[c.status]
@@ -402,14 +406,42 @@ AgentOption = Annotated[
         help="AI agent backend (claude-code, opencode)",
     ),
 ]
-
-@app.command()
-def spec(agent: AgentOption = None) -> None:
-    root = _require_project_root()
-    _launch_skill("prothon-spec-writer", root, agent)
 ```
 
-This allows natural usage like `prothon patterns --agent opencode`. Typer's `envvar=` parameter handles env var resolution on each command automatically.
+### Per-Command Model/Provider Options with Annotated Types
+
+The `--model`/`-m` and `--provider`/`-p` flags follow the same pattern — shared `Annotated` types added to each session command. These are opencode-specific (Claude Code silently ignores them).
+
+```python
+ModelOption = Annotated[
+    str | None,
+    typer.Option(
+        "--model", "-m",
+        envvar="PROTHON_MODEL",
+        help="Model name (opencode only)",
+    ),
+]
+
+ProviderOption = Annotated[
+    str | None,
+    typer.Option(
+        "--provider", "-p",
+        envvar="PROTHON_PROVIDER",
+        help="Provider name (opencode only)",
+    ),
+]
+
+@app.command()
+def spec(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
+    root = _require_project_root()
+    _launch_skill("prothon-spec-writer", root, agent, model=model, provider=provider)
+```
+
+This allows natural usage like `prothon spec --agent opencode --model glm-5 --provider z-ai`. Typer's `envvar=` parameter handles env var resolution on each command automatically.
 
 ### Fallthrough Precedence Chain
 
@@ -463,6 +495,58 @@ def resolve_agent(cli_value: str | None = None) -> str:
 
 Level 3 wraps `find_project_root()` in a `try/except ProthonError` because it's valid to run prothon outside a project (the resolution just falls through to level 4).
 
+### Model/Provider Resolution and Join Rule
+
+`resolve_model(cli_model, cli_provider)` implements two 5-level precedence chains (one for model, one for provider), then joins them into opencode's required `provider/model` format:
+
+```python
+def _resolve_model_value(cli_value: str | None) -> str | None:
+    if cli_value:
+        return cli_value
+    try:
+        root = find_project_root()
+        val = _nested_get(_read_toml(root / "pyproject.toml"), "tool", "prothon", "model")
+        if val:
+            return val
+    except ProthonError:
+        pass
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "model")
+    if val:
+        return val
+    return None  # defer to opencode defaults
+
+
+def _resolve_provider_value(cli_value: str | None) -> str | None:
+    # Same structure as _resolve_model_value, but for "provider" key
+    ...
+
+
+def resolve_model(cli_model: str | None, cli_provider: str | None) -> str | None:
+    model = _resolve_model_value(cli_model)
+    provider = _resolve_provider_value(cli_provider)
+
+    if model is None and provider is None:
+        return None  # defer to opencode defaults
+
+    if model is not None and "/" in model:
+        return model  # already in provider/model format, ignore provider flag
+
+    if model is not None and provider is not None:
+        return f"{provider}/{model}"
+
+    raise ProthonError(
+        "--provider requires --model (and vice versa). "
+        "Use provider/model format or set both."
+    )
+```
+
+Resolution rules:
+- If `--model` already contains `/`, treat it as complete `provider/model` and ignore `--provider`
+- If only one of model/provider resolves to a value (and model has no `/`), exit with error
+- If neither resolves, return `None` so opencode uses its own defaults
+
 ### CLI Guard and Launch Helpers
 
 Repeated "find-or-exit" and "resolve-launch-or-exit" logic is extracted into private helpers that catch domain exceptions and raise `typer.Exit`. Keeps command bodies clean.
@@ -482,12 +566,16 @@ def _require_promise_file(root: Path) -> Path:
         raise typer.Exit(1)
     return promise_path
 
-def _launch_skill(skill_name: str, cwd: Path, agent: str | None = None) -> None:
+def _launch_skill(
+    skill_name: str, cwd: Path, agent: str | None = None,
+    model: str | None = None, provider: str | None = None,
+) -> None:
     """Resolve backend, launch skill, handle errors."""
     try:
         name = resolve_agent(agent)
         backend = get_backend(name)
-        rc = launch(backend, skill_name, cwd)
+        resolved_model = resolve_model(model, provider)
+        rc = launch(backend, skill_name, cwd, model=resolved_model)
         if rc != 0:
             raise typer.Exit(rc)
     except ProthonError as exc:
@@ -554,7 +642,9 @@ This is an intentional exception to the standard import order. Use it only for g
 | Rich table helpers | `_render_*` in `cli.py` | Separate rendering from I/O, enum-to-style dicts avoid branching |
 | CLI guard/launch helpers | `_require_project_root()`, `_require_promise_file()`, `_launch_skill()` | Extract repeated find-or-exit and resolve-launch-or-exit into reusable helpers |
 | Per-command option + `Annotated` type | `--agent`/`-a` on each session command via shared `AgentOption` | Explicit data flow, no module-level state, natural CLI usage |
+| Per-command model/provider options | `--model`/`-m`, `--provider`/`-p` on each session command via shared `ModelOption`, `ProviderOption` | Explicit data flow, opencode-specific, silently ignored by Claude Code |
 | Fallthrough precedence | `resolve_agent(cli_value)` 5-level chain | First non-empty value wins; each level is a guard with fallthrough |
+| Model/provider join rule | `resolve_model(cli_model, cli_provider)` | opencode requires `provider/model` format; supports both separate flags and combined format |
 | XDG_CONFIG_HOME resolution | `OpenCodeBackend.sync_skills()`, `resolve_agent()` | Respect user's XDG override with `~/.config` fallback |
 | Prompt validation loops | `prothon new` constrained inputs | Simple while-loop re-prompt, no validation library |
 | Conditional path branching | `init_existing()` Path A/B | Guards first, branch on state, converge on common overlay |

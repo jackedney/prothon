@@ -49,6 +49,8 @@ console.print(table)
 ### Column styling and alignment
 
 ```python
+from rich.table import Column, Table
+
 table = Table(title="Star Wars Movies")
 table.add_column("Released", justify="right", style="cyan", no_wrap=True)
 table.add_column("Title", style="magenta")
@@ -124,21 +126,6 @@ from rich.progress import track
 
 for item in track(range(100), description="Processing..."):
     process(item)
-```
-
-For custom progress bars with multiple columns:
-
-```python
-from rich.table import Column
-from rich.progress import Progress, BarColumn, TextColumn
-
-text_column = TextColumn("{task.description}", table_column=Column(ratio=1))
-bar_column = BarColumn(bar_width=None, table_column=Column(ratio=2))
-
-with Progress(text_column, bar_column, expand=True) as progress:
-    task = progress.add_task("Working...", total=100)
-    for n in range(100):
-        progress.update(task, advance=1)
 ```
 
 ## Gotchas & Pitfalls

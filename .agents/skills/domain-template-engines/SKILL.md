@@ -57,4 +57,4 @@ The key differentiator is `run_update`: it compares the old template output, new
 - Template rendering must produce valid files -- syntactically correct TOML, YAML, Python, etc.
 - All template conditionals (`when`, `{% if %}`) must have test coverage for both branches.
 - The template must produce six items from user input: module name, description, author name, email, Python version, license (per SPEC R2).
-- Template assets live in `src/prothon/template/` and are included via `[tool.hatch.build.targets.wheel.force-include]` (per DESIGN.md).
+- Template assets live at `template/` in the project root and are included via `[tool.hatch.build.targets.wheel.force-include]` (per DESIGN.md).

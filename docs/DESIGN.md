@@ -100,7 +100,7 @@ Verification checks file existence (for creates/removes), git diff analysis (for
 
 ### CLI Commands
 
-All commands that launch an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`) accept a per-command `--agent` / `-a` option and the `PROTHON_AGENT` environment variable. See the Agent Configuration Contract below for the full resolution chain.
+All commands that launch an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`) accept a per-command `--agent` / `-a` option and the `PROTHON_AGENT` environment variable. When the resolved agent is `opencode`, `--model` / `-m` and `--provider` / `-p` options control which model is used. See the Agent Configuration Contract and Model Configuration Contract below for the full resolution chains.
 
 | Command | Input | Output | Subsystem |
 |---------|-------|--------|-----------|
@@ -156,7 +156,7 @@ Every assistant backend must satisfy the `AssistantBackend` protocol (structural
 - `name` — human-readable name for error messages (e.g. "Claude Code", "opencode")
 - `cli_command` — binary name to look up on PATH (e.g. "claude", "opencode")
 - `install_hint` — installation URL or command for actionable error messages when the binary is missing
-- `build_command(skill_name, cwd)` — constructs the subprocess argv for launching a session. Category A backends reference the skill by name (e.g. `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`). Category B backends read skill content and inject it into the prompt argument.
+- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name (e.g. `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`). When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
 - `sync_skills()` — installs/symlinks bundled skills to the assistant's discovery location. Category A backends call `skills.sync_skills(target=...)` with their specific directory. Category B backends may be a no-op.
 - `env_overrides()` — returns a dict of extra environment variables needed for non-interactive execution (e.g. `{"GOOSE_MODE": "auto"}`). Returns an empty dict if none are needed.
 
@@ -195,12 +195,50 @@ Config file format examples:
 # pyproject.toml
 [tool.prothon]
 agent = "opencode"
+model = "glm-5"
+provider = "z-ai"
 ```
 
 ```toml
 # ~/.config/prothon/config.toml
 agent = "opencode"
+model = "glm-5"
+provider = "z-ai"
 ```
+
+### Model Configuration Contract
+
+When the resolved agent is `opencode`, the user can configure which model and provider opencode uses. opencode requires the `provider/model` format on its `--model` flag (e.g. `--model z-ai/glm-5`). Prothon exposes this as two independent configuration values that are resolved separately and joined at invocation time.
+
+**Model precedence** (first non-empty value wins):
+
+| Priority | Source | Mechanism | Example |
+|----------|--------|-----------|---------|
+| 1 (highest) | CLI flag | `--model` / `-m` per-command option | `prothon spec --model glm-5` |
+| 2 | Environment variable | `PROTHON_MODEL` | `export PROTHON_MODEL=glm-5` |
+| 3 | Project config | `[tool.prothon]` in `pyproject.toml` | `model = "glm-5"` |
+| 4 | Global config | `~/.config/prothon/config.toml` (respects `$XDG_CONFIG_HOME`) | `model = "glm-5"` |
+| 5 (lowest) | Default | None | Defer to opencode's own defaults |
+
+**Provider precedence** (identical chain):
+
+| Priority | Source | Mechanism | Example |
+|----------|--------|-----------|---------|
+| 1 (highest) | CLI flag | `--provider` / `-p` per-command option | `prothon spec --provider z-ai-coding` |
+| 2 | Environment variable | `PROTHON_PROVIDER` | `export PROTHON_PROVIDER=z-ai-coding` |
+| 3 | Project config | `[tool.prothon]` in `pyproject.toml` | `provider = "z-ai-coding"` |
+| 4 | Global config | `~/.config/prothon/config.toml` (respects `$XDG_CONFIG_HOME`) | `provider = "z-ai-coding"` |
+| 5 (lowest) | Default | None | Defer to opencode's own defaults |
+
+**Resolution rules:**
+
+- Both `--model` and `--provider` options are per-command, defined on each session command (`spec`, `design`, `patterns`, `execute`, `compliance`) alongside `--agent`, via shared `ModelOption` and `ProviderOption` annotated types.
+- If both model and provider resolve to values, prothon joins them as `provider/model` and passes `--model provider/model` to opencode's `build_command`.
+- If `--model` already contains a `/` (e.g. `--model z-ai/glm-5`), it is treated as a complete `provider/model` specifier and `--provider` is ignored.
+- If only one of model or provider resolves to a value (and the model value does not contain `/`), prothon exits with an error: `--provider requires --model (and vice versa). Use provider/model format or set both.`
+- If neither resolves to a value, opencode is invoked without `--model`, deferring to opencode's own configuration and defaults.
+- When the resolved agent is `claude-code`, both options are silently ignored — Claude Code does not support model selection via prothon.
+- Resolution is implemented as a `resolve_model(cli_model, cli_provider)` function in `cli.py`, following the same pattern as `resolve_agent()`. Environment variables are handled via Typer's `envvar=` parameter on each option definition.
 
 ### Compliance Report Contract
 
@@ -253,3 +291,4 @@ Project-specific reference skills generated by the tech-researcher live in each 
 | Agent selection | 5-level precedence: CLI flag > env var > pyproject.toml > global config > default | Per-command flag; env var only; config file only | Matches universal Python ecosystem convention (uv, ruff, pip, pytest). Typer handles levels 1-2 natively. No new dependencies — tomlkit reads both config sources. |
 | Backend registry | Internal dict with `register_backend()` hook | Entry points (`importlib.metadata`); plugin framework (stevedore, pluggy) | Zero third-party consumers exist. Internal dict is zero-overhead, grep-discoverable, and type-safe. Entry point discovery adds import-time cost and failure modes. Migration to entry points later is a 10-line change. |
 | Backend protocol scope | 6 members: name, cli_command, install_hint, build_command, sync_skills, env_overrides | Minimal 4 members (current); maximal with interactive/non-interactive mode flag | install_hint enables actionable error messages. env_overrides cleanly separates env var concerns from command construction. Interactive/non-interactive mode flag deferred until execute workflow needs it. |
+| Model configuration | Separate `--model` and `--provider` flags joined into opencode's `provider/model` format | Single `--model` accepting `provider/model` only | Separate flags allow setting a project default model and switching providers on the CLI (e.g. `z-ai` vs `z-ai-coding` for the same model). Combined format still accepted in `--model` for convenience. opencode strictly requires `provider/model` — bare model names are rejected. |

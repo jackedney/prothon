@@ -5,7 +5,10 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from prothon.cli import app, resolve_agent
+from prothon.cli import (
+    app,
+    resolve_agent,
+)
 from prothon.exceptions import AssistantNotFoundError, ProthonError
 from prothon.git import run_git
 from prothon.scaffold import generate

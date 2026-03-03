@@ -34,6 +34,26 @@ AgentOption = Annotated[
     ),
 ]
 
+ModelOption = Annotated[
+    str | None,
+    typer.Option(
+        "--model",
+        "-m",
+        envvar="PROTHON_MODEL",
+        help="Model name (opencode only)",
+    ),
+]
+
+ProviderOption = Annotated[
+    str | None,
+    typer.Option(
+        "--provider",
+        "-p",
+        envvar="PROTHON_PROVIDER",
+        help="Provider name (opencode only)",
+    ),
+]
+
 app = typer.Typer(
     add_completion=False,
     help="Python project generator with docs-first AI workflow.",

@@ -35,6 +35,8 @@ The key differentiator is `run_update`: it compares the old template output, new
 
 **Answer validation is the template's responsibility.** The template defines what inputs are valid (types, choices, regex patterns). Runtime code should not re-validate template answers -- it should trust that the generated output is well-formed.
 
+**Init scaffolds are inlined, not template-derived.** Per DESIGN.md, `prothon init` inlines markdown headers in `scaffold.py` (3-5 lines each) rather than reading from the Copier template. This avoids coupling init to Copier's internal file layout and ensures template restructuring cannot break init.
+
 ## Edge Cases & Gotchas
 
 - **Jinja2 syntax conflicts.** Files containing literal `{{ }}` or `{% %}` (GitHub Actions workflows, Jinja2 templates within the template) must use `{% raw %}...{% endraw %}` blocks. Forgetting this causes Copier to try rendering workflow expressions as Jinja2 variables.
@@ -54,3 +56,5 @@ The key differentiator is `run_update`: it compares the old template output, new
 - The `.copier-answers.yml` file must be included in the template's `.gitignore` exclusion (it should be committed by the user, not templated).
 - Template rendering must produce valid files -- syntactically correct TOML, YAML, Python, etc.
 - All template conditionals (`when`, `{% if %}`) must have test coverage for both branches.
+- The template must produce six items from user input: module name, description, author name, email, Python version, license (per SPEC R2).
+- Template assets live at `template/` in the project root and are included via `[tool.hatch.build.targets.wheel.force-include]` (per DESIGN.md).

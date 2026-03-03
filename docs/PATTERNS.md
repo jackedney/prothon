@@ -67,6 +67,42 @@ def init_existing(cwd: Path | None = None) -> list[Path]: ...
 # Private
 def _template_dir() -> Path: ...
 def _post_generate(dest: Path) -> None: ...
+def _collect_project_details() -> dict[str, str]: ...  # init_existing Path A only
+def _run_copier_init(dest: Path, data: dict[str, str]) -> None: ...
+```
+
+```python
+# project.py — public API
+def find_project_root(start: Path | None = None) -> Path: ...
+```
+
+```python
+# git.py — public API
+DiffStat = dict[str, tuple[int, int]]
+
+def run_git(*args: str, cwd: Path | None = None) -> str: ...
+def rev_parse_head(cwd: Path | None = None) -> str: ...
+
+# Protocol + real implementation (also public)
+class GitDiffProvider(Protocol): ...
+class SubprocessGitDiff: ...
+```
+
+```python
+# skills.py — public API
+def bundled_skills_dir() -> Path: ...
+def sync_skills(target: Path | None = None) -> None: ...
+```
+
+```python
+# assistant.py — public API
+class AssistantBackend(Protocol): ...   # 6-member contract
+class ClaudeCodeBackend: ...            # Category A backend
+class OpenCodeBackend: ...              # Category A backend (XDG-aware)
+
+def register_backend(name: str, cls: type) -> None: ...
+def get_backend(name: str = "claude-code") -> AssistantBackend: ...
+def launch(backend: AssistantBackend, skill_name: str, cwd: Path, model: str | None = None) -> int: ...
 ```
 
 ## Design Patterns
@@ -109,14 +145,20 @@ Protocol implementations are standalone classes — they satisfy the contract st
 ```python
 class SubprocessGitDiff:
     def diff_names(self, base_commit: str) -> set[str]:
-        result = subprocess.run(
-            ["git", "diff", base_commit, "--name-only"],
-            capture_output=True, text=True,
-        )
-        return {l for l in result.stdout.splitlines() if l}
+        output = run_git("diff", base_commit, "--name-only")
+        return {line for line in output.strip().splitlines() if line.strip()}
 
-    def diff_numstat(self, base_commit: str) -> dict[str, tuple[int, int]]:
-        ...
+    def diff_numstat(self, base_commit: str) -> DiffStat:
+        stats: DiffStat = {}
+        output = run_git("diff", base_commit, "--numstat")
+        for line in output.strip().splitlines():
+            parts = line.split("\t")
+            if len(parts) == 3:
+                added_str, removed_str, filepath = parts
+                if added_str == "-" or removed_str == "-":
+                    continue  # binary file
+                stats[filepath] = (int(added_str), int(removed_str))
+        return stats
 ```
 
 ### Protocol for Assistant Backends
@@ -131,9 +173,14 @@ class AssistantBackend(Protocol):
     @property
     def cli_command(self) -> str: ...
 
-    def build_command(self, skill_name: str) -> list[str]: ...
+    @property
+    def install_hint(self) -> str: ...
+
+    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]: ...
 
     def sync_skills(self) -> None: ...
+
+    def env_overrides(self) -> dict[str, str]: ...
 
 
 class ClaudeCodeBackend:
@@ -145,12 +192,61 @@ class ClaudeCodeBackend:
     def cli_command(self) -> str:
         return "claude"
 
-    def build_command(self, skill_name: str) -> list[str]:
-        return [self.cli_command, "--skill", skill_name]
+    @property
+    def install_hint(self) -> str:
+        return "https://docs.anthropic.com/en/docs/claude-code"
+
+    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]:
+        # model is silently ignored — Claude Code does not support model selection via prothon
+        return [self.cli_command, "--dangerously-skip-permissions", f"/{skill_name}"]
 
     def sync_skills(self) -> None:
-        ...
+        from prothon.skills import sync_skills
+        sync_skills(target=Path.home() / ".claude" / "skills")
+
+    def env_overrides(self) -> dict[str, str]:
+        return {}
+
+
+class OpenCodeBackend:
+    @property
+    def name(self) -> str:
+        return "opencode"
+
+    @property
+    def cli_command(self) -> str:
+        return "opencode"
+
+    @property
+    def install_hint(self) -> str:
+        return "https://opencode.ai"
+
+    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]:
+        cmd = [self.cli_command, f"/{skill_name}"]
+        if model is not None:
+            cmd.extend(["--model", model])
+        return cmd
+
+    def sync_skills(self) -> None:
+        from prothon.skills import sync_skills
+        raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+        xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
+        sync_skills(target=xdg / "opencode" / "skills")
+
+    def env_overrides(self) -> dict[str, str]:
+        return {}
 ```
+
+### XDG_CONFIG_HOME Resolution
+
+Backends and configuration readers that access user-level directories respect `$XDG_CONFIG_HOME` with a `~/.config` fallback. Use a one-liner pattern:
+
+```python
+raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
+```
+
+Empty or relative `XDG_CONFIG_HOME` values fall back to `~/.config` to avoid syncing into repo-relative paths. This applies to `OpenCodeBackend.sync_skills()` and `resolve_agent()` (global config lookup).
 
 ### Registry for Backend Lookup
 
@@ -159,12 +255,22 @@ A simple dict maps names to factory callables. Used where a user or config strin
 ```python
 _BACKENDS: dict[str, type[AssistantBackend]] = {
     "claude-code": ClaudeCodeBackend,
+    "opencode": OpenCodeBackend,
 }
+
+
+def register_backend(name: str, cls: type) -> None:
+    """Public extension hook for programmatic use and testing."""
+    _BACKENDS[name] = cls
+
 
 def get_backend(name: str = "claude-code") -> AssistantBackend:
     cls = _BACKENDS.get(name)
     if cls is None:
-        raise UnknownBackendError(name)
+        registered = ", ".join(sorted(_BACKENDS.keys()))
+        raise UnknownBackendError(
+            f"no backend registered for '{name}' (available: {registered})"
+        )
     return cls()
 ```
 
@@ -173,12 +279,21 @@ def get_backend(name: str = "claude-code") -> AssistantBackend:
 The shared launch lifecycle is a plain function that accepts anything satisfying `AssistantBackend`. This follows the "functions first" default — shared behavior doesn't require a base class.
 
 ```python
-def launch(backend: AssistantBackend, skill_name: str, cwd: Path) -> int:
+def launch(backend: AssistantBackend, skill_name: str, cwd: Path, model: str | None = None) -> int:
     """Shared assistant launch lifecycle."""
     if not shutil.which(backend.cli_command):
-        raise AssistantNotFoundError(backend.cli_command)
-    backend.sync_skills()
-    return subprocess.run(backend.build_command(skill_name), cwd=cwd).returncode
+        raise AssistantNotFoundError(
+            f"{backend.name} ({backend.cli_command}) not found on PATH. "
+            f"Install: {backend.install_hint}"
+        )
+    try:
+        backend.sync_skills()
+    except (IOError, OSError) as exc:
+        raise ProthonError(f"failed to sync skills for {backend.name}: {exc}") from exc
+    env = {**os.environ, **backend.env_overrides()}
+    return subprocess.run(
+        backend.build_command(skill_name, cwd, model=model), cwd=cwd, env=env,
+    ).returncode
 ```
 
 ### Default Arguments for Production, Parameters for Testing
@@ -247,6 +362,257 @@ dest.symlink_to(source)
 
 `scaffold.py` uses relative symlinks (`os.symlink("AGENTS.md", link)`) for portability within a repo. `skills.py` uses absolute symlinks (`.symlink_to(skill_dir.resolve())`) because the source is outside the project tree.
 
+### Rich Table Rendering as Private Helpers
+
+`cli.py` builds tables via private `_render_*` functions that return `Table` objects. Commands print them. This separates rendering logic from I/O.
+
+```python
+def _render_plan(p: Promise) -> Table:
+    table = Table(title=f"PLAN: {len(p.tasks)} tasks (base: {base})")
+    table.add_column("#", style="bold", width=3)
+    table.add_column("Title", style="bold")
+    ...
+    return table
+
+@promise_app.command("plan")
+def promise_plan() -> None:
+    p = promise.load_promise(promise_path)
+    console.print(_render_plan(p))
+```
+
+Status styling uses a dict mapping enum values to `(label, style)` tuples — avoids branching:
+
+```python
+_status_styles = {
+    CheckStatus.PASS: ("PASS", "green"),
+    CheckStatus.FAIL: ("FAIL", "red"),
+    CheckStatus.SKIP: ("SKIP", "yellow"),
+}
+for c in report.checks:
+    label, style = _status_styles[c.status]
+    table.add_row(c.name, Text(label, style=style), c.detail)
+```
+
+### Per-Command Agent Option with Annotated Type
+
+The `--agent`/`-a` flag is per-command, defined once as a shared `Annotated` type and added to each command that launches an assistant session. The value flows explicitly through `_launch_skill` → `resolve_agent` as a function parameter — no module-level mutable state.
+
+```python
+AgentOption = Annotated[
+    str | None,
+    typer.Option(
+        "--agent", "-a",
+        envvar="PROTHON_AGENT",
+        help="AI agent backend (claude-code, opencode)",
+    ),
+]
+```
+
+### Per-Command Model/Provider Options with Annotated Types
+
+The `--model`/`-m` and `--provider`/`-p` flags follow the same pattern — shared `Annotated` types added to each session command. These are opencode-specific (Claude Code silently ignores them).
+
+```python
+ModelOption = Annotated[
+    str | None,
+    typer.Option(
+        "--model", "-m",
+        envvar="PROTHON_MODEL",
+        help="Model name (opencode only)",
+    ),
+]
+
+ProviderOption = Annotated[
+    str | None,
+    typer.Option(
+        "--provider", "-p",
+        envvar="PROTHON_PROVIDER",
+        help="Provider name (opencode only)",
+    ),
+]
+
+@app.command()
+def spec(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
+    root = _require_project_root()
+    _launch_skill("prothon-spec-writer", root, agent, model=model, provider=provider)
+```
+
+This allows natural usage like `prothon spec --agent opencode --model glm-5 --provider z-ai`. Typer's `envvar=` parameter handles env var resolution on each command automatically.
+
+### Fallthrough Precedence Chain
+
+`resolve_agent(cli_value)` implements a 5-level precedence chain where the first non-empty value wins. Each level is a simple `if val: return val` guard, falling through to the next. The `cli_value` parameter receives the value from Typer (which resolves both CLI flag and env var). The function lives in `cli.py` (not `assistant.py`) because levels 3-4 read config files — these are CLI concerns, not backend concerns.
+
+```python
+def _read_toml(path: Path) -> dict:
+    """Read a TOML file, returning an empty dict on parse error or missing file."""
+    if not path.exists():
+        return {}
+    try:
+        return tomlkit.parse(path.read_text(encoding="utf-8"))
+    except tomlkit.exceptions.TOMLKitError:
+        return {}
+
+
+def _nested_get(doc: dict, *keys: str) -> str | None:
+    """Walk *keys* through nested dicts, returning None if any level is not a mapping."""
+    current: object = doc
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return str(current) if current is not None else None
+
+
+def resolve_agent(cli_value: str | None = None) -> str:
+    # Levels 1-2: CLI flag / env var (Typer resolves both into cli_value)
+    if cli_value:
+        return cli_value
+
+    # Level 3: pyproject.toml [tool.prothon].agent
+    try:
+        root = find_project_root()
+        val = _nested_get(_read_toml(root / "pyproject.toml"), "tool", "prothon", "agent")
+        if val:
+            return val
+    except ProthonError:
+        pass  # No project root — fall through
+
+    # Level 4: global config
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "agent")
+    if val:
+        return val
+
+    # Level 5: default
+    return "claude-code"
+```
+
+Level 3 wraps `find_project_root()` in a `try/except ProthonError` because it's valid to run prothon outside a project (the resolution just falls through to level 4).
+
+### Model/Provider Resolution and Join Rule
+
+`resolve_model(cli_model, cli_provider)` implements two 5-level precedence chains (one for model, one for provider), then joins them into opencode's required `provider/model` format:
+
+```python
+def _resolve_model_value(cli_value: str | None) -> str | None:
+    if cli_value:
+        return cli_value
+    try:
+        root = find_project_root()
+        val = _nested_get(_read_toml(root / "pyproject.toml"), "tool", "prothon", "model")
+        if val:
+            return val
+    except ProthonError:
+        pass
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "model")
+    if val:
+        return val
+    return None  # defer to opencode defaults
+
+
+def _resolve_provider_value(cli_value: str | None) -> str | None:
+    # Same structure as _resolve_model_value, but for "provider" key
+    ...
+
+
+def resolve_model(cli_model: str | None, cli_provider: str | None) -> str | None:
+    model = _resolve_model_value(cli_model)
+    provider = _resolve_provider_value(cli_provider)
+
+    if model is None and provider is None:
+        return None  # defer to opencode defaults
+
+    if model is not None and "/" in model:
+        return model  # already in provider/model format, ignore provider flag
+
+    if model is not None and provider is not None:
+        return f"{provider}/{model}"
+
+    raise ProthonError(
+        "--provider requires --model (and vice versa). "
+        "Use provider/model format or set both."
+    )
+```
+
+Resolution rules:
+- If `--model` already contains `/`, treat it as complete `provider/model` and ignore `--provider`
+- If only one of model/provider resolves to a value (and model has no `/`), exit with error
+- If neither resolves, return `None` so opencode uses its own defaults
+
+### CLI Guard and Launch Helpers
+
+Repeated "find-or-exit" and "resolve-launch-or-exit" logic is extracted into private helpers that catch domain exceptions and raise `typer.Exit`. Keeps command bodies clean.
+
+```python
+def _require_project_root() -> Path:
+    try:
+        return find_project_root()
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+def _require_promise_file(root: Path) -> Path:
+    promise_path = root / promise.PROMISE_PATH
+    if not promise_path.exists():
+        typer.echo(f"No promise file found at {promise_path}")
+        raise typer.Exit(1)
+    return promise_path
+
+def _launch_skill(
+    skill_name: str, cwd: Path, agent: str | None = None,
+    model: str | None = None, provider: str | None = None,
+) -> None:
+    """Resolve backend, launch skill, handle errors."""
+    try:
+        name = resolve_agent(agent)
+        backend = get_backend(name)
+        resolved_model = resolve_model(model, provider)
+        rc = launch(backend, skill_name, cwd, model=resolved_model)
+        if rc != 0:
+            raise typer.Exit(rc)
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+```
+
+`_launch_skill()` is the single call site for the resolve → get → launch chain. All five assistant commands (`spec`, `design`, `patterns`, `execute`, `compliance`) delegate to it.
+
+### Interactive Prompt with Validation Loop
+
+`prothon new` collects inputs via `typer.prompt()` with while-loop validation for constrained fields. No validation library — just re-prompt until acceptable.
+
+```python
+python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
+while python_version not in ("3.11", "3.12", "3.13"):
+    typer.echo("Must be 3.11, 3.12, or 3.13")
+    python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
+```
+
+### Conditional Path Branching in Domain Functions
+
+`init_existing()` branches on whether `pyproject.toml` exists — Path A (absent) scaffolds via Copier, Path B (present) skips it. Both paths converge on the common overlay. Guards come first, branching after.
+
+```python
+def init_existing(cwd: Path | None = None) -> list[Path]:
+    root = Path(cwd) if cwd else Path.cwd()
+    # Guards first
+    ...
+    # Branch on project state
+    if not (root / "pyproject.toml").exists():
+        answers = _collect_project_details()
+        _run_copier_init(root, answers)
+    # Common overlay (both paths)
+    ...
+```
+
 ### Lazy Imports for Heavy Dependencies
 
 Copier is imported inside the function body, not at module level. This avoids loading Copier (and its transitive dependencies) when the module is imported for lightweight operations like `init_existing()`.
@@ -267,12 +633,22 @@ This is an intentional exception to the standard import order. Use it only for g
 | Dataclasses | Data carriers (`Promise`, `CheckResult`, `Task`) | Typed, immutable-friendly, no boilerplate |
 | Protocols | All dependency injection boundaries (`GitDiffProvider`, `AssistantBackend`) | Structural typing, no inheritance, swappable for testing |
 | Standalone function | Shared lifecycle (`launch()`) | Keeps protocols pure interface, follows functions-first default |
-| Registry dict | Backend lookup by name | Explicit, debuggable, no magic |
+| Registry dict + `register_backend()` | Backend lookup by name | Explicit, debuggable, extensible without caller changes |
 | Default args | Production vs test paths | Avoids monkeypatching |
 | Guard clauses | Domain precondition validation (`init_existing()`) | Fail fast, domain exceptions, no nested conditionals |
 | Inline constants | Doc scaffolds in `scaffold.py` | Decouples init from Copier template layout |
 | Idempotent symlinks | `scaffold.py`, `skills.py` | Safe re-runs, stale link cleanup |
 | Lazy imports | Copier in `scaffold.generate()` | Avoid heavy import for lightweight code paths |
+| Rich table helpers | `_render_*` in `cli.py` | Separate rendering from I/O, enum-to-style dicts avoid branching |
+| CLI guard/launch helpers | `_require_project_root()`, `_require_promise_file()`, `_launch_skill()` | Extract repeated find-or-exit and resolve-launch-or-exit into reusable helpers |
+| Per-command option + `Annotated` type | `--agent`/`-a` on each session command via shared `AgentOption` | Explicit data flow, no module-level state, natural CLI usage |
+| Per-command model/provider options | `--model`/`-m`, `--provider`/`-p` on each session command via shared `ModelOption`, `ProviderOption` | Explicit data flow, opencode-specific, silently ignored by Claude Code |
+| Fallthrough precedence | `resolve_agent(cli_value)` 5-level chain | First non-empty value wins; each level is a guard with fallthrough |
+| Model/provider join rule | `resolve_model(cli_model, cli_provider)` | opencode requires `provider/model` format; supports both separate flags and combined format |
+| XDG_CONFIG_HOME resolution | `OpenCodeBackend.sync_skills()`, `resolve_agent()` | Respect user's XDG override with `~/.config` fallback |
+| Prompt validation loops | `prothon new` constrained inputs | Simple while-loop re-prompt, no validation library |
+| Conditional path branching | `init_existing()` Path A/B | Guards first, branch on state, converge on common overlay |
+| Separate input collection | `new` in `cli.py` vs `_collect_project_details()` in `scaffold.py` | `new` uses Typer prompts directly (CLI concern); `_collect_project_details()` is only for `init_existing` Path A. Intentionally not shared — different UX contexts. |
 
 ## Error Handling
 
@@ -365,17 +741,28 @@ except Exception:
 
 ### Subprocess Error Wrapping
 
-The `git.py` wrapper converts subprocess failures immediately. Callers never see raw `subprocess.CalledProcessError`. Adoption reuses this — checking "is this a git repo" via `run_git("rev-parse", "--git-dir")` naturally raises `GitError` if the directory isn't a repo.
+All git interaction goes through `run_git()` which converts subprocess failures immediately. Callers never see raw `subprocess.CalledProcessError`. `GIT_TERMINAL_PROMPT=0` prevents interactive auth prompts from hanging the process. Adoption reuses this — checking "is this a git repo" via `run_git("rev-parse", "--git-dir")` naturally raises `GitError` if the directory isn't a repo.
 
 ```python
-def diff_names(base_commit: str) -> set[str]:
+def run_git(*args: str, cwd: Path | None = None) -> str:
     result = subprocess.run(
-        ["git", "diff", base_commit, "--name-only"],
-        capture_output=True, text=True,
+        ["git", *args],
+        capture_output=True, text=True, cwd=cwd,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
     )
     if result.returncode != 0:
-        raise GitError(f"git diff failed: {result.stderr.strip()}")
-    return {l for l in result.stdout.splitlines() if l}
+        full_cmd = " ".join(["git", *args])
+        raise GitError(f"{full_cmd} failed (exit {result.returncode}): {result.stderr.strip()}")
+    return result.stdout
+```
+
+When re-raising a caught exception as a domain error but the original traceback is noise, use `from None` to suppress chaining:
+
+```python
+try:
+    run_git("rev-parse", "--git-dir", cwd=root)
+except GitError:
+    raise GitError(f"not a git repository: {root}") from None
 ```
 
 ### Error Message Convention
@@ -384,7 +771,7 @@ Lowercase, specific, include the value that caused the problem.
 
 ```python
 raise PromiseError(f"task index {task_index} out of range (0-{len(tasks) - 1})")
-raise UnknownBackendError(f"no backend registered for '{name}'")
+raise UnknownBackendError(f"no backend registered for '{name}' (available: {registered})")
 ```
 
 ## Testing Patterns
@@ -396,10 +783,12 @@ Mirror the source tree under `tests/`, one test file per module.
 ```
 tests/
     conftest.py          # shared fixtures, fakes, factories
-    test_promise.py
-    test_scaffold.py
-    test_git.py
-    test_assistant.py
+    test_project.py      # project root detection
+    test_git.py          # git wrapper, SubprocessGitDiff
+    test_skills.py       # skill discovery and symlink sync
+    test_scaffold.py     # init_existing, generate, Copier integration
+    test_promise.py      # promise model, verification
+    test_assistant.py    # backend protocol, registry, launch
     test_cli.py          # integration tests via Typer CliRunner
 ```
 

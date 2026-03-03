@@ -26,7 +26,9 @@ user-invocable: false
 
 Not all statements are checkable. "The hierarchy authority order is non-negotiable" is a process constraint, not a code property. The compliance checker must distinguish between code-checkable and process-only statements.
 
-**Promise contract:** Before code is written, a plan declares what files will change and by how much. After code is written, the system verifies actual changes match the declaration. The promise is stored as TOML for human readability and machine parseability.
+**Promise contract:** Before code is written, a plan declares what files will change and by how much. After code is written, the system verifies actual changes match the declaration. The promise is stored as TOML (`docs/change_promise.toml`) for human readability and machine parseability. Each task declares files to create/modify/remove, expected line counts, context files, doc sections, reference skills, and dependencies.
+
+**Adoption vs scaffolding:** `prothon new` creates a full project with toolchain. `prothon init` overlays only the documentation-driven workflow onto an existing project without touching code, config, dependencies, or git history. Both create the same doc scaffolds and agent instruction files.
 
 ## Mental Models
 
@@ -38,7 +40,7 @@ Not all statements are checkable. "The hierarchy authority order is non-negotiab
 
 **Harmonization as downward propagation.** When SPEC changes, DESIGN may need updating. When DESIGN changes, PATTERNS may need updating. Changes propagate downward, never upward. The doc-harmonizer detects contradictions and proposes amendments but never applies them without user approval.
 
-**Tolerance in verification.** The promise system uses tolerances (+-30% or +-30 lines, whichever is greater) for line count verification. Plans are estimates, not exact predictions.
+**Tolerance in verification.** The promise system uses tolerances (+-30% or +-30 lines, whichever is greater) for line count verification. Binary files are excluded. Plans are estimates, not exact predictions. A report passes if it contains no FAIL entries -- SKIP results (e.g. no files declared for a category) do not affect the outcome.
 
 ## Edge Cases & Gotchas
 

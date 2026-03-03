@@ -6,9 +6,9 @@ user-invocable: false
 
 # pytest
 
-> Purpose: Testing framework for unit and integration tests (R4: scaffolded toolchain includes pytest)
+> Purpose: Testing framework for unit and integration tests (R4: scaffolded toolchain; also used by prothon's own test suite)
 > Docs: https://docs.pytest.org/
-> Version researched: >=8.0
+> Version researched: >=8.0 (latest 8.x)
 
 ## Quick Start
 
@@ -97,14 +97,60 @@ def test_shared_temp(tmp_path_factory):
     d2 = tmp_path_factory.mktemp("project2")
 ```
 
+### monkeypatch for patching
+
+```python
+def test_missing_binary(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda _: None)
+    with pytest.raises(AssistantNotFoundError):
+        check_binary("claude")
+
+def test_env_variable(monkeypatch):
+    monkeypatch.setenv("PROTHON_AGENT", "opencode")
+    assert resolve_agent() == "opencode"
+
+def test_chdir(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    assert Path.cwd() == tmp_path
+```
+
+### Scoped patching with context manager
+
+```python
+def test_scoped_patch(monkeypatch):
+    with monkeypatch.context() as m:
+        m.setattr("os.getcwd", lambda: "/temp")
+        import os
+        assert os.getcwd() == "/temp"
+    # Patch is undone here
+```
+
+### conftest.py for shared fixtures
+
+```python
+# tests/conftest.py
+import pytest
+
+@pytest.fixture
+def app_config():
+    return {"debug": True, "database_url": "sqlite:///:memory:"}
+
+@pytest.fixture(autouse=True)
+def setup_test_environment(monkeypatch):
+    monkeypatch.setenv("TESTING", "true")
+```
+
+Fixtures in `conftest.py` are available to all tests in the same directory and subdirectories without imports.
+
 ## Gotchas & Pitfalls
 
 - **`tmp_path` is a `Path` object, not a string.** It is automatically cleaned up after the test session. Do not store references to it beyond the test.
 - **Fixture ordering matters.** If fixture A depends on fixture B, declare B as a parameter of A. pytest resolves the dependency graph automatically.
-- **`conftest.py` is auto-loaded.** Fixtures defined in `conftest.py` are available to all tests in the same directory and subdirectories without import. Do not import `conftest.py` directly.
+- **`conftest.py` is auto-loaded.** Do not import `conftest.py` directly -- pytest discovers it automatically.
 - **`pytest.raises` is a context manager.** The exception must be raised inside the `with` block. Code after the `with` block only runs if the exception was raised and matched.
 - **`capfd` vs `capsys`.** Use `capsys` to capture `sys.stdout/stderr` and `capfd` to capture file descriptors (needed when subprocess output goes to fd 1/2 directly).
-- **Avoid mutable default fixture values.** Use `factory` fixtures or `copy.deepcopy` to prevent cross-test contamination.
+- **Avoid mutable default fixture values.** Use factory fixtures or `copy.deepcopy` to prevent cross-test contamination.
+- **`monkeypatch.setattr` with string targets** (e.g., `"shutil.which"`) patches the attribute at the given dotted path. Use this when the import location matters.
 
 ## Idiomatic Usage
 
@@ -117,3 +163,5 @@ def test_shared_temp(tmp_path_factory):
 **Do:** Use `pytest.mark.parametrize` to test boundary conditions and error cases without duplicating test functions.
 
 **Do:** Name tests descriptively: `test_<function>_<scenario>_<expected>` (e.g., `test_check_task_missing_file_returns_fail`).
+
+**Do:** Use `monkeypatch` for patching environment variables, PATH lookups (`shutil.which`), and module attributes in tests.

@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 from pathlib import Path
+from typing import Annotated
 
+import tomlkit
+import tomlkit.exceptions
 import typer
 from rich.console import Console
 from rich.markup import escape
@@ -12,12 +17,42 @@ from rich.text import Text
 
 from prothon import promise
 from prothon.assistant import get_backend, launch
-from prothon.exceptions import AssistantNotFoundError, ProthonError
+from prothon.exceptions import ProthonError
 from prothon.promise import CheckStatus, TaskCheckReport
 from prothon.project import find_project_root
 from prothon.scaffold import generate, init_existing
 
 console = Console()
+
+AgentOption = Annotated[
+    str | None,
+    typer.Option(
+        "--agent",
+        "-a",
+        envvar="PROTHON_AGENT",
+        help="AI agent backend (claude-code, opencode)",
+    ),
+]
+
+ModelOption = Annotated[
+    str | None,
+    typer.Option(
+        "--model",
+        "-m",
+        envvar="PROTHON_MODEL",
+        help="Model name (opencode only)",
+    ),
+]
+
+ProviderOption = Annotated[
+    str | None,
+    typer.Option(
+        "--provider",
+        "-p",
+        envvar="PROTHON_PROVIDER",
+        help="Provider name (opencode only)",
+    ),
+]
 
 app = typer.Typer(
     add_completion=False,
@@ -38,6 +73,17 @@ def _require_project_root() -> Path:
         raise typer.Exit(1)
 
 
+def _require_doc(root: Path, doc_name: str) -> None:
+    """Exit with an error if a prerequisite doc file is missing."""
+    doc_path = root / "docs" / doc_name
+    if not doc_path.is_file():
+        typer.echo(
+            f"Error: docs/{doc_name} must exist before this command can run",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+
 def _require_promise_file(root: Path) -> Path:
     """Resolve promise path against project root, or exit if missing."""
     promise_path = root / promise.PROMISE_PATH
@@ -47,22 +93,174 @@ def _require_promise_file(root: Path) -> Path:
     return promise_path
 
 
-def _launch_skill(skill_name: str, cwd: Path) -> None:
-    """Resolve the backend, launch the skill, and handle errors."""
+def _read_toml(path: Path) -> dict:
+    """Read a TOML file, returning an empty dict on parse error or missing file."""
+    if not path.exists():
+        return {}
     try:
-        backend = get_backend()
-        rc = launch(backend, skill_name, cwd)
-        if rc != 0:
-            raise typer.Exit(rc)
-    except AssistantNotFoundError:
-        typer.echo(
-            "Error: Claude Code CLI not found.\n"
-            "Install: https://docs.anthropic.com/en/docs/claude-code"
+        return tomlkit.parse(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomlkit.exceptions.TOMLKitError):
+        return {}
+
+
+def _nested_get(doc: dict, *keys: str) -> str | None:
+    """Walk *keys* through nested dicts, returning None if any level is not a mapping."""
+    current: object = doc
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return str(current) if current is not None else None
+
+
+def resolve_agent(cli_value: str | None = None) -> str:
+    """Resolve agent backend name via 5-level precedence chain.
+
+    Priority: CLI flag > env var > pyproject.toml > global config > default.
+    """
+    # Level 1: CLI flag (passed explicitly by caller)
+    if cli_value:
+        return cli_value
+
+    # Level 2: env var (also resolved by Typer into cli_value, but checked
+    # explicitly so non-Typer callers honour the precedence chain)
+    env_val = os.environ.get("PROTHON_AGENT")
+    if env_val:
+        return env_val
+
+    # Level 3: pyproject.toml [tool.prothon].agent
+    try:
+        root = find_project_root()
+        val = _nested_get(
+            _read_toml(root / "pyproject.toml"), "tool", "prothon", "agent"
         )
-        raise typer.Exit(1)
+        if val:
+            return val
+    except ProthonError:
+        pass  # No project root found — fall through
+
+    # Level 4: global config ~/.config/prothon/config.toml
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = (
+        Path(raw_xdg)
+        if raw_xdg and Path(raw_xdg).is_absolute()
+        else Path.home() / ".config"
+    )
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "agent")
+    if val:
+        return val
+
+    # Level 5: default
+    return "claude-code"
+
+
+def _resolve_config_value(
+    cli_value: str | None,
+    env_var: str,
+    config_key: str,
+) -> str | None:
+    """Resolve a config value via 5-level precedence: CLI > env > pyproject > global > None."""
+    if cli_value:
+        return cli_value
+    env_val = os.environ.get(env_var)
+    if env_val:
+        return env_val
+    try:
+        root = find_project_root()
+        val = _nested_get(
+            _read_toml(root / "pyproject.toml"), "tool", "prothon", config_key
+        )
+        if val:
+            return val
+    except ProthonError:
+        pass
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = (
+        Path(raw_xdg)
+        if raw_xdg and Path(raw_xdg).is_absolute()
+        else Path.home() / ".config"
+    )
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), config_key)
+    if val:
+        return val
+    return None
+
+
+def _resolve_model_value(cli_value: str | None) -> str | None:
+    """Resolve model name via 5-level precedence: CLI > env > pyproject > global > None."""
+    return _resolve_config_value(cli_value, "PROTHON_MODEL", "model")
+
+
+def _resolve_provider_value(cli_value: str | None) -> str | None:
+    """Resolve provider name via 5-level precedence: CLI > env > pyproject > global > None."""
+    return _resolve_config_value(cli_value, "PROTHON_PROVIDER", "provider")
+
+
+def resolve_model(cli_model: str | None, cli_provider: str | None) -> str | None:
+    """Resolve model and provider into opencode's provider/model format.
+
+    Returns None if neither resolves, or raises ProthonError if only one resolves
+    or if a qualified model conflicts with an explicit provider.
+    """
+    model = _resolve_model_value(cli_model)
+    provider = _resolve_provider_value(cli_provider)
+    if model is None and provider is None:
+        return None
+    if model is not None and "/" in model:
+        if provider is not None:
+            model_provider, _ = model.split("/", 1)
+            if model_provider != provider:
+                raise ProthonError(
+                    f"conflicting providers: model '{model}' specifies provider "
+                    f"'{model_provider}' but --provider is '{provider}'"
+                )
+        return model
+    if model is not None and provider is not None:
+        return f"{provider}/{model}"
+    raise ProthonError(
+        "--provider requires --model (and vice versa). "
+        "Use provider/model format or set both."
+    )
+
+
+def _file_hash(path: Path) -> str | None:
+    """Return the SHA-256 hex digest of a file, or None if it doesn't exist or is unreadable."""
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _launch_skill(
+    skill_name: str,
+    cwd: Path,
+    agent: str | None = None,
+    model: str | None = None,
+    provider: str | None = None,
+) -> None:
+    """Resolve backend, launch skill, handle errors."""
+    spec_path = cwd / "docs" / "SPEC.md"
+    guard_spec = skill_name != "prothon-spec-writer"
+    spec_hash = _file_hash(spec_path) if guard_spec else None
+
+    try:
+        name = resolve_agent(agent)
+        backend = get_backend(name)
+        resolved_model = resolve_model(model, provider) if name == "opencode" else None
+        rc = launch(backend, skill_name, cwd, model=resolved_model)
     except ProthonError as exc:
-        typer.echo(f"Error: {exc}")
+        typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
+
+    if guard_spec and _file_hash(spec_path) != spec_hash:
+        typer.echo(
+            "Warning: docs/SPEC.md was modified outside of 'prothon spec'. "
+            "Only the spec-writer should modify SPEC.md.",
+            err=True,
+        )
+
+    if rc != 0:
+        raise typer.Exit(rc)
 
 
 # --- Rich rendering helpers ---
@@ -221,38 +419,60 @@ def init() -> None:
 
 
 @app.command()
-def spec() -> None:
+def spec(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
     """Write or revise SPEC.md — extract requirements through probing questions."""
     root = _require_project_root()
-    _launch_skill("prothon-spec-writer", root)
+    _launch_skill("prothon-spec-writer", root, agent, model, provider)
 
 
 @app.command()
-def design() -> None:
+def design(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
     """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
     root = _require_project_root()
-    _launch_skill("prothon-design-writer", root)
+    _require_doc(root, "SPEC.md")
+    _launch_skill("prothon-design-writer", root, agent, model, provider)
 
 
 @app.command()
-def patterns() -> None:
+def patterns(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
     root = _require_project_root()
-    _launch_skill("prothon-patterns-writer", root)
+    _require_doc(root, "DESIGN.md")
+    _launch_skill("prothon-patterns-writer", root, agent, model, provider)
 
 
 @app.command()
-def execute() -> None:
+def execute(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
     """Align source code to documentation — plan and implement with subagents."""
     root = _require_project_root()
-    _launch_skill("prothon-execute", root)
+    _launch_skill("prothon-execute", root, agent, model, provider)
 
 
 @app.command()
-def compliance() -> None:
+def compliance(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
-    _launch_skill("prothon-compliance-checker", root)
+    _launch_skill("prothon-compliance-checker", root, agent, model, provider)
 
 
 # --- Promise subcommands ---

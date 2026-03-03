@@ -66,9 +66,11 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 ### CLI and Agent Integration
 
 40. All documentation and execution workflows must be invocable via CLI commands (`prothon spec`, `prothon design`, `prothon patterns`, `prothon execute`, `prothon compliance`).
-41. The system must support Claude Code as the AI assistant for all agent workflows.
-42. Built-in skills must be bundled with the package and synced to the user's AI assistant skill directory on every CLI invocation.
-43. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
+41. The system must support Claude Code and opencode as AI assistants for all agent workflows, with identical behavior and experience across both.
+42. The user must be able to select their preferred AI assistant via CLI flag, environment variable, project-level configuration, and global user-level configuration.
+43. Built-in skills must be bundled with the package and synced to the active assistant's skill directory on every CLI invocation.
+44. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
+45. When opencode is the selected assistant, the user must be able to configure a model and provider via the same configuration hierarchy (CLI flag, environment variable, project-level configuration, global user-level configuration). If neither is configured, prothon must invoke opencode without specifying model or provider, deferring to opencode's own defaults.
 
 ## Constraints
 
@@ -81,7 +83,7 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 
 ## Out of Scope
 
-- Support for AI assistants other than Claude Code (planned for future).
+- Support for AI assistants beyond Claude Code and opencode (future consideration).
 - Project templates beyond library-style Python packages (planned for future).
 - Customization of the scaffolded toolchain (tools are fixed by design).
 - Non-Python project scaffolding (planned for future as separate equivalent tools).

@@ -6,7 +6,7 @@ user-invocable: false
 
 # File I/O Optimisation
 
-> Relevance: Prothon manages symlinks for skill discovery, resolves project roots by walking parent directories, renders Jinja2 templates, and reads/writes TOML promise files. Incorrect path handling causes subtle cross-platform bugs and broken skill discovery. (SPEC R34, R36, R39)
+> Relevance: Prothon manages symlinks for skill discovery, resolves project roots by walking parent directories, renders Jinja2 templates, and reads/writes TOML promise files. Incorrect path handling causes subtle cross-platform bugs and broken skill discovery. (SPEC R36-R39, R42-R43; DESIGN: skills.py, project.py, per-backend symlink strategy)
 
 ## Key Principles
 
@@ -31,7 +31,9 @@ def find_project_root(start: Path | None = None) -> Path:
     raise ProjectNotFoundError("No docs/SPEC.md found in parent directories")
 ```
 
-### Symlink management for skill discovery
+### Symlink management for skill discovery (per-backend strategy)
+
+Per DESIGN.md, each backend maintains its own set of direct symlinks from its discovery directory to bundled package directories. No shared central location.
 
 ```python
 # Naive: create symlink without checking existing state
@@ -49,6 +51,10 @@ def ensure_symlink(source: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.symlink_to(source)
 ```
+
+Backend-specific targets:
+- Claude Code: `~/.claude/skills/`
+- opencode: `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`)
 
 ### Safe file writing with atomic semantics
 

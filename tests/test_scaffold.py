@@ -59,6 +59,12 @@ def test_renders_pyproject_toml(generated_project):
     assert 'name = "test-project"' in content
 
 
+def test_py_typed_marker_exists(generated_project):
+    """src/{module_name}/py.typed marker file exists."""
+    py_typed = generated_project / "src" / "test_project" / "py.typed"
+    assert py_typed.exists()
+
+
 def test_module_init_exists(generated_project):
     """src/{module_name}/__init__.py exists."""
     init = generated_project / "src" / "test_project" / "__init__.py"
@@ -110,6 +116,13 @@ def test_creates_doc_scaffolds(generated_project):
 def test_copies_plain_files(generated_project):
     """.gitignore is copied as-is."""
     assert (generated_project / ".gitignore").exists()
+
+
+def test_ci_workflow_files_generated(generated_project):
+    """GitHub Actions, GitLab CI, and pre-commit CI config files are generated."""
+    assert (generated_project / ".github" / "workflows" / "ci.yml").exists()
+    assert (generated_project / ".gitlab-ci.yml").exists()
+    assert (generated_project / ".pre-commit-config.yaml").exists()
 
 
 def test_creates_agents_md(generated_project):
@@ -457,3 +470,85 @@ def test_init_existing_path_b_skips_copier(tmp_path):
         init_existing(cwd=tmp_path)
 
     mock_run_copy.assert_not_called()
+
+
+# --- generate: template rendering edge cases ---
+
+
+def test_generate_strips_jinja_suffix(generated_project):
+    """Rendered files have .jinja suffix stripped."""
+    assert (generated_project / "pyproject.toml").exists()
+    assert not (generated_project / "pyproject.toml.jinja").exists()
+
+
+def test_generate_templates_directory_paths(generated_project):
+    """Module __init__.py rendered at src/{module_name}/ with description."""
+    init = generated_project / "src" / "test_project" / "__init__.py"
+    assert init.exists()
+    assert '"A test project"' in init.read_text()
+
+
+def test_generate_writes_copier_answers(generated_project):
+    """.copier-answers.yml contains the rendered module_name value."""
+    answers = generated_project / ".copier-answers.yml"
+    assert answers.exists()
+    content = answers.read_text()
+    assert "module_name: test_project" in content
+
+
+def test_generate_skips_copier_answers_template(generated_project):
+    """No _copier_conf file left in generated output."""
+    for p in generated_project.rglob("*"):
+        assert "_copier_conf" not in p.name
+
+
+def test_generate_authors_omitted_when_both_empty(tmp_path):
+    """authors section omitted from pyproject.toml when name and email empty."""
+    data = {
+        "project_name": "no-author",
+        "module_name": "no_author",
+        "description": "No author project",
+        "author_name": "",
+        "author_email": "",
+        "python_version": "3.13",
+        "license": "MIT",
+    }
+    dest = tmp_path / "no-author"
+    generate(dest, data)
+    content = (dest / "pyproject.toml").read_text()
+    assert "authors" not in content
+
+
+def test_generate_authors_name_only(tmp_path):
+    """authors section contains name but no email when email is empty."""
+    data = {
+        "project_name": "name-only",
+        "module_name": "name_only",
+        "description": "Name only project",
+        "author_name": "Test Author",
+        "author_email": "",
+        "python_version": "3.13",
+        "license": "MIT",
+    }
+    dest = tmp_path / "name-only"
+    generate(dest, data)
+    content = (dest / "pyproject.toml").read_text()
+    assert 'name = "Test Author"' in content
+    assert "email" not in content
+
+
+def test_generate_license_none_excluded(tmp_path):
+    """license = "None" is excluded from pyproject.toml."""
+    data = {
+        "project_name": "no-license",
+        "module_name": "no_license",
+        "description": "No license project",
+        "author_name": "Test",
+        "author_email": "test@example.com",
+        "python_version": "3.13",
+        "license": "None",
+    }
+    dest = tmp_path / "no-license"
+    generate(dest, data)
+    content = (dest / "pyproject.toml").read_text()
+    assert 'license = "None"' not in content

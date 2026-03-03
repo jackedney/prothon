@@ -121,10 +121,11 @@ def resolve_assistant() -> str:
 
 
 def _file_hash(path: Path) -> str | None:
-    """Return the SHA-256 hex digest of a file, or None if it doesn't exist."""
-    if not path.exists():
+    """Return the SHA-256 hex digest of a file, or None if it doesn't exist or is unreadable."""
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
         return None
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _launch_skill(skill_name: str, cwd: Path) -> None:
@@ -137,8 +138,6 @@ def _launch_skill(skill_name: str, cwd: Path) -> None:
         name = resolve_assistant()
         backend = get_backend(name)
         rc = launch(backend, skill_name, cwd)
-        if rc != 0:
-            raise typer.Exit(rc)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
@@ -149,6 +148,9 @@ def _launch_skill(skill_name: str, cwd: Path) -> None:
             "Only the spec-writer should modify SPEC.md.",
             err=True,
         )
+
+    if rc != 0:
+        raise typer.Exit(rc)
 
 
 # --- Rich rendering helpers ---

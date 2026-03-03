@@ -388,13 +388,19 @@ def complete_task(
         raise PromiseError(
             f"Task {task_index} cannot be completed: promise checks failed"
         )
-    # Re-load and validate index to avoid TOCTOU race if the file changed
+    # Re-load and validate to avoid TOCTOU race if the file changed
     # between the check_task read and this read.
     promise = load_promise(path)
     if task_index < 0 or task_index >= len(promise.tasks):
         raise PromiseError(
             f"Task index {task_index} out of range after re-load; "
             "promise file may have changed — re-run `promise check` and retry"
+        )
+    if promise.tasks[task_index].title != report.title:
+        raise PromiseError(
+            f"Task {task_index} title changed between check and completion "
+            f"(expected {report.title!r}, got {promise.tasks[task_index].title!r}); "
+            "re-run `promise check` and retry"
         )
     promise.tasks[task_index].completed = True
     promise.tasks[task_index].attempts = attempts

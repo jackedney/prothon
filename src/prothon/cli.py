@@ -47,7 +47,7 @@ def _require_project_root() -> Path:
 def _require_doc(root: Path, doc_name: str) -> None:
     """Exit with an error if a prerequisite doc file is missing."""
     doc_path = root / "docs" / doc_name
-    if not doc_path.exists():
+    if not doc_path.is_file():
         typer.echo(
             f"Error: docs/{doc_name} must exist before this command can run",
             err=True,
@@ -70,7 +70,7 @@ def _read_toml(path: Path) -> dict:
         return {}
     try:
         return tomlkit.parse(path.read_text(encoding="utf-8"))
-    except tomlkit.exceptions.TOMLKitError:
+    except (OSError, UnicodeDecodeError, tomlkit.exceptions.TOMLKitError):
         return {}
 
 

@@ -383,8 +383,8 @@ def test_unknown_backend_produces_error(tmp_path, monkeypatch, context):
     assert "no backend registered" in result.output
 
 
-def test_resolve_assistant_env_var_fallback(tmp_path, monkeypatch):
-    """Level 2: PROTHON_ASSISTANT env var is picked up via _state (Typer envvar)."""
+def test_resolve_assistant_state_fallback(tmp_path, monkeypatch):
+    """Level 2: _state fallback is used when Typer stores env var value."""
     monkeypatch.chdir(tmp_path)
     # Simulate Typer having read the env var into _state
     monkeypatch.setitem(_state, "assistant", "opencode")

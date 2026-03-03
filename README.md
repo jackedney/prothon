@@ -197,7 +197,7 @@ Or set it permanently in `pyproject.toml`:
 assistant = "opencode"
 ```
 
-Or globally in `~/.config/prothon/config.toml`:
+Or globally in `$XDG_CONFIG_HOME/prothon/config.toml` (defaults to `~/.config/prothon/config.toml`):
 
 ```toml
 assistant = "opencode"

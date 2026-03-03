@@ -165,6 +165,37 @@ def test_opencode_backend_env_overrides() -> None:
     assert backend.env_overrides() == {}
 
 
+def test_opencode_backend_build_command_with_model() -> None:
+    """build_command appends --model provider/model when model is provided."""
+    backend = OpenCodeBackend()
+    result = backend.build_command(
+        "prothon-spec-writer", Path("/tmp"), model="z-ai/glm-5"
+    )
+    assert result == [
+        "opencode",
+        "--prompt",
+        "/prothon-spec-writer",
+        "--model",
+        "z-ai/glm-5",
+    ]
+
+
+def test_opencode_backend_build_command_without_model() -> None:
+    """build_command does not include --model when model is None."""
+    backend = OpenCodeBackend()
+    result = backend.build_command("prothon-spec-writer", Path("/tmp"), model=None)
+    assert result == ["opencode", "--prompt", "/prothon-spec-writer"]
+    assert "--model" not in result
+
+
+def test_opencode_backend_build_model_parameter_optional() -> None:
+    """build_command works when model parameter is not passed at all."""
+    backend = OpenCodeBackend()
+    result = backend.build_command("prothon-spec-writer", Path("/tmp"))
+    assert result == ["opencode", "--prompt", "/prothon-spec-writer"]
+    assert "--model" not in result
+
+
 # --- launch lifecycle ---
 
 

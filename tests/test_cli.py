@@ -440,6 +440,268 @@ def test_resolve_agent_empty_global_config_falls_to_default(tmp_path, monkeypatc
     assert resolve_agent() == "claude-code"
 
 
+# --- resolve_model join behavior ---
+
+
+def test_resolve_model_both_none_returns_none(tmp_path, monkeypatch):
+    """Both model and provider None -> returns None (defer to opencode defaults)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PROTHON_MODEL", raising=False)
+    monkeypatch.delenv("PROTHON_PROVIDER", raising=False)
+    xdg = tmp_path / "xdg_config"
+    xdg.mkdir()
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    from prothon.cli import resolve_model
+
+    assert resolve_model(None, None) is None
+
+
+def test_resolve_model_model_with_slash_passthrough(tmp_path, monkeypatch):
+    """Model contains '/' -> treated as complete provider/model, provider ignored."""
+    monkeypatch.chdir(tmp_path)
+    from prothon.cli import resolve_model
+
+    result = resolve_model("z-ai/glm-5", "other-provider")
+    assert result == "z-ai/glm-5"
+
+
+def test_resolve_model_model_with_slash_provider_none(tmp_path, monkeypatch):
+    """Model contains '/' with provider=None -> passthrough."""
+    monkeypatch.chdir(tmp_path)
+    from prothon.cli import resolve_model
+
+    result = resolve_model("z-ai/glm-5", None)
+    assert result == "z-ai/glm-5"
+
+
+def test_resolve_model_joins_provider_and_model(tmp_path, monkeypatch):
+    """Both model and provider set -> returns 'provider/model'."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PROTHON_MODEL", raising=False)
+    monkeypatch.delenv("PROTHON_PROVIDER", raising=False)
+    xdg = tmp_path / "xdg_config"
+    xdg.mkdir()
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    from prothon.cli import resolve_model
+
+    result = resolve_model("glm-5", "z-ai")
+    assert result == "z-ai/glm-5"
+
+
+def test_resolve_model_only_model_raises(tmp_path, monkeypatch):
+    """Only model resolves (no '/') -> raises ProthonError."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PROTHON_MODEL", raising=False)
+    monkeypatch.delenv("PROTHON_PROVIDER", raising=False)
+    xdg = tmp_path / "xdg_config"
+    xdg.mkdir()
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    from prothon.cli import resolve_model
+
+    with pytest.raises(ProthonError, match="--provider requires --model"):
+        resolve_model("glm-5", None)
+
+
+def test_resolve_model_only_provider_raises(tmp_path, monkeypatch):
+    """Only provider resolves -> raises ProthonError."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PROTHON_MODEL", raising=False)
+    monkeypatch.delenv("PROTHON_PROVIDER", raising=False)
+    xdg = tmp_path / "xdg_config"
+    xdg.mkdir()
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    from prothon.cli import resolve_model
+
+    with pytest.raises(ProthonError, match="--provider requires --model"):
+        resolve_model(None, "z-ai")
+
+
+# --- _resolve_model_value precedence chain ---
+
+
+def test_resolve_model_value_returns_none_by_default(tmp_path, monkeypatch):
+    """Level 5: returns None when no config source is set."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PROTHON_MODEL", raising=False)
+    xdg = tmp_path / "xdg_config"
+    xdg.mkdir()
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    from prothon.cli import _resolve_model_value
+
+    assert _resolve_model_value(None) is None
+
+
+def test_resolve_model_value_cli_takes_priority(tmp_path, monkeypatch):
+    """Level 1: CLI value overrides all other sources."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PROTHON_MODEL", "env-model")
+    from prothon.cli import _resolve_model_value
+
+    assert _resolve_model_value("cli-model") == "cli-model"
+
+
+def test_resolve_model_value_env_overrides_pyproject(tmp_path, monkeypatch):
+    """Level 2: env var overrides pyproject.toml."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "SPEC.md").write_text("# Spec\n")
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.prothon]\nmodel = "pyproject-model"\n'
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PROTHON_MODEL", "env-model")
+    xdg = tmp_path / "xdg_config"
+    xdg.mkdir()
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    from prothon.cli import _resolve_model_value
+
+    assert _resolve_model_value(None) == "env-model"
+
+
+def test_resolve_model_value_pyproject_overrides_global(tmp_path, monkeypatch):
+    """Level 3: pyproject.toml overrides global config."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "SPEC.md").write_text("# Spec\n")
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.prothon]\nmodel = "pyproject-model"\n'
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PROTHON_MODEL", raising=False)
+    xdg = tmp_path / "xdg_config"
+    (xdg / "prothon").mkdir(parents=True)
+    (xdg / "prothon" / "config.toml").write_text('model = "global-model"\n')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    from prothon.cli import _resolve_model_value
+
+    assert _resolve_model_value(None) == "pyproject-model"
+
+
+def test_resolve_model_value_global_config_used(tmp_path, monkeypatch):
+    """Level 4: global config used when no other source."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PROTHON_MODEL", raising=False)
+    xdg = tmp_path / "xdg_config"
+    (xdg / "prothon").mkdir(parents=True)
+    (xdg / "prothon" / "config.toml").write_text('model = "global-model"\n')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    from prothon.cli import _resolve_model_value
+
+    assert _resolve_model_value(None) == "global-model"
+
+
+# --- _resolve_provider_value precedence chain ---
+
+
+def test_resolve_provider_value_returns_none_by_default(tmp_path, monkeypatch):
+    """Level 5: returns None when no config source is set."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PROTHON_PROVIDER", raising=False)
+    xdg = tmp_path / "xdg_config"
+    xdg.mkdir()
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    from prothon.cli import _resolve_provider_value
+
+    assert _resolve_provider_value(None) is None
+
+
+def test_resolve_provider_value_cli_takes_priority(tmp_path, monkeypatch):
+    """Level 1: CLI value overrides all other sources."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PROTHON_PROVIDER", "env-provider")
+    from prothon.cli import _resolve_provider_value
+
+    assert _resolve_provider_value("cli-provider") == "cli-provider"
+
+
+def test_resolve_provider_value_pyproject_overrides_global(tmp_path, monkeypatch):
+    """Level 3: pyproject.toml overrides global config."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "SPEC.md").write_text("# Spec\n")
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.prothon]\nprovider = "pyproject-provider"\n'
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PROTHON_PROVIDER", raising=False)
+    xdg = tmp_path / "xdg_config"
+    (xdg / "prothon").mkdir(parents=True)
+    (xdg / "prothon" / "config.toml").write_text('provider = "global-provider"\n')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    from prothon.cli import _resolve_provider_value
+
+    assert _resolve_provider_value(None) == "pyproject-provider"
+
+
+# --- CLI integration tests for model/provider ---
+
+
+def test_opencode_receives_resolved_model(tmp_path, monkeypatch, context):
+    """opencode backend receives resolved model in format provider/model."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    with patch("prothon.cli.launch", return_value=0) as mock_launch:
+        with patch("prothon.cli.get_backend") as mock_get_backend:
+            mock_get_backend.return_value.name = "opencode"
+            result = runner.invoke(
+                app,
+                [
+                    "spec",
+                    "--agent",
+                    "opencode",
+                    "--model",
+                    "glm-5",
+                    "--provider",
+                    "z-ai",
+                ],
+            )
+    assert result.exit_code == 0
+    mock_launch.assert_called_once()
+    assert mock_launch.call_args.kwargs["model"] == "z-ai/glm-5"
+
+
+def test_opencode_receives_slash_model_as_is(tmp_path, monkeypatch, context):
+    """opencode receives model with '/' as-is, ignoring provider."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    with patch("prothon.cli.launch", return_value=0) as mock_launch:
+        with patch("prothon.cli.get_backend") as mock_get_backend:
+            mock_get_backend.return_value.name = "opencode"
+            result = runner.invoke(
+                app,
+                [
+                    "spec",
+                    "--agent",
+                    "opencode",
+                    "--model",
+                    "z-ai/glm-5",
+                    "--provider",
+                    "ignored",
+                ],
+            )
+    assert result.exit_code == 0
+    mock_launch.assert_called_once()
+    assert mock_launch.call_args.kwargs["model"] == "z-ai/glm-5"
+
+
+def test_opencode_no_model_passes_none(tmp_path, monkeypatch, context):
+    """opencode with no model/provider configured passes None to launch."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    monkeypatch.delenv("PROTHON_MODEL", raising=False)
+    monkeypatch.delenv("PROTHON_PROVIDER", raising=False)
+
+    with patch("prothon.cli.launch", return_value=0) as mock_launch:
+        with patch("prothon.cli.get_backend") as mock_get_backend:
+            mock_get_backend.return_value.name = "opencode"
+            result = runner.invoke(app, ["spec", "--agent", "opencode"])
+    assert result.exit_code == 0
+    mock_launch.assert_called_once()
+    assert mock_launch.call_args.kwargs["model"] is None
+
+
 # --- SPEC.md protection (R21) ---
 
 

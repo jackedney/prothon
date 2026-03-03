@@ -292,16 +292,24 @@ def test_check_task_passes_base_commit_to_diff_provider(tmp_path: Path):
 # --- complete_task ---
 
 
-def test_complete_task_marks_completed(promise_file: Path):
-    complete_task(0, path=promise_file)
-    promise = load_promise(promise_file)
-    assert promise.tasks[0].completed is True
-    assert promise.tasks[1].completed is False
+def test_complete_task_marks_completed(tmp_path: Path):
+    promise = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="Task A"), Task(title="Task B")],
+    )
+    p = tmp_path / "promise.toml"
+    save_promise(promise, p)
+    fake = FakeGitDiff()
+
+    complete_task(0, diff=fake, path=p)
+    result = load_promise(p)
+    assert result.tasks[0].completed is True
+    assert result.tasks[1].completed is False
 
 
 def test_complete_task_index_out_of_range(promise_file: Path):
     with pytest.raises(PromiseError):
-        complete_task(99, path=promise_file)
+        complete_task(99, diff=FakeGitDiff(), path=promise_file)
 
 
 def test_complete_task_records_attempts(tmp_path: Path):
@@ -312,7 +320,7 @@ def test_complete_task_records_attempts(tmp_path: Path):
     p = tmp_path / "promise.toml"
     save_promise(promise, p)
 
-    complete_task(0, attempts=3, path=p)
+    complete_task(0, attempts=3, diff=FakeGitDiff(), path=p)
 
     result = load_promise(p)
     assert result.tasks[0].completed is True
@@ -327,10 +335,24 @@ def test_complete_task_defaults_to_one_attempt(tmp_path: Path):
     p = tmp_path / "promise.toml"
     save_promise(promise, p)
 
-    complete_task(0, path=p)
+    complete_task(0, diff=FakeGitDiff(), path=p)
 
     result = load_promise(p)
     assert result.tasks[0].attempts == 1
+
+
+def test_complete_task_refuses_when_checks_fail(tmp_path: Path):
+    """complete_task raises PromiseError when promise checks fail (SPEC R34)."""
+    promise = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="Create file", files_to_create=["missing.py"])],
+    )
+    p = tmp_path / "promise.toml"
+    save_promise(promise, p)
+    fake = FakeGitDiff()
+
+    with pytest.raises(PromiseError, match="promise checks failed"):
+        complete_task(0, diff=fake, path=p)
 
 
 # --- status ---
@@ -343,9 +365,15 @@ def test_status_shows_all_tasks(promise_file: Path):
     assert "0/2 completed" in output
 
 
-def test_status_reflects_completion(promise_file: Path):
-    complete_task(0, path=promise_file)
-    output = status(promise_file)
+def test_status_reflects_completion(tmp_path: Path):
+    promise = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="Task A"), Task(title="Task B")],
+    )
+    p = tmp_path / "promise.toml"
+    save_promise(promise, p)
+    complete_task(0, diff=FakeGitDiff(), path=p)
+    output = status(p)
     assert "1/2 completed" in output
 
 
@@ -1014,7 +1042,7 @@ def test_complete_task_out_of_range_empty_message(tmp_path: Path):
     path = tmp_path / "p.toml"
     save_promise(p, path)
     with pytest.raises(PromiseError, match="no tasks"):
-        complete_task(0, path=path)
+        complete_task(0, diff=FakeGitDiff(), path=path)
 
 
 def test_complete_task_out_of_range_shows_range(tmp_path: Path):
@@ -1022,7 +1050,7 @@ def test_complete_task_out_of_range_shows_range(tmp_path: Path):
     path = tmp_path / "p.toml"
     save_promise(p, path)
     with pytest.raises(PromiseError, match="0-1"):
-        complete_task(5, path=path)
+        complete_task(5, diff=FakeGitDiff(), path=path)
 
 
 def test_complete_task_negative_index_rejected(tmp_path: Path):
@@ -1030,7 +1058,7 @@ def test_complete_task_negative_index_rejected(tmp_path: Path):
     path = tmp_path / "p.toml"
     save_promise(p, path)
     with pytest.raises(PromiseError):
-        complete_task(-1, path=path)
+        complete_task(-1, diff=FakeGitDiff(), path=path)
 
 
 # --- status detail ---

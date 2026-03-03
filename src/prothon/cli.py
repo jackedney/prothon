@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -40,6 +41,17 @@ def _require_project_root() -> Path:
         return find_project_root()
     except ProthonError as exc:
         typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+
+def _require_doc(root: Path, doc_name: str) -> None:
+    """Exit with an error if a prerequisite doc file is missing."""
+    doc_path = root / "docs" / doc_name
+    if not doc_path.exists():
+        typer.echo(
+            f"Error: docs/{doc_name} must exist before this command can run",
+            err=True,
+        )
         raise typer.Exit(1)
 
 
@@ -108,8 +120,19 @@ def resolve_assistant() -> str:
     return "claude-code"
 
 
+def _file_hash(path: Path) -> str | None:
+    """Return the SHA-256 hex digest of a file, or None if it doesn't exist."""
+    if not path.exists():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def _launch_skill(skill_name: str, cwd: Path) -> None:
     """Resolve the backend, launch the skill, and handle errors."""
+    spec_path = cwd / "docs" / "SPEC.md"
+    guard_spec = skill_name != "prothon-spec-writer"
+    spec_hash = _file_hash(spec_path) if guard_spec else None
+
     try:
         name = resolve_assistant()
         backend = get_backend(name)
@@ -119,6 +142,13 @@ def _launch_skill(skill_name: str, cwd: Path) -> None:
     except ProthonError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1)
+
+    if guard_spec and _file_hash(spec_path) != spec_hash:
+        typer.echo(
+            "Warning: docs/SPEC.md was modified outside of 'prothon spec'. "
+            "Only the spec-writer should modify SPEC.md.",
+            err=True,
+        )
 
 
 # --- Rich rendering helpers ---
@@ -297,6 +327,7 @@ def spec() -> None:
 def design() -> None:
     """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
     root = _require_project_root()
+    _require_doc(root, "SPEC.md")
     _launch_skill("prothon-design-writer", root)
 
 
@@ -304,6 +335,7 @@ def design() -> None:
 def patterns() -> None:
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
     root = _require_project_root()
+    _require_doc(root, "DESIGN.md")
     _launch_skill("prothon-patterns-writer", root)
 
 

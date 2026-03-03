@@ -363,25 +363,32 @@ def check_task(
 
 
 def complete_task(
-    task_index: int, *, attempts: int = 1, path: Path = PROMISE_PATH
+    task_index: int,
+    *,
+    attempts: int = 1,
+    diff: GitDiffProvider | None = None,
+    path: Path = PROMISE_PATH,
 ) -> None:
-    """Mark a task as completed and record the number of attempts.
+    """Mark a task as completed after verifying its promises pass.
+
+    Runs ``check_task`` first and refuses to mark the task complete if
+    any check fails (SPEC R34: compliance mandatory before completion).
 
     Args:
         task_index: Zero-based index of the task to mark complete.
         attempts: Number of attempts taken to complete the task.
+        diff: Git diff data source; defaults to SubprocessGitDiff().
         path: Path to the promise TOML file.
 
     Raises:
-        PromiseError: If task_index is out of range.
+        PromiseError: If task_index is out of range or checks fail.
     """
+    report = check_task(task_index, diff=diff, path=path)
+    if not report.passed:
+        raise PromiseError(
+            f"Task {task_index} cannot be completed: promise checks failed"
+        )
     promise = load_promise(path)
-    if task_index < 0 or task_index >= len(promise.tasks):
-        if not promise.tasks:
-            msg = f"Task index {task_index} out of range (no tasks in promise)"
-        else:
-            msg = f"Task index {task_index} out of range (0-{len(promise.tasks) - 1})"
-        raise PromiseError(msg)
     promise.tasks[task_index].completed = True
     promise.tasks[task_index].attempts = attempts
     save_promise(promise, path)

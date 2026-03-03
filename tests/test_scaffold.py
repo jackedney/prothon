@@ -59,6 +59,12 @@ def test_renders_pyproject_toml(generated_project):
     assert 'name = "test-project"' in content
 
 
+def test_py_typed_marker_exists(generated_project):
+    """src/{module_name}/py.typed marker file exists."""
+    py_typed = generated_project / "src" / "test_project" / "py.typed"
+    assert py_typed.exists()
+
+
 def test_module_init_exists(generated_project):
     """src/{module_name}/__init__.py exists."""
     init = generated_project / "src" / "test_project" / "__init__.py"
@@ -110,6 +116,13 @@ def test_creates_doc_scaffolds(generated_project):
 def test_copies_plain_files(generated_project):
     """.gitignore is copied as-is."""
     assert (generated_project / ".gitignore").exists()
+
+
+def test_ci_workflow_files_generated(generated_project):
+    """GitHub Actions, GitLab CI, and pre-commit CI config files are generated."""
+    assert (generated_project / ".github" / "workflows" / "ci.yml").exists()
+    assert (generated_project / ".gitlab-ci.yml").exists()
+    assert (generated_project / ".pre-commit-config.yaml").exists()
 
 
 def test_creates_agents_md(generated_project):

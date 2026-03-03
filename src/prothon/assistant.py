@@ -77,7 +77,7 @@ class OpenCodeBackend:
 
     def build_command(self, skill_name: str, cwd: Path) -> list[str]:
         """Return subprocess argv for an opencode session with *skill_name*."""
-        return [self.cli_command, "run", "--command", skill_name]
+        return [self.cli_command, "--prompt", f"/{skill_name}"]
 
     def sync_skills(self) -> None:
         """Symlink bundled skills into opencode's discovery directory."""

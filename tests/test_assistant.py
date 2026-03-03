@@ -92,12 +92,16 @@ def test_get_backend_unknown_raises() -> None:
 
 def test_register_backend_adds_to_registry() -> None:
     """register_backend makes a new backend available via get_backend."""
+    previous = _BACKENDS.get("fake-test")
     register_backend("fake-test", FakeBackend)
     try:
         backend = get_backend("fake-test")
         assert isinstance(backend, FakeBackend)
     finally:
-        _BACKENDS.pop("fake-test", None)
+        if previous is None:
+            _BACKENDS.pop("fake-test", None)
+        else:
+            _BACKENDS["fake-test"] = previous
 
 
 # --- ClaudeCodeBackend ---

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -48,6 +49,7 @@ class TaskCheckReport:
 
     task_index: int
     title: str
+    task_id: str
     checks: list[CheckResult] = field(default_factory=list)
 
     @property
@@ -75,6 +77,7 @@ class Task:
     """A single promised task within the change promise."""
 
     title: str
+    task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     goal: str = ""
     success_criteria: str = ""
     files_to_create: list[str] = field(default_factory=list)
@@ -111,6 +114,7 @@ def _task_from_dict(d: dict) -> Task:
     """Construct a Task from a TOML dict, tolerating missing keys."""
     return Task(
         title=d.get("title", ""),
+        task_id=d.get("task_id") or uuid.uuid4().hex,
         goal=d.get("goal", ""),
         success_criteria=d.get("success_criteria", ""),
         files_to_create=list(d.get("files_to_create", [])),
@@ -140,6 +144,7 @@ def _task_to_dict(task: Task) -> dict:
     """Serialize a Task to a plain dict for TOML output."""
     return {
         "title": task.title,
+        "task_id": task.task_id,
         "goal": task.goal,
         "success_criteria": task.success_criteria,
         "files_to_create": task.files_to_create,
@@ -293,7 +298,9 @@ def check_task(
 
     base_commit = promise.metadata.base_commit or "HEAD"
     task = promise.tasks[task_index]
-    report = TaskCheckReport(task_index=task_index, title=task.title)
+    report = TaskCheckReport(
+        task_index=task_index, title=task.title, task_id=task.task_id
+    )
 
     # Check files_to_create
     if task.files_to_create:
@@ -363,25 +370,45 @@ def check_task(
 
 
 def complete_task(
-    task_index: int, *, attempts: int = 1, path: Path = PROMISE_PATH
+    task_index: int,
+    *,
+    attempts: int = 1,
+    diff: GitDiffProvider | None = None,
+    path: Path = PROMISE_PATH,
 ) -> None:
-    """Mark a task as completed and record the number of attempts.
+    """Mark a task as completed after verifying its promises pass.
+
+    Runs ``check_task`` first and refuses to mark the task complete if
+    any check fails (SPEC R34: compliance mandatory before completion).
 
     Args:
         task_index: Zero-based index of the task to mark complete.
         attempts: Number of attempts taken to complete the task.
+        diff: Git diff data source; defaults to SubprocessGitDiff().
         path: Path to the promise TOML file.
 
     Raises:
-        PromiseError: If task_index is out of range.
+        PromiseError: If task_index is out of range or checks fail.
     """
+    report = check_task(task_index, diff=diff, path=path)
+    if not report.passed:
+        raise PromiseError(
+            f"Task {task_index} cannot be completed: promise checks failed"
+        )
+    # Re-load and validate to avoid TOCTOU race if the file changed
+    # between the check_task read and this read.
     promise = load_promise(path)
     if task_index < 0 or task_index >= len(promise.tasks):
-        if not promise.tasks:
-            msg = f"Task index {task_index} out of range (no tasks in promise)"
-        else:
-            msg = f"Task index {task_index} out of range (0-{len(promise.tasks) - 1})"
-        raise PromiseError(msg)
+        raise PromiseError(
+            f"Task index {task_index} out of range after re-load; "
+            "promise file may have changed — re-run `promise check` and retry"
+        )
+    if promise.tasks[task_index].task_id != report.task_id:
+        raise PromiseError(
+            f"Task {task_index} identity changed between check and completion "
+            f"(expected task_id {report.task_id!r}, got {promise.tasks[task_index].task_id!r}); "
+            "re-run `promise check` and retry"
+        )
     promise.tasks[task_index].completed = True
     promise.tasks[task_index].attempts = attempts
     save_promise(promise, path)

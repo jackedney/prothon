@@ -105,6 +105,26 @@ def test_compliance_fails_outside_project(tmp_path, monkeypatch):
     assert "no prothon project found" in result.output
 
 
+def test_design_fails_without_spec(tmp_path, monkeypatch):
+    """design command requires docs/SPEC.md to exist."""
+    (tmp_path / "docs").mkdir()
+    monkeypatch.chdir(tmp_path)
+    with patch("prothon.cli.find_project_root", return_value=tmp_path):
+        result = runner.invoke(app, ["design"])
+    assert result.exit_code == 1
+    assert "SPEC.md must exist" in result.output
+
+
+def test_patterns_fails_without_design(tmp_path, monkeypatch):
+    """patterns command requires docs/DESIGN.md to exist."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "SPEC.md").write_text("# Spec\n")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["patterns"])
+    assert result.exit_code == 1
+    assert "DESIGN.md must exist" in result.output
+
+
 def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
@@ -363,8 +383,8 @@ def test_unknown_backend_produces_error(tmp_path, monkeypatch, context):
     assert "no backend registered" in result.output
 
 
-def test_resolve_assistant_env_var_fallback(tmp_path, monkeypatch):
-    """Level 2: PROTHON_ASSISTANT env var is picked up via _state (Typer envvar)."""
+def test_resolve_assistant_state_fallback(tmp_path, monkeypatch):
+    """Level 2: _state fallback is used when Typer stores env var value."""
     monkeypatch.chdir(tmp_path)
     # Simulate Typer having read the env var into _state
     monkeypatch.setitem(_state, "assistant", "opencode")
@@ -421,3 +441,50 @@ def test_resolve_assistant_empty_global_config_falls_to_default(tmp_path, monkey
     (xdg / "prothon" / "config.toml").write_text("# empty config\n")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
     assert resolve_assistant() == "claude-code"
+
+
+# --- SPEC.md protection (R21) ---
+
+
+def test_launch_skill_warns_when_spec_modified(tmp_path, monkeypatch, context):
+    """Non-spec skills warn if SPEC.md was modified during the session."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    def modify_spec(*args, **kwargs):
+        (dest / "docs" / "SPEC.md").write_text("# Tampered\n")
+        return 0
+
+    with patch("prothon.cli.launch", side_effect=modify_spec):
+        with patch("prothon.cli.get_backend"):
+            result = runner.invoke(app, ["design"])
+    assert "SPEC.md was modified outside" in result.output
+
+
+def test_launch_skill_no_warning_for_spec_writer(tmp_path, monkeypatch, context):
+    """spec-writer is allowed to modify SPEC.md without warning."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    def modify_spec(*args, **kwargs):
+        (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+        return 0
+
+    with patch("prothon.cli.launch", side_effect=modify_spec):
+        with patch("prothon.cli.get_backend"):
+            result = runner.invoke(app, ["spec"])
+    assert "SPEC.md was modified" not in result.output
+
+
+def test_launch_skill_no_warning_when_spec_unchanged(tmp_path, monkeypatch, context):
+    """No warning when SPEC.md is unchanged after a non-spec skill."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    with patch("prothon.cli.launch", return_value=0):
+        with patch("prothon.cli.get_backend"):
+            result = runner.invoke(app, ["design"])
+    assert "SPEC.md was modified" not in result.output

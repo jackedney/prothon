@@ -67,7 +67,7 @@ def init_existing(cwd: Path | None = None) -> list[Path]: ...
 # Private
 def _template_dir() -> Path: ...
 def _post_generate(dest: Path) -> None: ...
-def _collect_project_details() -> dict[str, str]: ...
+def _collect_project_details() -> dict[str, str]: ...  # init_existing Path A only
 def _run_copier_init(dest: Path, data: dict[str, str]) -> None: ...
 ```
 
@@ -559,6 +559,7 @@ This is an intentional exception to the standard import order. Use it only for g
 | XDG_CONFIG_HOME resolution | `OpenCodeBackend.sync_skills()`, `resolve_assistant()` | Respect user's XDG override with `~/.config` fallback |
 | Prompt validation loops | `prothon new` constrained inputs | Simple while-loop re-prompt, no validation library |
 | Conditional path branching | `init_existing()` Path A/B | Guards first, branch on state, converge on common overlay |
+| Separate input collection | `new` in `cli.py` vs `_collect_project_details()` in `scaffold.py` | `new` uses Typer prompts directly (CLI concern); `_collect_project_details()` is only for `init_existing` Path A. Intentionally not shared — different UX contexts. |
 
 ## Error Handling
 

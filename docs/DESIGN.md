@@ -50,10 +50,10 @@ All modules
 
 ### Bundled Assets
 
-Two non-Python asset directories live inside the package:
+Two non-Python asset directories are bundled with the project:
 
-- `skills/` — 7 bundled skill directories, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 42 (skills bundled with package) and 22 (dedicated interactive agents).
-- `template/` — Copier project template with `copier.yml`, Jinja2-templated files, and post-generation tasks. Serves requirements 1-9 (project scaffolding).
+- `skills/` — 7 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 42 (skills bundled with package) and 22 (dedicated interactive agents).
+- `template/` — Copier project template at the repository root (not inside the package), with `copier.yml`, Jinja2-templated files, and post-generation tasks. Serves requirements 1-9 (project scaffolding).
 
 `skills/` is included automatically as part of the `src/prothon` package. `template/` is included via `[tool.hatch.build.targets.wheel.force-include]` since it lives outside the package root.
 

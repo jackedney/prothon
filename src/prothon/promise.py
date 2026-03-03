@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -48,6 +49,7 @@ class TaskCheckReport:
 
     task_index: int
     title: str
+    task_id: str
     checks: list[CheckResult] = field(default_factory=list)
 
     @property
@@ -75,6 +77,7 @@ class Task:
     """A single promised task within the change promise."""
 
     title: str
+    task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     goal: str = ""
     success_criteria: str = ""
     files_to_create: list[str] = field(default_factory=list)
@@ -111,6 +114,7 @@ def _task_from_dict(d: dict) -> Task:
     """Construct a Task from a TOML dict, tolerating missing keys."""
     return Task(
         title=d.get("title", ""),
+        task_id=d.get("task_id") or uuid.uuid4().hex,
         goal=d.get("goal", ""),
         success_criteria=d.get("success_criteria", ""),
         files_to_create=list(d.get("files_to_create", [])),
@@ -140,6 +144,7 @@ def _task_to_dict(task: Task) -> dict:
     """Serialize a Task to a plain dict for TOML output."""
     return {
         "title": task.title,
+        "task_id": task.task_id,
         "goal": task.goal,
         "success_criteria": task.success_criteria,
         "files_to_create": task.files_to_create,
@@ -293,7 +298,9 @@ def check_task(
 
     base_commit = promise.metadata.base_commit or "HEAD"
     task = promise.tasks[task_index]
-    report = TaskCheckReport(task_index=task_index, title=task.title)
+    report = TaskCheckReport(
+        task_index=task_index, title=task.title, task_id=task.task_id
+    )
 
     # Check files_to_create
     if task.files_to_create:
@@ -396,10 +403,10 @@ def complete_task(
             f"Task index {task_index} out of range after re-load; "
             "promise file may have changed — re-run `promise check` and retry"
         )
-    if promise.tasks[task_index].title != report.title:
+    if promise.tasks[task_index].task_id != report.task_id:
         raise PromiseError(
-            f"Task {task_index} title changed between check and completion "
-            f"(expected {report.title!r}, got {promise.tasks[task_index].title!r}); "
+            f"Task {task_index} identity changed between check and completion "
+            f"(expected task_id {report.task_id!r}, got {promise.tasks[task_index].task_id!r}); "
             "re-run `promise check` and retry"
         )
     promise.tasks[task_index].completed = True

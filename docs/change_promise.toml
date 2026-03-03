@@ -62,8 +62,8 @@ context_files = ["src/prothon/assistant.py", "src/prothon/project.py"]
 doc_sections = ["DESIGN.md#Model Configuration Contract", "PATTERNS.md#Model/Provider Resolution and Join Rule"]
 reference_skills = ["style-python"]
 dependencies = []
-completed = false
-attempts = 0
+completed = true
+attempts = 1
 
 # -----------------------------------------------------------------------------
 # Task 3: Add ModelOption and ProviderOption types

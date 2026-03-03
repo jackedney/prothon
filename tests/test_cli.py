@@ -485,3 +485,97 @@ def test_launch_skill_no_warning_when_spec_unchanged(tmp_path, monkeypatch, cont
         with patch("prothon.cli.get_backend"):
             result = runner.invoke(app, ["design"])
     assert "SPEC.md was modified" not in result.output
+
+
+# --- _launch_skill model/provider handling ---
+
+
+def test_launch_skill_claude_ignores_model_only(tmp_path, monkeypatch, context):
+    """Claude Code ignores model option - no error even if only model is set."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    with patch("prothon.cli.launch", return_value=0) as mock_launch:
+        with patch("prothon.cli.get_backend") as mock_get_backend:
+            mock_get_backend.return_value.name = "Claude Code"
+            result = runner.invoke(
+                app, ["spec", "--model", "glm-5", "--agent", "claude-code"]
+            )
+    assert result.exit_code == 0
+    mock_launch.assert_called_once()
+    assert mock_launch.call_args.kwargs["model"] is None
+
+
+def test_launch_skill_claude_ignores_provider_only(tmp_path, monkeypatch, context):
+    """Claude Code ignores provider option - no error even if only provider is set."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    with patch("prothon.cli.launch", return_value=0) as mock_launch:
+        with patch("prothon.cli.get_backend") as mock_get_backend:
+            mock_get_backend.return_value.name = "Claude Code"
+            result = runner.invoke(
+                app, ["spec", "--provider", "z-ai", "--agent", "claude-code"]
+            )
+    assert result.exit_code == 0
+    mock_launch.assert_called_once()
+    assert mock_launch.call_args.kwargs["model"] is None
+
+
+def test_launch_skill_claude_ignores_model_env_var(tmp_path, monkeypatch, context):
+    """Claude Code ignores PROTHON_MODEL env var - no error even if only model is set."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    monkeypatch.setenv("PROTHON_MODEL", "glm-5")
+
+    with patch("prothon.cli.launch", return_value=0) as mock_launch:
+        with patch("prothon.cli.get_backend") as mock_get_backend:
+            mock_get_backend.return_value.name = "Claude Code"
+            result = runner.invoke(app, ["spec", "--agent", "claude-code"])
+    assert result.exit_code == 0
+    mock_launch.assert_called_once()
+    assert mock_launch.call_args.kwargs["model"] is None
+
+
+def test_launch_skill_opencode_validates_model_provider(tmp_path, monkeypatch, context):
+    """opencode still validates model/provider - error if only one is set."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    with patch("prothon.cli.get_backend") as mock_get_backend:
+        mock_get_backend.return_value.name = "opencode"
+        result = runner.invoke(app, ["spec", "--model", "glm-5", "--agent", "opencode"])
+    assert result.exit_code == 1
+    assert "--provider requires --model" in result.output
+
+
+def test_launch_skill_opencode_accepts_both_model_provider(
+    tmp_path, monkeypatch, context
+):
+    """opencode accepts both model and provider - passes resolved model to launch."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    with patch("prothon.cli.launch", return_value=0) as mock_launch:
+        with patch("prothon.cli.get_backend") as mock_get_backend:
+            mock_get_backend.return_value.name = "opencode"
+            result = runner.invoke(
+                app,
+                [
+                    "spec",
+                    "--model",
+                    "glm-5",
+                    "--provider",
+                    "z-ai",
+                    "--agent",
+                    "opencode",
+                ],
+            )
+    assert result.exit_code == 0
+    mock_launch.assert_called_once()
+    assert mock_launch.call_args.kwargs["model"] == "z-ai/glm-5"

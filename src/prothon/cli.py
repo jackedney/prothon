@@ -252,7 +252,7 @@ def _launch_skill(
     try:
         name = resolve_agent(agent)
         backend = get_backend(name)
-        resolved_model = resolve_model(model, provider)
+        resolved_model = resolve_model(model, provider) if name == "opencode" else None
         rc = launch(backend, skill_name, cwd, model=resolved_model)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}", err=True)

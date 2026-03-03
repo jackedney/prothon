@@ -147,7 +147,24 @@ def test_opencode_backend_build_command() -> None:
     """build_command constructs the expected argv."""
     backend = OpenCodeBackend()
     result = backend.build_command("prothon-spec-writer", Path("/tmp"))
-    assert result == ["opencode", "/prothon-spec-writer"]
+    assert result == ["opencode", "run", "--command", "prothon-spec-writer"]
+
+
+def test_opencode_backend_build_command_no_bare_slash_args() -> None:
+    """build_command must not produce args that opencode would treat as a project path.
+
+    opencode's positional argument is a directory to chdir into, so any
+    argv element starting with '/' (other than the binary itself) would be
+    misinterpreted as a filesystem path instead of a skill invocation.
+    """
+    backend = OpenCodeBackend()
+    cmd = backend.build_command("prothon-patterns-writer", Path("/tmp"))
+    non_binary_args = cmd[1:]  # skip the binary name
+    slash_args = [a for a in non_binary_args if a.startswith("/")]
+    assert slash_args == [], (
+        f"opencode build_command produced path-like args {slash_args} "
+        "that would be misinterpreted as a project directory"
+    )
 
 
 def test_opencode_backend_env_overrides() -> None:

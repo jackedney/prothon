@@ -142,8 +142,10 @@ def launch(
         raise ProthonError(f"failed to sync skills for {backend.name}: {exc}") from exc
     env = {**os.environ, **backend.env_overrides()}
     try:
-        return subprocess.run(
-            backend.build_command(skill_name, cwd, model=model), cwd=cwd, env=env
-        ).returncode
+        if model is None:
+            cmd = backend.build_command(skill_name, cwd)
+        else:
+            cmd = backend.build_command(skill_name, cwd, model=model)
+        return subprocess.run(cmd, cwd=cwd, env=env).returncode
     except OSError as exc:
         raise ProthonError(f"failed to launch {backend.name}: {exc}") from exc

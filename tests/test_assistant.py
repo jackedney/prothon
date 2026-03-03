@@ -358,3 +358,90 @@ def test_get_backend_unknown_error_lists_registered_backends() -> None:
     msg = str(exc_info.value)
     assert "claude-code" in msg
     assert "opencode" in msg
+
+
+# --- Backwards compatibility for build_command signature ---
+
+
+class LegacyBackend:
+    """Backend with old signature (no model parameter)."""
+
+    @property
+    def name(self) -> str:
+        return "Legacy"
+
+    @property
+    def cli_command(self) -> str:
+        return "legacy-assistant"
+
+    @property
+    def install_hint(self) -> str:
+        return "https://example.com/legacy"
+
+    def build_command(self, skill_name: str, cwd: Path) -> list[str]:
+        return [self.cli_command, f"/{skill_name}"]
+
+    def sync_skills(self) -> None:
+        pass
+
+    def env_overrides(self) -> dict[str, str]:
+        return {}
+
+
+@patch("prothon.assistant.subprocess.run")
+@patch("prothon.assistant.shutil.which", return_value="/usr/bin/legacy-assistant")
+def test_launch_with_legacy_backend_when_model_is_none(
+    mock_which: MagicMock,
+    mock_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """launch() works with a backend that doesn't accept model parameter when model is None."""
+    mock_run.return_value = MagicMock(returncode=0)
+    backend = LegacyBackend()
+
+    code = launch(backend, "my-skill", cwd=tmp_path, model=None)  # type: ignore[arg-type]
+
+    mock_run.assert_called_once_with(
+        ["legacy-assistant", "/my-skill"],
+        cwd=tmp_path,
+        env=os.environ,
+    )
+    assert code == 0
+
+
+@patch("prothon.assistant.subprocess.run")
+@patch("prothon.assistant.shutil.which", return_value="/usr/bin/fake-assistant")
+def test_launch_calls_build_command_without_model_when_none(
+    mock_which: MagicMock,
+    mock_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """launch() calls build_command(skill_name, cwd) when model is None."""
+    mock_run.return_value = MagicMock(returncode=0)
+    backend = FakeBackend()
+
+    with patch.object(
+        backend, "build_command", wraps=backend.build_command
+    ) as mock_build:
+        launch(backend, "my-skill", cwd=tmp_path, model=None)
+
+    mock_build.assert_called_once_with("my-skill", tmp_path)
+
+
+@patch("prothon.assistant.subprocess.run")
+@patch("prothon.assistant.shutil.which", return_value="/usr/bin/fake-assistant")
+def test_launch_calls_build_command_with_model_when_provided(
+    mock_which: MagicMock,
+    mock_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """launch() calls build_command(skill_name, cwd, model=model) when model is not None."""
+    mock_run.return_value = MagicMock(returncode=0)
+    backend = FakeBackend()
+
+    with patch.object(
+        backend, "build_command", wraps=backend.build_command
+    ) as mock_build:
+        launch(backend, "my-skill", cwd=tmp_path, model="z-ai/glm-5")
+
+    mock_build.assert_called_once_with("my-skill", tmp_path, model="z-ai/glm-5")

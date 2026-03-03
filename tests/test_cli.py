@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from prothon.cli import _state, app, resolve_assistant
+from prothon.cli import app, resolve_agent
 from prothon.exceptions import AssistantNotFoundError, ProthonError
 from prothon.git import run_git
 from prothon.scaffold import generate
@@ -277,98 +277,92 @@ def test_launch_skill_assistant_not_found_no_xx_prefix(tmp_path, monkeypatch, co
     assert "XX" not in result.output
 
 
-# --- resolve_assistant precedence chain ---
+# --- resolve_agent precedence chain ---
 
 
-def test_resolve_assistant_returns_default(tmp_path, monkeypatch):
+def test_resolve_agent_returns_default(tmp_path, monkeypatch):
     """Level 5: returns 'claude-code' when no config source is set."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setitem(_state, "assistant", None)
-    monkeypatch.delenv("PROTHON_ASSISTANT", raising=False)
+    monkeypatch.delenv("PROTHON_AGENT", raising=False)
     # No pyproject.toml, no global config — should fall through to default
     xdg = tmp_path / "xdg_config"
     xdg.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    assert resolve_assistant() == "claude-code"
+    assert resolve_agent() == "claude-code"
 
 
-def test_resolve_assistant_reads_pyproject_toml(tmp_path, monkeypatch):
-    """Level 3: reads [tool.prothon].assistant from pyproject.toml."""
+def test_resolve_agent_reads_pyproject_toml(tmp_path, monkeypatch):
+    """Level 3: reads [tool.prothon].agent from pyproject.toml."""
     # Create project structure so find_project_root works
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "SPEC.md").write_text("# Spec\n")
-    (tmp_path / "pyproject.toml").write_text('[tool.prothon]\nassistant = "opencode"\n')
+    (tmp_path / "pyproject.toml").write_text('[tool.prothon]\nagent = "opencode"\n')
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setitem(_state, "assistant", None)
-    monkeypatch.delenv("PROTHON_ASSISTANT", raising=False)
+    monkeypatch.delenv("PROTHON_AGENT", raising=False)
     # Prevent global config from interfering
     xdg = tmp_path / "xdg_config"
     xdg.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    assert resolve_assistant() == "opencode"
+    assert resolve_agent() == "opencode"
 
 
-def test_resolve_assistant_reads_global_config(tmp_path, monkeypatch):
-    """Level 4: reads assistant from ~/.config/prothon/config.toml."""
+def test_resolve_agent_reads_global_config(tmp_path, monkeypatch):
+    """Level 4: reads agent from ~/.config/prothon/config.toml."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setitem(_state, "assistant", None)
-    monkeypatch.delenv("PROTHON_ASSISTANT", raising=False)
+    monkeypatch.delenv("PROTHON_AGENT", raising=False)
     # No project root — ensure find_project_root raises (no docs/SPEC.md)
     xdg = tmp_path / "xdg_config"
     (xdg / "prothon").mkdir(parents=True)
-    (xdg / "prothon" / "config.toml").write_text('assistant = "opencode"\n')
+    (xdg / "prothon" / "config.toml").write_text('agent = "opencode"\n')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    assert resolve_assistant() == "opencode"
+    assert resolve_agent() == "opencode"
 
 
-def test_resolve_assistant_cli_flag_overrides_pyproject(tmp_path, monkeypatch):
-    """Level 1 beats level 3: CLI flag overrides pyproject.toml config."""
+def test_resolve_agent_cli_value_overrides_pyproject(tmp_path, monkeypatch):
+    """Level 1 beats level 3: CLI value overrides pyproject.toml config."""
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "SPEC.md").write_text("# Spec\n")
-    (tmp_path / "pyproject.toml").write_text('[tool.prothon]\nassistant = "opencode"\n')
+    (tmp_path / "pyproject.toml").write_text('[tool.prothon]\nagent = "opencode"\n')
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setitem(_state, "assistant", "claude-code")
-    monkeypatch.delenv("PROTHON_ASSISTANT", raising=False)
-    assert resolve_assistant() == "claude-code"
+    monkeypatch.delenv("PROTHON_AGENT", raising=False)
+    assert resolve_agent("claude-code") == "claude-code"
 
 
-def test_resolve_assistant_pyproject_overrides_global_config(tmp_path, monkeypatch):
+def test_resolve_agent_pyproject_overrides_global_config(tmp_path, monkeypatch):
     """Level 3 beats level 4: pyproject.toml overrides global config."""
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "SPEC.md").write_text("# Spec\n")
-    (tmp_path / "pyproject.toml").write_text('[tool.prothon]\nassistant = "opencode"\n')
+    (tmp_path / "pyproject.toml").write_text('[tool.prothon]\nagent = "opencode"\n')
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setitem(_state, "assistant", None)
-    monkeypatch.delenv("PROTHON_ASSISTANT", raising=False)
+    monkeypatch.delenv("PROTHON_AGENT", raising=False)
     # Set up global config with a different value
     xdg = tmp_path / "xdg_config"
     (xdg / "prothon").mkdir(parents=True)
-    (xdg / "prothon" / "config.toml").write_text('assistant = "claude-code"\n')
+    (xdg / "prothon" / "config.toml").write_text('agent = "claude-code"\n')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    assert resolve_assistant() == "opencode"
+    assert resolve_agent() == "opencode"
 
 
-def test_resolve_assistant_global_config_overrides_default(tmp_path, monkeypatch):
+def test_resolve_agent_global_config_overrides_default(tmp_path, monkeypatch):
     """Level 4 beats level 5: global config overrides the hardcoded default."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setitem(_state, "assistant", None)
-    monkeypatch.delenv("PROTHON_ASSISTANT", raising=False)
+    monkeypatch.delenv("PROTHON_AGENT", raising=False)
     # No pyproject.toml [tool.prothon], no docs/SPEC.md
     xdg = tmp_path / "xdg_config"
     (xdg / "prothon").mkdir(parents=True)
-    (xdg / "prothon" / "config.toml").write_text('assistant = "opencode"\n')
+    (xdg / "prothon" / "config.toml").write_text('agent = "opencode"\n')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    assert resolve_assistant() == "opencode"
+    assert resolve_agent() == "opencode"
 
 
-def test_assistant_flag_passed_through_to_backend(tmp_path, monkeypatch, context):
-    """--assistant flag reaches resolve_assistant and selects the correct backend."""
+def test_agent_flag_passed_through_to_backend(tmp_path, monkeypatch, context):
+    """--agent flag reaches resolve_agent and selects the correct backend."""
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
     with patch("prothon.cli.launch", return_value=0) as mock_launch:
         with patch("prothon.cli.get_backend") as mock_get_backend:
-            runner.invoke(app, ["--assistant", "opencode", "spec"])
+            runner.invoke(app, ["spec", "--agent", "opencode"])
     mock_get_backend.assert_called_once_with("opencode")
     mock_launch.assert_called_once()
 
@@ -378,69 +372,63 @@ def test_unknown_backend_produces_error(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    result = runner.invoke(app, ["--assistant", "unknown-backend", "spec"])
+    result = runner.invoke(app, ["spec", "--agent", "unknown-backend"])
     assert result.exit_code == 1
     assert "no backend registered" in result.output
 
 
-def test_resolve_assistant_state_fallback(tmp_path, monkeypatch):
-    """Level 2: _state fallback is used when Typer stores env var value."""
+def test_resolve_agent_cli_value_takes_priority(tmp_path, monkeypatch):
+    """Level 1: explicit cli_value is returned immediately."""
     monkeypatch.chdir(tmp_path)
-    # Simulate Typer having read the env var into _state
-    monkeypatch.setitem(_state, "assistant", "opencode")
-    assert resolve_assistant() == "opencode"
+    assert resolve_agent("opencode") == "opencode"
 
 
-def test_resolve_assistant_env_var_via_cli_runner(tmp_path, monkeypatch, context):
-    """PROTHON_ASSISTANT env var flows through the Typer callback into _state."""
+def test_resolve_agent_env_var_via_cli_runner(tmp_path, monkeypatch, context):
+    """PROTHON_AGENT env var flows through the Typer option into resolve_agent."""
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    monkeypatch.setenv("PROTHON_ASSISTANT", "opencode")
+    monkeypatch.setenv("PROTHON_AGENT", "opencode")
     with patch("prothon.cli.launch", return_value=0):
         with patch("prothon.cli.get_backend") as mock_get_backend:
             runner.invoke(app, ["spec"])
     mock_get_backend.assert_called_once_with("opencode")
 
 
-def test_resolve_assistant_cli_flag_overrides_env_var(tmp_path, monkeypatch, context):
-    """Level 1 beats level 2: CLI --assistant flag overrides PROTHON_ASSISTANT."""
+def test_resolve_agent_cli_flag_overrides_env_var(tmp_path, monkeypatch, context):
+    """Level 1 beats level 2: CLI --agent flag overrides PROTHON_AGENT."""
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    monkeypatch.setenv("PROTHON_ASSISTANT", "opencode")
+    monkeypatch.setenv("PROTHON_AGENT", "opencode")
     with patch("prothon.cli.launch", return_value=0):
         with patch("prothon.cli.get_backend") as mock_get_backend:
-            runner.invoke(app, ["--assistant", "claude-code", "spec"])
+            runner.invoke(app, ["spec", "--agent", "claude-code"])
     mock_get_backend.assert_called_once_with("claude-code")
 
 
-def test_resolve_assistant_pyproject_without_tool_prothon_section(
-    tmp_path, monkeypatch
-):
+def test_resolve_agent_pyproject_without_tool_prothon_section(tmp_path, monkeypatch):
     """pyproject.toml exists but has no [tool.prothon] — falls through."""
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "SPEC.md").write_text("# Spec\n")
     (tmp_path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 88\n")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setitem(_state, "assistant", None)
-    monkeypatch.delenv("PROTHON_ASSISTANT", raising=False)
+    monkeypatch.delenv("PROTHON_AGENT", raising=False)
     xdg = tmp_path / "xdg_config"
     xdg.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    assert resolve_assistant() == "claude-code"
+    assert resolve_agent() == "claude-code"
 
 
-def test_resolve_assistant_empty_global_config_falls_to_default(tmp_path, monkeypatch):
-    """Global config exists but has no assistant key — falls through to default."""
+def test_resolve_agent_empty_global_config_falls_to_default(tmp_path, monkeypatch):
+    """Global config exists but has no agent key — falls through to default."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setitem(_state, "assistant", None)
-    monkeypatch.delenv("PROTHON_ASSISTANT", raising=False)
+    monkeypatch.delenv("PROTHON_AGENT", raising=False)
     xdg = tmp_path / "xdg_config"
     (xdg / "prothon").mkdir(parents=True)
     (xdg / "prothon" / "config.toml").write_text("# empty config\n")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    assert resolve_assistant() == "claude-code"
+    assert resolve_agent() == "claude-code"
 
 
 # --- SPEC.md protection (R21) ---

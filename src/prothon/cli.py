@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
+from typing import Annotated
 
 import tomlkit
 import tomlkit.exceptions
@@ -23,7 +24,15 @@ from prothon.scaffold import generate, init_existing
 
 console = Console()
 
-_state: dict[str, str | None] = {"assistant": None}
+AgentOption = Annotated[
+    str | None,
+    typer.Option(
+        "--agent",
+        "-a",
+        envvar="PROTHON_AGENT",
+        help="AI agent backend (claude-code, opencode)",
+    ),
+]
 
 app = typer.Typer(
     add_completion=False,
@@ -84,21 +93,21 @@ def _nested_get(doc: dict, *keys: str) -> str | None:
     return str(current) if current is not None else None
 
 
-def resolve_assistant() -> str:
-    """Resolve assistant backend name via 5-level precedence chain.
+def resolve_agent(cli_value: str | None = None) -> str:
+    """Resolve agent backend name via 5-level precedence chain.
 
     Priority: CLI flag > env var > pyproject.toml > global config > default.
-    Levels 1-2 are handled by Typer (--assistant flag + PROTHON_ASSISTANT envvar).
+    Levels 1-2 are handled by Typer (--agent flag + PROTHON_AGENT envvar).
     """
-    # Levels 1-2: CLI flag / env var (already resolved by Typer into _state)
-    if _state["assistant"]:
-        return _state["assistant"]
+    # Levels 1-2: CLI flag / env var (Typer resolves both into the parameter)
+    if cli_value:
+        return cli_value
 
-    # Level 3: pyproject.toml [tool.prothon].assistant
+    # Level 3: pyproject.toml [tool.prothon].agent
     try:
         root = find_project_root()
         val = _nested_get(
-            _read_toml(root / "pyproject.toml"), "tool", "prothon", "assistant"
+            _read_toml(root / "pyproject.toml"), "tool", "prothon", "agent"
         )
         if val:
             return val
@@ -112,7 +121,7 @@ def resolve_assistant() -> str:
         if raw_xdg and Path(raw_xdg).is_absolute()
         else Path.home() / ".config"
     )
-    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "assistant")
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "agent")
     if val:
         return val
 
@@ -128,14 +137,14 @@ def _file_hash(path: Path) -> str | None:
         return None
 
 
-def _launch_skill(skill_name: str, cwd: Path) -> None:
+def _launch_skill(skill_name: str, cwd: Path, agent: str | None = None) -> None:
     """Resolve the backend, launch the skill, and handle errors."""
     spec_path = cwd / "docs" / "SPEC.md"
     guard_spec = skill_name != "prothon-spec-writer"
     spec_hash = _file_hash(spec_path) if guard_spec else None
 
     try:
-        name = resolve_assistant()
+        name = resolve_agent(agent)
         backend = get_backend(name)
         rc = launch(backend, skill_name, cwd)
     except ProthonError as exc:
@@ -237,18 +246,8 @@ def _render_check_report(report: TaskCheckReport) -> Table:
 
 
 @app.callback(invoke_without_command=True)
-def callback(
-    ctx: typer.Context,
-    assistant: str | None = typer.Option(
-        None,
-        "--assistant",
-        "-a",
-        envvar="PROTHON_ASSISTANT",
-        help="AI assistant backend (claude-code, opencode)",
-    ),
-) -> None:
+def callback(ctx: typer.Context) -> None:
     """Python project generator with docs-first AI workflow."""
-    _state["assistant"] = assistant
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
 
@@ -319,40 +318,40 @@ def init() -> None:
 
 
 @app.command()
-def spec() -> None:
+def spec(agent: AgentOption = None) -> None:
     """Write or revise SPEC.md — extract requirements through probing questions."""
     root = _require_project_root()
-    _launch_skill("prothon-spec-writer", root)
+    _launch_skill("prothon-spec-writer", root, agent)
 
 
 @app.command()
-def design() -> None:
+def design(agent: AgentOption = None) -> None:
     """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
     root = _require_project_root()
     _require_doc(root, "SPEC.md")
-    _launch_skill("prothon-design-writer", root)
+    _launch_skill("prothon-design-writer", root, agent)
 
 
 @app.command()
-def patterns() -> None:
+def patterns(agent: AgentOption = None) -> None:
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
     root = _require_project_root()
     _require_doc(root, "DESIGN.md")
-    _launch_skill("prothon-patterns-writer", root)
+    _launch_skill("prothon-patterns-writer", root, agent)
 
 
 @app.command()
-def execute() -> None:
+def execute(agent: AgentOption = None) -> None:
     """Align source code to documentation — plan and implement with subagents."""
     root = _require_project_root()
-    _launch_skill("prothon-execute", root)
+    _launch_skill("prothon-execute", root, agent)
 
 
 @app.command()
-def compliance() -> None:
+def compliance(agent: AgentOption = None) -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
-    _launch_skill("prothon-compliance-checker", root)
+    _launch_skill("prothon-compliance-checker", root, agent)
 
 
 # --- Promise subcommands ---

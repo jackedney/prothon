@@ -242,7 +242,7 @@ raw_xdg = os.environ.get("XDG_CONFIG_HOME")
 xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
 ```
 
-Empty or relative `XDG_CONFIG_HOME` values fall back to `~/.config` to avoid syncing into repo-relative paths. This applies to `OpenCodeBackend.sync_skills()` and `resolve_assistant()` (global config lookup).
+Empty or relative `XDG_CONFIG_HOME` values fall back to `~/.config` to avoid syncing into repo-relative paths. This applies to `OpenCodeBackend.sync_skills()` and `resolve_agent()` (global config lookup).
 
 ### Registry for Backend Lookup
 
@@ -389,32 +389,31 @@ for c in report.checks:
     table.add_row(c.name, Text(label, style=style), c.detail)
 ```
 
-### Global Typer Option with Module-Level State
+### Per-Command Agent Option with Annotated Type
 
-The `--assistant`/`-a` flag is global (on the app callback), not per-command. Typer's `envvar=` parameter handles env var resolution automatically. A module-level `_state` dict shares the callback's value with other functions without threading it through every command signature.
+The `--agent`/`-a` flag is per-command, defined once as a shared `Annotated` type and added to each command that launches an assistant session. The value flows explicitly through `_launch_skill` → `resolve_agent` as a function parameter — no module-level mutable state.
 
 ```python
-_state: dict[str, str | None] = {"assistant": None}
-
-@app.callback(invoke_without_command=True)
-def callback(
-    ctx: typer.Context,
-    assistant: str | None = typer.Option(
-        None, "--assistant", "-a",
-        envvar="PROTHON_ASSISTANT",
-        help="AI assistant backend (claude-code, opencode)",
+AgentOption = Annotated[
+    str | None,
+    typer.Option(
+        "--agent", "-a",
+        envvar="PROTHON_AGENT",
+        help="AI agent backend (claude-code, opencode)",
     ),
-) -> None:
-    _state["assistant"] = assistant
-    if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())
+]
+
+@app.command()
+def spec(agent: AgentOption = None) -> None:
+    root = _require_project_root()
+    _launch_skill("prothon-spec-writer", root, agent)
 ```
 
-This pattern matches `ruff --config` and `uv --config-file` — global options on the callback, not per-command.
+This allows natural usage like `prothon patterns --agent opencode`. Typer's `envvar=` parameter handles env var resolution on each command automatically.
 
 ### Fallthrough Precedence Chain
 
-`resolve_assistant()` implements a 5-level precedence chain where the first non-empty value wins. Each level is a simple `if val: return val` guard, falling through to the next. The function lives in `cli.py` (not `assistant.py`) because levels 1-2 depend on Typer state and levels 3-4 read config files — these are CLI concerns, not backend concerns.
+`resolve_agent(cli_value)` implements a 5-level precedence chain where the first non-empty value wins. Each level is a simple `if val: return val` guard, falling through to the next. The `cli_value` parameter receives the value from Typer (which resolves both CLI flag and env var). The function lives in `cli.py` (not `assistant.py`) because levels 3-4 read config files — these are CLI concerns, not backend concerns.
 
 ```python
 def _read_toml(path: Path) -> dict:
@@ -437,15 +436,15 @@ def _nested_get(doc: dict, *keys: str) -> str | None:
     return str(current) if current is not None else None
 
 
-def resolve_assistant() -> str:
-    # Levels 1-2: CLI flag / env var (from Typer into _state)
-    if _state["assistant"]:
-        return _state["assistant"]
+def resolve_agent(cli_value: str | None = None) -> str:
+    # Levels 1-2: CLI flag / env var (Typer resolves both into cli_value)
+    if cli_value:
+        return cli_value
 
-    # Level 3: pyproject.toml [tool.prothon].assistant
+    # Level 3: pyproject.toml [tool.prothon].agent
     try:
         root = find_project_root()
-        val = _nested_get(_read_toml(root / "pyproject.toml"), "tool", "prothon", "assistant")
+        val = _nested_get(_read_toml(root / "pyproject.toml"), "tool", "prothon", "agent")
         if val:
             return val
     except ProthonError:
@@ -454,7 +453,7 @@ def resolve_assistant() -> str:
     # Level 4: global config
     raw_xdg = os.environ.get("XDG_CONFIG_HOME")
     xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
-    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "assistant")
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "agent")
     if val:
         return val
 
@@ -483,10 +482,10 @@ def _require_promise_file(root: Path) -> Path:
         raise typer.Exit(1)
     return promise_path
 
-def _launch_skill(skill_name: str, cwd: Path) -> None:
+def _launch_skill(skill_name: str, cwd: Path, agent: str | None = None) -> None:
     """Resolve backend, launch skill, handle errors."""
     try:
-        name = resolve_assistant()
+        name = resolve_agent(agent)
         backend = get_backend(name)
         rc = launch(backend, skill_name, cwd)
         if rc != 0:
@@ -554,9 +553,9 @@ This is an intentional exception to the standard import order. Use it only for g
 | Lazy imports | Copier in `scaffold.generate()` | Avoid heavy import for lightweight code paths |
 | Rich table helpers | `_render_*` in `cli.py` | Separate rendering from I/O, enum-to-style dicts avoid branching |
 | CLI guard/launch helpers | `_require_project_root()`, `_require_promise_file()`, `_launch_skill()` | Extract repeated find-or-exit and resolve-launch-or-exit into reusable helpers |
-| Global Typer option + `_state` dict | `--assistant`/`-a` on app callback | Global option shared across commands without threading through signatures |
-| Fallthrough precedence | `resolve_assistant()` 5-level chain | First non-empty value wins; each level is a guard with fallthrough |
-| XDG_CONFIG_HOME resolution | `OpenCodeBackend.sync_skills()`, `resolve_assistant()` | Respect user's XDG override with `~/.config` fallback |
+| Per-command option + `Annotated` type | `--agent`/`-a` on each session command via shared `AgentOption` | Explicit data flow, no module-level state, natural CLI usage |
+| Fallthrough precedence | `resolve_agent(cli_value)` 5-level chain | First non-empty value wins; each level is a guard with fallthrough |
+| XDG_CONFIG_HOME resolution | `OpenCodeBackend.sync_skills()`, `resolve_agent()` | Respect user's XDG override with `~/.config` fallback |
 | Prompt validation loops | `prothon new` constrained inputs | Simple while-loop re-prompt, no validation library |
 | Conditional path branching | `init_existing()` Path A/B | Guards first, branch on state, converge on common overlay |
 | Separate input collection | `new` in `cli.py` vs `_collect_project_details()` in `scaffold.py` | `new` uses Typer prompts directly (CLI concern); `_collect_project_details()` is only for `init_existing` Path A. Intentionally not shared — different UX contexts. |

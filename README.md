@@ -50,7 +50,7 @@ prothon init       # overlay docs-first workflow (creates docs/, AGENTS.md, syml
 prothon spec && prothon design && prothon patterns && prothon execute
 ```
 
-Each command launches a Claude Code session with a dedicated skill. The skill asks you questions, researches options, and writes the doc. You make the decisions.
+Each command launches an AI assistant session with a dedicated skill. The skill asks you questions, researches options, and writes the doc. You make the decisions. Works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (default) and [opencode](https://opencode.ai).
 
 ---
 
@@ -181,7 +181,29 @@ GEMINI.md  → AGENTS.md    Gemini
 AGENT.md   → AGENTS.md    other agents
 ```
 
-Skills live in `.agents/skills/` with symlinks to `.claude/skills/` and `.opencode/skills/`.
+Skills live in `.agents/skills/` with symlinks into each assistant's discovery directory.
+
+### assistant selection
+
+```bash
+prothon --assistant opencode spec    # CLI flag (highest priority)
+PROTHON_ASSISTANT=opencode prothon spec   # env var
+```
+
+Or set it permanently in `pyproject.toml`:
+
+```toml
+[tool.prothon]
+assistant = "opencode"
+```
+
+Or globally in `~/.config/prothon/config.toml`:
+
+```toml
+assistant = "opencode"
+```
+
+Priority: CLI flag > env var > pyproject.toml > global config > default (`claude-code`).
 
 ### customizing the template
 
@@ -195,7 +217,7 @@ copier copy --trust --vcs-ref HEAD /path/to/prothon /tmp/test-project
 
 ## future
 
-→ **additional coding agents** — currently built for Claude Code. Planned support for [Codex](https://github.com/openai/codex) and [OpenCode](https://github.com/anomalyco/opencode), bringing docs-first development to more agent backends.
+→ **additional coding agents** — currently supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [opencode](https://opencode.ai). Planned support for [Codex](https://github.com/openai/codex) and other agent backends.
 → **code review integration** — integrate with [CodeRabbit](https://coderabbit.ai) and [Greptile](https://greptile.com) to bring automated, doc-aware code review into the workflow.
 → **continuous agentic development** — [RALPH loop](https://ghuntley.com/loop/) style autonomous development cycles — agents read docs, plan, implement, verify, and loop until the task is complete, with minimal human intervention.
 

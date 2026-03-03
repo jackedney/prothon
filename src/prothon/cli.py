@@ -97,11 +97,16 @@ def resolve_agent(cli_value: str | None = None) -> str:
     """Resolve agent backend name via 5-level precedence chain.
 
     Priority: CLI flag > env var > pyproject.toml > global config > default.
-    Levels 1-2 are handled by Typer (--agent flag + PROTHON_AGENT envvar).
     """
-    # Levels 1-2: CLI flag / env var (Typer resolves both into the parameter)
+    # Level 1: CLI flag (passed explicitly by caller)
     if cli_value:
         return cli_value
+
+    # Level 2: env var (also resolved by Typer into cli_value, but checked
+    # explicitly so non-Typer callers honour the precedence chain)
+    env_val = os.environ.get("PROTHON_AGENT")
+    if env_val:
+        return env_val
 
     # Level 3: pyproject.toml [tool.prothon].agent
     try:

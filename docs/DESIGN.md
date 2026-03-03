@@ -100,7 +100,7 @@ Verification checks file existence (for creates/removes), git diff analysis (for
 
 ### CLI Commands
 
-All commands that launch an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`) respect the global `--agent` / `-a` option and the `PROTHON_AGENT` environment variable. See the Agent Configuration Contract below for the full resolution chain.
+All commands that launch an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`) accept a per-command `--agent` / `-a` option and the `PROTHON_AGENT` environment variable. See the Agent Configuration Contract below for the full resolution chain.
 
 | Command | Input | Output | Subsystem |
 |---------|-------|--------|-----------|

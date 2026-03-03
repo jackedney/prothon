@@ -134,6 +134,81 @@ def resolve_agent(cli_value: str | None = None) -> str:
     return "claude-code"
 
 
+def _resolve_model_value(cli_value: str | None) -> str | None:
+    """Resolve model name via 5-level precedence: CLI > env > pyproject > global > None."""
+    if cli_value:
+        return cli_value
+    env_val = os.environ.get("PROTHON_MODEL")
+    if env_val:
+        return env_val
+    try:
+        root = find_project_root()
+        val = _nested_get(
+            _read_toml(root / "pyproject.toml"), "tool", "prothon", "model"
+        )
+        if val:
+            return val
+    except ProthonError:
+        pass
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = (
+        Path(raw_xdg)
+        if raw_xdg and Path(raw_xdg).is_absolute()
+        else Path.home() / ".config"
+    )
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "model")
+    if val:
+        return val
+    return None
+
+
+def _resolve_provider_value(cli_value: str | None) -> str | None:
+    """Resolve provider name via 5-level precedence: CLI > env > pyproject > global > None."""
+    if cli_value:
+        return cli_value
+    env_val = os.environ.get("PROTHON_PROVIDER")
+    if env_val:
+        return env_val
+    try:
+        root = find_project_root()
+        val = _nested_get(
+            _read_toml(root / "pyproject.toml"), "tool", "prothon", "provider"
+        )
+        if val:
+            return val
+    except ProthonError:
+        pass
+    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = (
+        Path(raw_xdg)
+        if raw_xdg and Path(raw_xdg).is_absolute()
+        else Path.home() / ".config"
+    )
+    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "provider")
+    if val:
+        return val
+    return None
+
+
+def resolve_model(cli_model: str | None, cli_provider: str | None) -> str | None:
+    """Resolve model and provider into opencode's provider/model format.
+
+    Returns None if neither resolves, or raises ProthonError if only one resolves.
+    """
+    model = _resolve_model_value(cli_model)
+    provider = _resolve_provider_value(cli_provider)
+    if model is None and provider is None:
+        return None
+    if model is not None and "/" in model:
+        return model
+    if model is not None and provider is not None:
+        return f"{provider}/{model}"
+    raise ProthonError(
+        "--provider requires --model (and vice versa). "
+        "Use provider/model format or set both."
+    )
+
+
 def _file_hash(path: Path) -> str | None:
     """Return the SHA-256 hex digest of a file, or None if it doesn't exist or is unreadable."""
     try:

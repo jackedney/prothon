@@ -93,7 +93,7 @@ def update_pyproject_version(path: Path, new_version: str) -> None:
         project = doc.get("project")
         if not isinstance(project, dict):
             raise VersionError("pyproject.toml missing [project] table")
-        project["version"] = new_version  # type: ignore[assignment]
+        project["version"] = new_version
         path.write_text(tomlkit.dumps(doc), encoding="utf-8")
     except TOMLKitError as exc:
         raise VersionError(f"failed to update pyproject.toml: {exc}") from exc

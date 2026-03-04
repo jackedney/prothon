@@ -34,6 +34,11 @@ class TestParseVersion:
         with pytest.raises(VersionError, match="invalid version"):
             parse_version("1.2")
 
+    @pytest.mark.parametrize("v", ["1.2.3.4", "1.2.3-rc1", "v1.2.3x"])
+    def test_parse_version_rejects_trailing_characters(self, v):
+        with pytest.raises(VersionError, match="invalid version"):
+            parse_version(v)
+
     @pytest.mark.parametrize(
         "v,expected",
         [

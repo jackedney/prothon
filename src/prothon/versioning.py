@@ -24,7 +24,7 @@ def parse_version(v: str) -> tuple[int, int, int]:
     Raises:
         VersionError: If the version string is not in valid semver format.
     """
-    match = re.match(r"v?(\d+)\.(\d+)\.(\d+)", v)
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", v)
     if not match:
         raise VersionError(f"invalid version format: {v!r}")
     return (int(match.group(1)), int(match.group(2)), int(match.group(3)))

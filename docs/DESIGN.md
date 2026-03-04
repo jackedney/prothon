@@ -23,7 +23,7 @@ src/prothon/
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, doc agents, execution, compliance, promise system, versioning, skill management — requirements 1, 22, 25, 32, 40-48, 26, 42) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
+This layout is driven by the number of subsystems in the SPEC (scaffolding, doc agents, execution, compliance, promise system, versioning, skill management — requirements 1-9, 22, 25-26, 32-35, 40-48, 52) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
 
 ### Module Dependencies
 
@@ -57,7 +57,7 @@ All modules
 
 Two non-Python asset directories are bundled with the project:
 
-- `skills/` — 7 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 42 (skills bundled with package) and 22 (dedicated interactive agents).
+- `skills/` — 7 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 52 (skills bundled with package) and 22 (dedicated interactive agents).
 - `template/` — Copier project template at the repository root (not inside the package), with `copier.yml`, Jinja2-templated files, and post-generation tasks. Serves requirements 1-9 (project scaffolding).
 
 `skills/` is included automatically as part of the `src/prothon` package. `template/` is included via `[tool.hatch.build.targets.wheel.force-include]` since it lives outside the package root.
@@ -71,7 +71,7 @@ AI coding CLIs fall into two structural categories based on how they receive ski
 - **Category A (native skill directories)** — Claude Code and opencode have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name via slash commands.
 - **Category B (prompt injection)** — Tools like Codex CLI, Gemini CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. These are out of scope per the SPEC but the abstraction accommodates them for future expansion.
 
-A registry maps assistant names to backend classes. Claude Code and opencode are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 41-42 (Claude Code and opencode support, assistant selection).
+A registry maps assistant names to backend classes. Claude Code and opencode are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 50-51 (Claude Code and opencode support, assistant selection).
 
 ### Promise Verification
 
@@ -83,7 +83,7 @@ Verification checks file existence (for creates/removes), git diff analysis (for
 
 | Package | Purpose | Serves Requirement | Alternatives Considered |
 |---------|---------|-------------------|------------------------|
-| typer (>=0.15) | CLI framework with type-hint-driven parameter inference | R40: CLI-invocable workflows | click, argparse |
+| typer (>=0.15) | CLI framework with type-hint-driven parameter inference | R49: CLI-invocable workflows | click, argparse |
 | copier (>=9.0) | Project templating with native `copier update` support | R1-R9: project scaffolding | cookiecutter, custom Jinja2 |
 | tomlkit (>=0.13,<1.0) | TOML read/write with comment and formatting preservation | R25-R26: change promise contract | tomllib+tomli-w, toml |
 | rich (via typer) | Table rendering for promise plans, status, and compliance reports | R33: compliance report with PASS/FAIL/SKIP status | tabulate, click echo/style |

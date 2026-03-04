@@ -33,3 +33,7 @@ class ComplianceError(ProthonError):
 
 class GitError(ProthonError):
     """Git subprocess command failed."""
+
+
+class VersionError(ProthonError):
+    """Version string is malformed or bump operation failed."""

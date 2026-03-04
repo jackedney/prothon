@@ -269,11 +269,11 @@ The commit message follows the format `docs: update <FILENAME> via <agent-name>`
 
 ### Tech Research Contract
 
-The tech-researcher generates reference skills in `.agents/skills/` based on the technology choices in DESIGN.md (serves R36-R39). It runs as a post-write quality gate of the design-writer, but only when technology choices have materially changed.
+The tech-researcher generates reference skills in `.agents/skills/` based on the technology choices in DESIGN.md (serves R36-R39). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
 
-**Trigger condition** — The tech-researcher runs only when the design-writer session resulted in changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
+**Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
 
-**Skip condition** — If the design-writer session only added, removed, or modified content outside the Technology Choices and Key Decisions tables, the tech-researcher is skipped entirely. The design-writer determines this by inspecting the scope of its own changes before deciding whether to launch the tech-researcher subagent.
+**Skip condition** — If the modifying agent only added, removed, or modified content outside the Technology Choices and Key Decisions tables, the tech-researcher is skipped entirely. The responsible agent determines this by inspecting the scope of its own changes before deciding whether to launch the tech-researcher subagent.
 
 ### Compliance Report Contract
 

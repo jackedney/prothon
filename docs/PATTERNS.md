@@ -96,7 +96,7 @@ def sync_skills(target: Path | None = None) -> None: ...
 
 ```python
 # assistant.py — public API
-class AssistantBackend(Protocol): ...   # 6-member contract
+class AssistantBackend(Protocol): ...   # 7-member contract
 class ClaudeCodeBackend: ...            # Category A backend
 class OpenCodeBackend: ...              # Category A backend (XDG-aware)
 
@@ -194,6 +194,8 @@ class AssistantBackend(Protocol):
 
     def env_overrides(self) -> dict[str, str]: ...
 
+    def subagent_type_map(self) -> dict[str, str]: ...
+
 
 class ClaudeCodeBackend:
     @property
@@ -218,6 +220,9 @@ class ClaudeCodeBackend:
 
     def env_overrides(self) -> dict[str, str]:
         return {}
+
+    def subagent_type_map(self) -> dict[str, str]:
+        return {"general-purpose": "general-purpose", "explore": "Explore", "plan": "Plan"}
 
 
 class OpenCodeBackend:
@@ -247,6 +252,9 @@ class OpenCodeBackend:
 
     def env_overrides(self) -> dict[str, str]:
         return {}
+
+    def subagent_type_map(self) -> dict[str, str]:
+        return {"general-purpose": "general", "explore": "explore", "plan": "plan"}
 ```
 
 ### XDG_CONFIG_HOME Resolution

@@ -82,8 +82,7 @@ def test_creates_symlinks(generated_project):
     """CLAUDE.md, GEMINI.md, AGENT.md are symlinks to AGENTS.md."""
     for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
         link = generated_project / name
-        assert link.is_symlink(), f"{name} is not a symlink"
-        assert os.readlink(str(link)) == "AGENTS.md"
+        assert_symlink_to(link, "AGENTS.md")
 
 
 def test_creates_agents_skills_dir(generated_project):

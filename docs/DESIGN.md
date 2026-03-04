@@ -145,7 +145,7 @@ attempts = <int>
 
 ### Promise Verification Contract
 
-Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (PASS/FAIL/SKIP), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). SKIP indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAIL entries — SKIP results do not affect the outcome.
+Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (members: `PASSED`, `FAILED`, `SKIPPED` with values `"PASS"`, `"FAIL"`, `"SKIP"`), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). SKIPPED indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAILED entries — SKIPPED results do not affect the outcome.
 
 Tolerance for line counts: +-30% or +-30 lines, whichever is greater. Binary files are excluded from line counts.
 
@@ -156,7 +156,7 @@ Every assistant backend must satisfy the `AssistantBackend` protocol (structural
 - `name` — human-readable name for error messages (e.g. "Claude Code", "opencode")
 - `cli_command` — binary name to look up on PATH (e.g. "claude", "opencode")
 - `install_hint` — installation URL or command for actionable error messages when the binary is missing
-- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name (e.g. `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`). When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
+- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name via slash commands. Claude Code uses `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`; opencode uses `["opencode", "--prompt", "/prothon-spec-writer"]` with the `--prompt` flag. When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
 - `sync_skills()` — installs/symlinks bundled skills to the assistant's discovery location. Category A backends call `skills.sync_skills(target=...)` with their specific directory. Category B backends may be a no-op.
 - `env_overrides()` — returns a dict of extra environment variables needed for non-interactive execution (e.g. `{"GOOSE_MODE": "auto"}`). Returns an empty dict if none are needed.
 

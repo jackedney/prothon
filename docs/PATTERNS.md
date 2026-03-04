@@ -234,7 +234,7 @@ class OpenCodeBackend:
         return "https://opencode.ai"
 
     def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]:
-        cmd = [self.cli_command, f"/{skill_name}"]
+        cmd = [self.cli_command, "--prompt", f"/{skill_name}"]
         if model is not None:
             cmd.extend(["--model", model])
         return cmd

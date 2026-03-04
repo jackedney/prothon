@@ -128,11 +128,11 @@ A populated `docs/DESIGN.md` with all sections filled in, every choice traced to
 Once DESIGN.md is written to disk and committed, run these quality gates before finishing.
 
 1. **Harmonize docs** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
-   > Read the doc-harmonizer skill at `~/.claude/skills/prothon-doc-harmonizer/SKILL.md` and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. For each conflict found, present the proposed amendment to the user and wait for explicit approval before applying the change. Do NOT apply any fixes without user confirmation.
+   > Load the prothon-doc-harmonizer skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. For each conflict found, present the proposed amendment to the user and wait for explicit approval before applying the change. Do NOT apply any fixes without user confirmation.
 
 2. **Conditionally generate tech references** — Before launching the tech-researcher, inspect the scope of changes you made to DESIGN.md during this session:
    - If the **Technology Choices** table or the **Key Decisions** table was added, removed, or modified → launch the tech-researcher subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
-     > Read the tech-researcher skill at `~/.claude/skills/prothon-tech-researcher/SKILL.md` and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, then generate reference skills in `.agents/skills/` for all chosen technologies, codestyle, optimisation, and domain knowledge.
+     > Load the prothon-tech-researcher skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, then generate reference skills in `.agents/skills/` for all chosen technologies, codestyle, optimisation, and domain knowledge.
    - If changes were limited to other sections (Architecture, Interfaces, contracts, etc.) and the Technology Choices and Key Decisions tables were untouched → skip the tech-researcher entirely.
    - Tell the user which path was taken: "Tech-researcher triggered — Technology Choices / Key Decisions changed." or "Tech-researcher skipped — no changes to Technology Choices or Key Decisions tables."
 

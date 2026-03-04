@@ -105,6 +105,18 @@ def get_backend(name: str = "claude-code") -> AssistantBackend: ...
 def launch(backend: AssistantBackend, skill_name: str, cwd: Path, model: str | None = None) -> int: ...
 ```
 
+```python
+# versioning.py — public API
+def parse_version(v: str) -> tuple[int, int, int]: ...
+def bump_major(v: str) -> str: ...
+def bump_minor(v: str) -> str: ...
+def bump_patch(v: str) -> str: ...
+def update_pyproject_version(path: Path, new_version: str) -> None: ...
+def update_init_version(path: Path, new_version: str) -> None: ...
+def create_tag(version: str, cwd: Path | None = None) -> None: ...
+def detect_bump_type(before_sha: str, after_sha: str, cwd: Path | None = None) -> str | None: ...
+```
+
 ## Design Patterns
 
 ### Functions First, Classes When Needed
@@ -625,6 +637,138 @@ def generate(dest: Path, data: dict | None = None) -> None:
 
 This is an intentional exception to the standard import order. Use it only for genuinely heavy third-party packages where the import cost matters.
 
+### Versioning Patterns
+
+**Semver arithmetic** — Pure functions, no external library. Parses version string, bumps major/minor/patch, returns new string.
+
+```python
+import re
+
+def parse_version(v: str) -> tuple[int, int, int]:
+    match = re.match(r"v?(\d+)\.(\d+)\.(\d+)", v)
+    if not match:
+        raise VersionError(f"invalid version format: {v!r}")
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+def bump_major(v: str) -> str:
+    major, _, _ = parse_version(v)
+    return f"{major + 1}.0.0"
+
+def bump_minor(v: str) -> str:
+    major, minor, _ = parse_version(v)
+    return f"{major}.{minor + 1}.0"
+
+def bump_patch(v: str) -> str:
+    major, minor, patch = parse_version(v)
+    return f"{major}.{minor}.{patch + 1}"
+```
+
+**File update functions** — Two functions: one for `pyproject.toml` (tomlkit preserves formatting), one for `__init__.py` (string replacement). Both accept the new version string.
+
+```python
+def update_pyproject_version(path: Path, new_version: str) -> None:
+    doc = tomlkit.parse(path.read_text())
+    doc["project"]["version"] = new_version
+    path.write_text(tomlkit.dumps(doc))
+
+def update_init_version(path: Path, new_version: str) -> None:
+    content = path.read_text()
+    updated = re.sub(
+        r'__version__\s*=\s*["\'][^"\']+["\']',
+        f'__version__ = "{new_version}"',
+        content,
+    )
+    path.write_text(updated)
+```
+
+**Git tagging** — Thin wrapper using existing `git` module. Annotated tag with message.
+
+```python
+def create_tag(version: str, cwd: Path | None = None) -> None:
+    run_git("tag", "-a", f"v{version}", "-m", f"release {version}", cwd=cwd)
+```
+
+**Change detection** — Function that takes before/after SHAs and returns which bump type applies (or `None` if no relevant files changed). Used by CI workflows.
+
+```python
+def detect_bump_type(before_sha: str, after_sha: str, cwd: Path | None = None) -> str | None:
+    """Returns 'major', 'minor', 'patch', or None."""
+    changed = run_git("diff", "--name-only", before_sha, after_sha, cwd=cwd)
+    files = {line for line in changed.strip().splitlines() if line.strip()}
+
+    if "docs/SPEC.md" in files:
+        return "major"
+    if "docs/DESIGN.md" in files:
+        return "minor"
+    if "docs/PATTERNS.md" in files or any(f.startswith("src/") for f in files):
+        return "patch"
+    return None
+```
+
+### CI Workflow Patterns
+
+**Workflow templates** — Inlined as module-level constants in `scaffold.py` (same pattern as doc scaffolds). Not separate files — keeps template/ directory focused on Copier template.
+
+```python
+_GITHUB_VERSION_BUMP_WORKFLOW = """\
+name: Version Bump
+on:
+  push:
+    branches: [main, master]
+permissions:
+  contents: write
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Detect and bump version
+        run: |
+          ...
+"""
+
+_GITLAB_VERSION_BUMP_JOB = """\
+version-bump:
+  stage: deploy
+  script:
+    - ...
+"""
+```
+
+**Workflow selection** — `prothon init` detects which CI platform(s) exist and writes appropriate workflows:
+
+```python
+def _detect_ci_platform(root: Path) -> list[str]:
+    """Returns 'github', 'gitlab', or both."""
+    platforms = []
+    if (root / ".github" / "workflows").is_dir():
+        platforms.append("github")
+    if (root / ".gitlab-ci.yml").exists():
+        platforms.append("gitlab")
+    return platforms or ["github"]  # default to GitHub if none
+```
+
+If neither exists, default to GitHub (most common). User can delete unwanted file.
+
+**pyproject.toml append** — Safe append with idempotency check:
+
+```python
+def _append_prothon_ci_section(root: Path) -> bool:
+    """Append [tool.prothon.ci] if not present. Returns True if appended."""
+    path = root / "pyproject.toml"
+    content = path.read_text()
+    if "[tool.prothon.ci]" in content:
+        return False
+    with path.open("a") as f:
+        f.write("\n[tool.prothon.ci]\nauto_version = true\n")
+    return True
+```
+
+These are internal to `init_existing()` — no new public functions in `scaffold.py`.
+
 ### Pattern Summary
 
 | Pattern | Where | Why |
@@ -636,7 +780,7 @@ This is an intentional exception to the standard import order. Use it only for g
 | Registry dict + `register_backend()` | Backend lookup by name | Explicit, debuggable, extensible without caller changes |
 | Default args | Production vs test paths | Avoids monkeypatching |
 | Guard clauses | Domain precondition validation (`init_existing()`) | Fail fast, domain exceptions, no nested conditionals |
-| Inline constants | Doc scaffolds in `scaffold.py` | Decouples init from Copier template layout |
+| Inline constants | Doc scaffolds, CI workflows in `scaffold.py` | Decouples init from Copier template layout |
 | Idempotent symlinks | `scaffold.py`, `skills.py` | Safe re-runs, stale link cleanup |
 | Lazy imports | Copier in `scaffold.generate()` | Avoid heavy import for lightweight code paths |
 | Rich table helpers | `_render_*` in `cli.py` | Separate rendering from I/O, enum-to-style dicts avoid branching |
@@ -649,6 +793,9 @@ This is an intentional exception to the standard import order. Use it only for g
 | Prompt validation loops | `prothon new` constrained inputs | Simple while-loop re-prompt, no validation library |
 | Conditional path branching | `init_existing()` Path A/B | Guards first, branch on state, converge on common overlay |
 | Separate input collection | `new` in `cli.py` vs `_collect_project_details()` in `scaffold.py` | `new` uses Typer prompts directly (CLI concern); `_collect_project_details()` is only for `init_existing` Path A. Intentionally not shared — different UX contexts. |
+| Semver pure functions | `versioning.py` bump functions | Zero dependencies, ~30 lines, full control over format |
+| CI platform detection | `_detect_ci_platform()` in `scaffold.py` | Sensible default (GitHub), user can delete unwanted |
+| Idempotent config append | `_append_prothon_ci_section()` in `scaffold.py` | Safe re-runs, no duplicate sections |
 
 ## Error Handling
 
@@ -680,6 +827,9 @@ class ComplianceError(ProthonError):
 
 class GitError(ProthonError):
     """Git subprocess command failed."""
+
+class VersionError(ProthonError):
+    """Version string is malformed or bump operation failed."""
 ```
 
 ### Raise at Source, Catch at Boundary
@@ -772,6 +922,7 @@ Lowercase, specific, include the value that caused the problem.
 ```python
 raise PromiseError(f"task index {task_index} out of range (0-{len(tasks) - 1})")
 raise UnknownBackendError(f"no backend registered for '{name}' (available: {registered})")
+raise VersionError(f"invalid version format: {v!r}")
 ```
 
 ## Testing Patterns
@@ -789,6 +940,7 @@ tests/
     test_scaffold.py     # init_existing, generate, Copier integration
     test_promise.py      # promise model, verification
     test_assistant.py    # backend protocol, registry, launch
+    test_versioning.py   # semver, file updates, change detection
     test_cli.py          # integration tests via Typer CliRunner
 ```
 
@@ -803,6 +955,7 @@ def test_check_task_passes_when_all_files_created(): ...
 def test_check_task_fails_when_file_missing(): ...
 def test_load_promise_raises_on_malformed_toml(): ...
 def test_within_tolerance_boundary_values(): ...
+def test_bump_major_resets_minor_and_patch(): ...
 ```
 
 ### Protocol Fakes Over Mocks
@@ -949,6 +1102,82 @@ def test_status_shows_progress(tmp_path, monkeypatch):
     result = runner.invoke(app, ["promise", "status"])
     assert result.exit_code == 0
     assert "0/3 tasks completed" in result.output
+```
+
+### Versioning Tests
+
+**Unit tests for semver arithmetic** — Direct function tests, no filesystem:
+
+```python
+# test_versioning.py
+
+def test_parse_version_extracts_components():
+    assert parse_version("1.2.3") == (1, 2, 3)
+    assert parse_version("v2.0.0") == (2, 0, 0)
+
+def test_parse_version_rejects_invalid():
+    with pytest.raises(VersionError, match="invalid version"):
+        parse_version("not-a-version")
+
+def test_bump_major_resets_minor_and_patch():
+    assert bump_major("1.2.3") == "2.0.0"
+
+def test_bump_minor_resets_patch():
+    assert bump_minor("1.2.3") == "1.3.0"
+
+def test_bump_patch_increments_patch():
+    assert bump_patch("1.2.3") == "1.2.4"
+```
+
+**File update tests** — Use `tmp_path`:
+
+```python
+def test_update_pyproject_preserves_comments(tmp_path):
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text('[project]\nversion = "0.1.0"\n# comment\n')
+    update_pyproject_version(pyproject, "0.2.0")
+    content = pyproject.read_text()
+    assert 'version = "0.2.0"' in content
+    assert "# comment" in content
+
+def test_update_init_version(tmp_path):
+    init = tmp_path / "__init__.py"
+    init.write_text('__version__ = "0.1.0"\n')
+    update_init_version(init, "0.2.0")
+    assert '__version__ = "0.2.0"' in init.read_text()
+```
+
+**Change detection tests** — Use `run_git` with temp repo:
+
+```python
+def test_detect_bump_type_returns_major_for_spec_change(tmp_path):
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "SPEC.md").write_text("# spec")
+    run_git("add", ".", cwd=tmp_path)
+    run_git("commit", "-m", "initial", cwd=tmp_path)
+    before = rev_parse_head(cwd=tmp_path)
+
+    (tmp_path / "docs" / "SPEC.md").write_text("# updated")
+    run_git("add", ".", cwd=tmp_path)
+    run_git("commit", "-m", "spec change", cwd=tmp_path)
+    after = rev_parse_head(cwd=tmp_path)
+
+    assert detect_bump_type(before, after, cwd=tmp_path) == "major"
+
+def test_detect_bump_type_returns_none_for_readme_only(tmp_path):
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "README.md").write_text("# readme")
+    run_git("add", ".", cwd=tmp_path)
+    run_git("commit", "-m", "initial", cwd=tmp_path)
+    before = rev_parse_head(cwd=tmp_path)
+
+    (tmp_path / "README.md").write_text("# updated")
+    run_git("add", ".", cwd=tmp_path)
+    run_git("commit", "-m", "readme update", cwd=tmp_path)
+    after = rev_parse_head(cwd=tmp_path)
+
+    assert detect_bump_type(before, after, cwd=tmp_path) is None
 ```
 
 ### What Not to Test

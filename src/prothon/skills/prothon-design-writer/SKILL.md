@@ -71,7 +71,10 @@ Do NOT start researching or presenting options. Just the list. STOP.
 
 **Step 4.** Once every decision is made, present a summary table for final confirmation.
 
-**Step 5.** Write the final approved content to `docs/DESIGN.md`.
+**Step 5.** Write the final approved content to `docs/DESIGN.md`. Immediately after writing, commit the file:
+   - `git add docs/DESIGN.md`
+   - `git commit -m "docs: update DESIGN.md via design-writer"`
+   - Do NOT push — local commit only.
 
 **The conversation cadence must be:** you send one message → user responds → you send the next message → user responds. If you are about to send a message that doesn't end with a question or invitation for feedback, something is wrong.
 
@@ -82,7 +85,10 @@ Do NOT start researching or presenting options. Just the list. STOP.
 3. **Read SPEC.md** — Re-read the current spec to understand any changes since the design was last written.
 4. **Work through changes** — For each section being modified, follow the same one-at-a-time conversational flow from Path A step 4. Present one decision, wait for the user's response, then move on. Preserve content the user doesn't want to change.
 5. **Summarize changes** — Present all revised decisions for final confirmation.
-6. **Write DESIGN.md** — Write the updated content to `docs/DESIGN.md`.
+6. **Write DESIGN.md** — Write the updated content to `docs/DESIGN.md`. Immediately after writing, commit the file:
+   - `git add docs/DESIGN.md`
+   - `git commit -m "docs: update DESIGN.md via design-writer"`
+   - Do NOT push — local commit only.
 
 ## Sections to Populate
 
@@ -119,14 +125,9 @@ A populated `docs/DESIGN.md` with all sections filled in, every choice traced to
 
 ## After Writing
 
-Once DESIGN.md is written to disk, run these quality gates before finishing. Do NOT ask the user — just run them.
+Once DESIGN.md is written to disk and committed, run this quality gate before finishing.
 
 1. **Harmonize docs** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
-   > Read the doc-harmonizer skill at `~/.claude/skills/prothon-doc-harmonizer/SKILL.md` and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. Apply fixes to the lower-authority document without asking for confirmation.
+   > Load the prothon-doc-harmonizer skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. For each conflict found, present the proposed amendment to the user and wait for explicit approval before applying the change. Do NOT apply any fixes without user confirmation. The harmonizer will also conditionally trigger the tech-researcher if the Technology Choices or Key Decisions tables changed.
 
-2. **Generate tech references** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
-   > Read the tech-researcher skill at `~/.claude/skills/prothon-tech-researcher/SKILL.md` and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, then generate reference skills in `.agents/skills/` for all chosen technologies, codestyle, optimisation, and domain knowledge.
-
-   These two subagents are independent — launch them in parallel.
-
-3. **Report and finish** — Once both subagents complete, summarize their results to the user and tell them to run `prothon patterns` next to define code patterns and conventions. Never mention skill names (like `/prothon-patterns-writer`, `/prothon-tech-researcher`, etc.) to the user — they use CLI commands (`prothon patterns`, `prothon design`, etc.), not skill slash commands.
+2. **Report and finish** — Once the harmonizer completes, summarize its results to the user and tell them to run `prothon patterns` next to define code patterns and conventions. Never mention skill names (like `/prothon-patterns-writer`, `/prothon-tech-researcher`, etc.) to the user — they use CLI commands (`prothon patterns`, `prothon design`, etc.), not skill slash commands.

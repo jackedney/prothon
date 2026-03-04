@@ -145,7 +145,7 @@ attempts = <int>
 
 ### Promise Verification Contract
 
-Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (PASS/FAIL/SKIP), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). SKIP indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAIL entries — SKIP results do not affect the outcome.
+Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (members: `PASSED`, `FAILED`, `SKIPPED` with values `"PASS"`, `"FAIL"`, `"SKIP"`), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). SKIPPED indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAILED entries — SKIPPED results do not affect the outcome.
 
 Tolerance for line counts: +-30% or +-30 lines, whichever is greater. Binary files are excluded from line counts.
 
@@ -156,7 +156,7 @@ Every assistant backend must satisfy the `AssistantBackend` protocol (structural
 - `name` — human-readable name for error messages (e.g. "Claude Code", "opencode")
 - `cli_command` — binary name to look up on PATH (e.g. "claude", "opencode")
 - `install_hint` — installation URL or command for actionable error messages when the binary is missing
-- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name (e.g. `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`). When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
+- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name via slash commands. Claude Code uses `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`; opencode uses `["opencode", "--prompt", "/prothon-spec-writer"]` with the `--prompt` flag. When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
 - `sync_skills()` — installs/symlinks bundled skills to the assistant's discovery location. Category A backends call `skills.sync_skills(target=...)` with their specific directory. Category B backends may be a no-op.
 - `env_overrides()` — returns a dict of extra environment variables needed for non-interactive execution (e.g. `{"GOOSE_MODE": "auto"}`). Returns an empty dict if none are needed.
 
@@ -240,6 +240,41 @@ When the resolved agent is `opencode`, the user can configure which model and pr
 - When the resolved agent is `claude-code`, both options are silently ignored — Claude Code does not support model selection via prothon.
 - Resolution is implemented as a `resolve_model(cli_model, cli_provider)` function in `cli.py`, following the same pattern as `resolve_agent()`. Environment variables are handled via Typer's `envvar=` parameter on each option definition.
 
+### Documentation Safety Contract
+
+Documentation files (`docs/SPEC.md`, `docs/DESIGN.md`, `docs/PATTERNS.md`) are protected by two mechanisms:
+
+**Edit guard** — Only four agents may write to documentation files:
+
+| File | Permitted writers |
+|------|-------------------|
+| `docs/SPEC.md` | spec-writer |
+| `docs/DESIGN.md` | design-writer, doc-harmonizer |
+| `docs/PATTERNS.md` | patterns-writer, doc-harmonizer |
+
+The doc-harmonizer may only write after presenting proposed amendments to the user and receiving explicit approval. This satisfies the SPEC constraint that no documentation changes may be applied by the doc-harmonizer without user approval.
+
+All other agents (execute, compliance, tech-researcher, and any subagents they spawn) must treat these files as read-only. This is enforced at the skill level — each non-doc agent's skill instructions explicitly state that `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` are read-only and must not be written to.
+
+**Commit-after-write** — Every agent that writes to a documentation file must commit that file immediately after writing. This prevents subsequent agent sessions from accidentally overwriting uncommitted changes.
+
+| Agent | Commits |
+|-------|---------|
+| spec-writer | `docs/SPEC.md` |
+| design-writer | `docs/DESIGN.md` |
+| patterns-writer | `docs/PATTERNS.md` |
+| doc-harmonizer | whichever doc(s) it amended |
+
+The commit message follows the format `docs: update <FILENAME> via <agent-name>`. No push is performed — the commit is local only.
+
+### Tech Research Contract
+
+The tech-researcher generates reference skills in `.agents/skills/` based on the technology choices in DESIGN.md (serves R36-R39). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
+
+**Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
+
+**Skip condition** — If the modifying agent only added, removed, or modified content outside the Technology Choices and Key Decisions tables, the tech-researcher is skipped entirely. The responsible agent determines this by inspecting the scope of its own changes before deciding whether to launch the tech-researcher subagent.
+
 ### Compliance Report Contract
 
 The compliance checker reads all three documentation levels and all source code, then produces three tables (SPEC compliance, DESIGN compliance, PATTERNS compliance). Each row contains: the checkable statement, a PASS/FAIL/SKIP status, and `file:line` evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category). A summary section reports overall percentage and prioritized action items.
@@ -292,3 +327,4 @@ Project-specific reference skills generated by the tech-researcher live in each 
 | Backend registry | Internal dict with `register_backend()` hook | Entry points (`importlib.metadata`); plugin framework (stevedore, pluggy) | Zero third-party consumers exist. Internal dict is zero-overhead, grep-discoverable, and type-safe. Entry point discovery adds import-time cost and failure modes. Migration to entry points later is a 10-line change. |
 | Backend protocol scope | 6 members: name, cli_command, install_hint, build_command, sync_skills, env_overrides | Minimal 4 members (current); maximal with interactive/non-interactive mode flag | install_hint enables actionable error messages. env_overrides cleanly separates env var concerns from command construction. Interactive/non-interactive mode flag deferred until execute workflow needs it. |
 | Model configuration | Separate `--model` and `--provider` flags joined into opencode's `provider/model` format | Single `--model` accepting `provider/model` only | Separate flags allow setting a project default model and switching providers on the CLI (e.g. `z-ai` vs `z-ai-coding` for the same model). Combined format still accepted in `--model` for convenience. opencode strictly requires `provider/model` — bare model names are rejected. |
+| Documentation safety | Skill-level edit guard + commit-after-write | Pre-commit hook file check; filesystem permissions | Skill instructions are the right enforcement layer — they govern agent behavior where the writes happen. Pre-commit hooks run too late (after the damage). Filesystem permissions break the agents that need write access. Commit-after-write is the minimal safeguard against loss from subsequent sessions. |

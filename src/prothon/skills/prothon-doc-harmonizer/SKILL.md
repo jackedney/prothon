@@ -46,7 +46,24 @@ You are the Doc Harmonizer. Your job is to detect and resolve conflicts between 
 All documents are consistent.
 ```
 
-5. **Apply fixes** — For each conflict, apply the proposed edit to the lower-authority document. Do NOT ask for user confirmation — this agent runs as an automated quality gate.
+5. **Present proposed amendments** — For each conflict, show the user a clear before/after diff:
+   ```text
+   #### Amendment 1 — <FILENAME> (Section)
+   **Before:** "<current text>"
+   **After:** "<proposed replacement text>"
+   ```
+6. **Wait for explicit user approval** — Ask the user to approve or reject each proposed amendment. Do NOT write to any documentation file until the user has explicitly approved the change. This applies whether the harmonizer is running standalone or as a subagent invoked by design-writer or patterns-writer — the parent session is interactive and the user must confirm.
+7. **Write approved amendments** — Only after receiving explicit approval, apply the approved edits to the lower-authority document(s).
+8. **Commit each amended file** — Immediately after writing an amended documentation file, commit it:
+   - Stage the file: `git add docs/<FILENAME>`
+   - Commit with message: `docs: update <FILENAME> via doc-harmonizer`
+   - Do NOT push — the commit is local only.
+   - If multiple files are amended, commit each file separately with its own commit message.
+9. **Conditionally trigger tech-researcher** — If you amended `docs/DESIGN.md` and the changes touched the **Technology Choices** table or the **Key Decisions** table:
+   - Launch the tech-researcher subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
+     > Load the prothon-tech-researcher skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, then generate reference skills in `.agents/skills/` for all chosen technologies, codestyle, optimisation, and domain knowledge.
+   - If amendments were limited to other sections and the Technology Choices and Key Decisions tables were untouched → skip the tech-researcher entirely.
+   - Tell the user which path was taken: "Tech-researcher triggered — Technology Choices / Key Decisions changed." or "Tech-researcher skipped — no changes to Technology Choices or Key Decisions tables."
 
 ## What Counts as a Conflict
 

@@ -113,7 +113,7 @@ You are implementing a single task. Follow this loop:
 ## Phase 3: Verify
 
 1. **Run compliance check** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
-   > Read the compliance-checker skill at `~/.claude/skills/prothon-compliance-checker/SKILL.md` and execute it. Read all docs and all source code, then produce a compliance report.
+   > Load the prothon-compliance-checker skill and execute it. Read all docs and all source code, then produce a compliance report.
 
 2. **Report results** — Present the compliance report to the user. If there are failures, fix them and re-check until compliance passes or the remaining issues need user input.
 

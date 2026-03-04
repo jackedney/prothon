@@ -236,6 +236,7 @@ Note: `user-invocable: false` makes all these auto-discoverable reference skills
 
 ## Guards
 
+- `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` are **read-only**. Do NOT write to, modify, or delete these files. If documentation appears incorrect, flag it to the user.
 - Each skill file MUST be concise — target 100-200 lines max
 - Do NOT include architecture opinions (that belongs in DESIGN.md)
 - Do NOT include project-specific patterns (that belongs in PATTERNS.md)

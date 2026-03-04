@@ -1,0 +1,65 @@
+[metadata]
+base_commit = "b0715ef91bf69ee985d31d02df2fcd837628653f"
+created_at = "2026-03-04T12:04:00Z"
+
+reference_skills = ["tech-tomlkit", "tech-pytest", "style-python"]
+dependencies = []
+
+[[tasks]]
+title = "Add versioning module"
+goal = "Implement versioning.py with semantic version detection, bumping, and git tagging functions"
+success_criteria = "All functions work, pyproject.toml version updates, init.py version updates, git tagging work"
+files_to_create = ["src/prothon/versioning.py", "tests/test_versioning.py"]
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 200
+expected_lines_removed = 0
+context_files = ["docs/SPEC.md#Semantic-Versioning", "docs/DESIGN.md#Versioning", "docs/PATTERNS.md#Versioning-Patterns"]
+doc_sections = ["DESIGN.md#Version-Bumping-Contract", "PATTERNS.md#Versioning-Patterns"]
+reference_skills = ["tech-tomlkit", "tech-pytest"]
+dependencies = []
+
+[[tasks]]
+title = "Add CI workflow generation to init_existing"
+goal = "Detect existing CI platform and add version-bump workflow if missing"
+success_criteria = "prothon init detects GitHub/GitLab CI and adds appropriate version-bump workflow, appends [tool.prothon.ci] section to pyproject.toml"
+files_to_create = []
+files_to_modify = ["src/prothon/scaffold.py"]
+files_to_remove = []
+expected_lines_added = 150
+expected_lines_removed = 5
+context_files = ["docs/DESIGN.md#Adoption-Contract", "docs/PATTERNS.md#CI-Workflow-Patterns"]
+doc_sections = ["DESIGN.md#Adoption-Contract", "PATTERNS.md#CI-Workflow-Patterns"]
+reference_skills = ["tech-copier", "tech-tomlkit"]
+dependencies = [0]
+
+[[tasks]]
+title = "Add versioning unit tests"
+goal = "Write comprehensive tests for versioning module"
+success_criteria = "All functions have tests, CI workflow templates tested, CI detection tested"
+files_to_create = ["tests/test_versioning.py"]
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 350
+expected_lines_removed = 0
+context_files = ["docs/PATTERNS.md#Testing-Patterns"]
+doc_sections = ["PATTERNS.md#Versioning-Tests", "PATTERNS.md#Testing-Patterns"]
+reference_skills = ["tech-pytest", "tech-hypothesis"]
+dependencies = [0]
+
+[[tasks]]
+title = "Update scaffold tests for CI workflow generation"
+goal = "Add tests for CI workflow generation in init_existing function"
+success_criteria = "Existing tests updated to cover CI workflow creation"
+files_to_create = []
+files_to_modify = ["tests/test_scaffold.py"]
+files_to_remove = []
+expected_lines_added = 80
+expected_lines_removed = 5
+context_files = ["src/prothon/scaffold.py", "tests/test_scaffold.py"]
+doc_sections = ["DESIGN.md#Adoption-Contract", "PATTERNS.md#CI-Workflow-Patterns"]
+reference_skills = ["tech-pytest"]
+dependencies = [1]
+completed = false
+attempts = 0
+max_attempts = 3

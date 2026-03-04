@@ -13,6 +13,7 @@ src/prothon/
     scaffold.py         # Template rendering, copier answers, git init, project adoption
     skills.py           # Skill discovery, symlink management
     promise.py          # Promise data model, TOML I/O, git diff verification
+    versioning.py       # Semantic version detection, bumping, git tagging
     project.py          # Project root detection, shared project context
     git.py              # Thin typed wrapper around git CLI via subprocess
     assistant.py        # Abstract assistant interface and backend registry
@@ -22,7 +23,7 @@ src/prothon/
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, doc agents, execution, compliance, promise system, skill management — requirements 1, 22, 25, 32, 26, 42) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
+This layout is driven by the number of subsystems in the SPEC (scaffolding, doc agents, execution, compliance, promise system, versioning, skill management — requirements 1, 22, 25, 32, 40-48, 26, 42) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
 
 ### Module Dependencies
 
@@ -35,6 +36,10 @@ cli.py
 assistant.py
   └── skills.sync_skills(target)
 
+versioning.py
+  ├── git.* (for tag operations)
+  └── tomlkit (for version file updates)
+
 cli.py (agent resolution — per-command --agent option)
   ├── typer Option + envvar for --agent / PROTHON_AGENT (on each session command)
   ├── project.find_project_root() → pyproject.toml [tool.prothon].agent
@@ -46,7 +51,7 @@ All modules
   └── exceptions.*
 ```
 
-`cli.py` is the only module that depends on Typer for command definitions. Domain modules (`scaffold.py`, `promise.py`, etc.) are plain Python and independently testable without invoking the CLI framework. This separation serves requirement 40 (all workflows invocable via CLI) while keeping domain logic framework-independent.
+`cli.py` is the only module that depends on Typer for command definitions. Domain modules (`scaffold.py`, `promise.py`, `versioning.py`, etc.) are plain Python and independently testable without invoking the CLI framework. This separation serves requirement 49 (all workflows invocable via CLI) while keeping domain logic framework-independent.
 
 ### Bundled Assets
 
@@ -288,13 +293,17 @@ The compliance checker reads all three documentation levels and all source code,
 3. Creates `docs/` directory with empty scaffolds: `SPEC.md`, `DESIGN.md`, `PATTERNS.md` — each containing only markdown section headers, inlined in `scaffold.py`.
 4. Creates `AGENTS.md` at the project root with agent instruction content (inlined in `scaffold.py`), plus symlinks: `CLAUDE.md → AGENTS.md`, `GEMINI.md → AGENTS.md`, `AGENT.md → AGENTS.md`.
 5. Creates `.agents/skills/` directory for project-specific reference skills.
-6. Prints a summary of all created files and suggests `prothon spec` as the next step.
+6. Adds version-bump CI workflow files (GitHub Actions and/or GitLab CI/CD) if not already present.
+7. Appends `[tool.prothon.ci]` section to `pyproject.toml` with `auto_version = true` if the section does not already exist.
+8. Prints a summary of all created files and suggests `prothon spec` as the next step.
 
-The command must not modify existing files, `pyproject.toml`, dependencies, toolchain configuration, pre-commit hooks, CI workflows, or git history.
+The command must not modify existing source files, dependencies, toolchain configuration, pre-commit hooks, or git history. The command may add CI workflow files and append to `pyproject.toml`.
 
 ### Scaffolding Contract
 
-`prothon new` collects six inputs (module name, description, author name, author email, Python version, license) and passes them to Copier's `run_copy()`. The template produces a complete project with: `src/` layout, `pyproject.toml`, pre-commit hooks, CI workflows, git repo with initial commit, agent instruction files, doc scaffolds, and `.agents/skills/` directory. A `.copier-answers.yml` file is written to enable future `copier update` calls.
+`prothon new` collects six inputs (module name, description, author name, author email, Python version, license) and passes them to Copier's `run_copy()`. The template produces a complete project with: `src/` layout, `pyproject.toml`, pre-commit hooks, CI workflows, git repo with initial commit, agent instruction files, doc scaffolds, `.agents/skills/` directory, and version-bump CI workflows for GitHub Actions and GitLab CI/CD. A `.copier-answers.yml` file is written to enable future `copier update` calls.
+
+The generated `pyproject.toml` includes `[tool.prothon.ci]` with `auto_version = true`.
 
 ### Skill Discovery Contract
 
@@ -308,6 +317,71 @@ Bundled skills live in `src/prothon/skills/` as directories containing `SKILL.md
 Symlinks point directly from the backend's skill directory to the bundled package directory. Each backend maintains its own set of symlinks (no shared central location). The duplication cost is zero since symlinks have no disk footprint.
 
 Project-specific reference skills generated by the tech-researcher live in each project's `.agents/skills/` directory. Both Claude Code and opencode discover `.agents/skills/` natively, so no backend-specific handling is needed for project skills.
+
+### Version Bumping Contract
+
+Automatic semantic versioning is handled entirely in CI workflows. The version bump type is determined by which documentation files changed since the last tag:
+
+| Changed file | Bump type |
+|--------------|-----------|
+| `docs/SPEC.md` | Major |
+| `docs/DESIGN.md` (no SPEC change) | Minor |
+| `docs/PATTERNS.md` or source only | Patch |
+
+**Detection mechanism:**
+
+1. **Primary: CI environment variables** — Platform-native SHA references provide the most reliable change detection.
+   - GitHub Actions: `github.event.before` (previous SHA) and `GITHUB_SHA` (current SHA)
+   - GitLab CI: `CI_COMMIT_BEFORE_SHA` and `CI_COMMIT_SHA`
+
+2. **Fallback: git diff-tree** — When env vars are unavailable (manual triggers, scheduled runs):
+   ```bash
+   git diff-tree --no-commit-id --name-only -r $BEFORE_SHA $CURRENT_SHA
+   ```
+
+**Bump execution:**
+
+Custom implementation in `versioning.py` using existing dependencies:
+- `tomlkit` reads/writes `pyproject.toml` version field
+- String replacement updates `src/<package>/__init__.py` `__version__`
+- `git` module creates annotated tag `v<version>`
+
+No external versioning library is used — semver arithmetic is ~30 lines, and both tomlkit and git subprocess are already available.
+
+**Configuration:**
+
+Scaffolded and adopted projects include a `[tool.prothon.ci]` section in `pyproject.toml`:
+
+```toml
+[tool.prothon.ci]
+auto_version = true  # Set to false to disable automatic version bumping
+```
+
+When `auto_version = false`, the CI workflow skips the bump job entirely.
+
+### CI Workflow Contract
+
+Both `prothon new` and `prothon init` generate version-bump CI workflows for the project's chosen platform(s).
+
+**GitHub Actions** (`.github/workflows/version-bump.yml`):
+- Triggers on push to default branch
+- Reads `[tool.prothon.ci].auto_version` from `pyproject.toml`
+- Detects changed files via `github.event.before` / `GITHUB_SHA`
+- Executes bump, commits updated files, pushes tag
+- Uses `GITHUB_TOKEN` with `contents: write` permission
+
+**GitLab CI/CD** (`.gitlab-ci.yml` includes version-bump job):
+- Triggers on push to default branch
+- Reads `[tool.prothon.ci].auto_version` from `pyproject.toml`
+- Detects changed files via `CI_COMMIT_BEFORE_SHA` / `CI_COMMIT_SHA`
+- Executes bump, commits updated files, pushes tag
+- Uses `GITLAB_TOKEN` or project access token
+
+**Workflow behavior:**
+- Runs only on the default branch (not feature branches)
+- Skips when `auto_version = false`
+- Skips when no source or documentation files changed (e.g., README-only changes)
+- Creates tag only after successful bump — no tag on failure
 
 ## Key Decisions
 
@@ -328,3 +402,6 @@ Project-specific reference skills generated by the tech-researcher live in each 
 | Backend protocol scope | 6 members: name, cli_command, install_hint, build_command, sync_skills, env_overrides | Minimal 4 members (current); maximal with interactive/non-interactive mode flag | install_hint enables actionable error messages. env_overrides cleanly separates env var concerns from command construction. Interactive/non-interactive mode flag deferred until execute workflow needs it. |
 | Model configuration | Separate `--model` and `--provider` flags joined into opencode's `provider/model` format | Single `--model` accepting `provider/model` only | Separate flags allow setting a project default model and switching providers on the CLI (e.g. `z-ai` vs `z-ai-coding` for the same model). Combined format still accepted in `--model` for convenience. opencode strictly requires `provider/model` — bare model names are rejected. |
 | Documentation safety | Skill-level edit guard + commit-after-write | Pre-commit hook file check; filesystem permissions | Skill instructions are the right enforcement layer — they govern agent behavior where the writes happen. Pre-commit hooks run too late (after the damage). Filesystem permissions break the agents that need write access. Commit-after-write is the minimal safeguard against loss from subsequent sessions. |
+| Version detection | CI env vars (primary) + git diff-tree (fallback) | git log parsing; file hashes; conventional commits | CI env vars are platform-native and 100% reliable in push/PR events. git diff-tree provides universal fallback when env vars unavailable. Together they cover all CI scenarios without local state management. |
+| Version bumping | Custom implementation (tomlkit + subprocess) | bump-my-version; python-semver + custom code | Zero new dependencies — tomlkit and subprocess are already available. Semver arithmetic is ~30 lines. Full control over commit/tag format. Adding a library would save minimal code while introducing a dependency. |
+| CI configurability | Basic toggle (`auto_version = true/false`) | No config; full branch/trigger configurability | "Minorly configurable" per SPEC. Single toggle lets users disable without deleting files. Branch/trigger customization belongs in the workflow YAML itself — users comfortable with CI can edit directly. |

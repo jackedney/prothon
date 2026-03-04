@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import tomlkit
+
 from prothon.exceptions import GitError, ProjectAlreadyInitError
 from prothon.git import run_git
 
@@ -42,6 +44,305 @@ _PATTERNS_SCAFFOLD = """\
 ## Error Handling
 
 ## Testing Patterns
+"""
+
+_VERSION_BUMP_WORKFLOW = """\
+name: Version Bump
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check auto_version config
+        id: config
+        run: |
+          AUTO_VERSION=$(python3 - <<'PYEOF'
+          import sys
+          try:
+              import tomllib
+          except ImportError:
+              try:
+                  import tomli as tomllib
+              except ImportError:
+                  print("true")
+                  sys.exit(0)
+          try:
+              with open("pyproject.toml", "rb") as f:
+                  data = tomllib.load(f)
+              val = data.get("tool", {}).get("prothon", {}).get("ci", {}).get("auto_version", True)
+              print("true" if val else "false")
+          except Exception:
+              print("true")
+          PYEOF
+          )
+          echo "auto_version=$AUTO_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Detect changed files and bump type
+        if: steps.config.outputs.auto_version == 'true'
+        id: detect
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          BUMP_TYPE=$(python3 - <<'PYEOF'
+          import os
+          import subprocess
+          import sys
+
+          before = os.environ.get("BEFORE_SHA", "").strip()
+          after = os.environ.get("AFTER_SHA", "HEAD").strip()
+
+          # Validate before SHA — the zero SHA means no previous commit (first push)
+          zero_sha = "0000000000000000000000000000000000000000"
+          if not before or before == zero_sha:
+              # No previous commit to diff against; skip bump
+              print("none")
+              sys.exit(0)
+
+          try:
+              result = subprocess.run(
+                  ["git", "diff", "--name-only", before, after],
+                  capture_output=True,
+                  text=True,
+                  check=True,
+              )
+          except subprocess.CalledProcessError:
+              print("none")
+              sys.exit(0)
+
+          files = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+          if "docs/SPEC.md" in files:
+              print("major")
+          elif "docs/DESIGN.md" in files:
+              print("minor")
+          elif "docs/PATTERNS.md" in files or any(f.startswith("src/") for f in files):
+              print("patch")
+          else:
+              print("none")
+          PYEOF
+          )
+          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
+
+      - name: Apply version bump
+        if: steps.config.outputs.auto_version == 'true' && steps.detect.outputs.bump_type != 'none'
+        env:
+          BUMP_TYPE: ${{ steps.detect.outputs.bump_type }}
+        run: |
+          python3 - <<'PYEOF'
+          import os
+          import re
+          import subprocess
+          import sys
+
+          try:
+              import tomllib
+          except ImportError:
+              try:
+                  import tomli as tomllib
+              except ImportError:
+                  print("ERROR: tomllib not available (Python < 3.11 and tomli not installed)", file=sys.stderr)
+                  sys.exit(1)
+
+          try:
+              import tomlkit
+          except ImportError:
+              print("ERROR: tomlkit is required for version bumping", file=sys.stderr)
+              sys.exit(1)
+
+          bump_type = os.environ["BUMP_TYPE"]
+
+          # Read current version from pyproject.toml
+          with open("pyproject.toml", "rb") as f:
+              raw = tomllib.load(f)
+          current = raw.get("project", {}).get("version", "")
+          if not current:
+              print("ERROR: no version found in pyproject.toml [project]", file=sys.stderr)
+              sys.exit(1)
+
+          # Parse semver
+          m = re.fullmatch(r"v?(\\d+)\\.(\\d+)\\.(\\d+)", current)
+          if not m:
+              print(f"ERROR: invalid version format: {current!r}", file=sys.stderr)
+              sys.exit(1)
+          major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
+
+          if bump_type == "major":
+              new_version = f"{major + 1}.0.0"
+          elif bump_type == "minor":
+              new_version = f"{major}.{minor + 1}.0"
+          else:
+              new_version = f"{major}.{minor}.{patch + 1}"
+
+          print(f"Bumping {current} -> {new_version} ({bump_type})")
+
+          # Update pyproject.toml using tomlkit to preserve formatting
+          content = open("pyproject.toml", encoding="utf-8").read()
+          doc = tomlkit.parse(content)
+          doc["project"]["version"] = new_version
+          open("pyproject.toml", "w", encoding="utf-8").write(tomlkit.dumps(doc))
+
+          # Update src/<package>/__init__.py __version__
+          import pathlib
+          src_dir = pathlib.Path("src")
+          init_files = list(src_dir.glob("*/__init__.py"))
+          for init_path in init_files:
+              text = init_path.read_text(encoding="utf-8")
+              pattern = r'__version__\\s*=\\s*["\\'][^"\\']+["\\']'
+              if re.search(pattern, text):
+                  updated = re.sub(pattern, f'__version__ = "{new_version}"', text)
+                  init_path.write_text(updated, encoding="utf-8")
+                  print(f"Updated {init_path}")
+
+          # Write new version to file for subsequent steps
+          open(".new_version", "w").write(new_version)
+          PYEOF
+
+      - name: Commit, tag, and push
+        if: steps.config.outputs.auto_version == 'true' && steps.detect.outputs.bump_type != 'none'
+        run: |
+          NEW_VERSION=$(cat .new_version)
+          rm -f .new_version
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add pyproject.toml
+          git add src/
+
+          git commit -m "chore: bump version to ${NEW_VERSION} [skip ci]"
+          git tag -a "v${NEW_VERSION}" -m "release ${NEW_VERSION}"
+          git push origin main
+          git push origin "v${NEW_VERSION}"
+"""
+
+_GITLAB_VERSION_BUMP = """\
+stages:
+  - version-bump
+
+version-bump:
+  stage: version-bump
+  image: python:3.13
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - pip install tomlkit
+    - git config user.email "ci@gitlab"
+    - git config user.name "GitLab CI"
+  script:
+    - |
+      python - <<'PYEOF'
+      import subprocess, sys, re, os
+      from pathlib import Path
+
+      # Read auto_version config
+      try:
+          import tomlkit
+          doc = tomlkit.parse(Path("pyproject.toml").read_text())
+          auto_version = doc.get("tool", {}).get("prothon", {}).get("ci", {}).get("auto_version", True)
+      except Exception:
+          auto_version = True
+
+      if not auto_version:
+          print("auto_version is false — skipping version bump")
+          sys.exit(0)
+
+      # Detect changed files
+      before_sha = os.environ.get("CI_COMMIT_BEFORE_SHA", "")
+      current_sha = os.environ.get("CI_COMMIT_SHA", "HEAD")
+
+      if not before_sha or before_sha == "0000000000000000000000000000000000000000":
+          result = subprocess.run(
+              ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
+              capture_output=True, text=True
+          )
+      else:
+          result = subprocess.run(
+              ["git", "diff", "--name-only", before_sha, current_sha],
+              capture_output=True, text=True
+          )
+
+      if result.returncode != 0:
+          print(f"git diff failed: {result.stderr}", file=sys.stderr)
+          sys.exit(1)
+
+      files = {line for line in result.stdout.strip().splitlines() if line.strip()}
+      print(f"Changed files: {files}")
+
+      # Determine bump type
+      if "docs/SPEC.md" in files:
+          bump_type = "major"
+      elif "docs/DESIGN.md" in files:
+          bump_type = "minor"
+      elif "docs/PATTERNS.md" in files or any(f.startswith("src/") for f in files):
+          bump_type = "patch"
+      else:
+          print("No relevant files changed — skipping version bump")
+          sys.exit(0)
+
+      print(f"Bump type: {bump_type}")
+
+      # Read current version
+      doc = tomlkit.parse(Path("pyproject.toml").read_text())
+      current_version = doc["project"]["version"]
+      print(f"Current version: {current_version}")
+
+      # Semver arithmetic
+      match = re.fullmatch(r"v?(\\d+)\\.(\\d+)\\.(\\d+)", current_version)
+      if not match:
+          print(f"Invalid version format: {current_version}", file=sys.stderr)
+          sys.exit(1)
+      major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+      if bump_type == "major":
+          new_version = f"{major + 1}.0.0"
+      elif bump_type == "minor":
+          new_version = f"{major}.{minor + 1}.0"
+      else:
+          new_version = f"{major}.{minor}.{patch + 1}"
+
+      print(f"New version: {new_version}")
+
+      # Update pyproject.toml
+      doc["project"]["version"] = new_version
+      Path("pyproject.toml").write_text(tomlkit.dumps(doc))
+
+      # Update src/<package>/__init__.py
+      init_files = list(Path("src").glob("*/__init__.py"))
+      for init_path in init_files:
+          content = init_path.read_text()
+          pattern = r'__version__\\s*=\\s*["\\'][^"\\']+["\\']'
+          if re.search(pattern, content):
+              updated = re.sub(pattern, f'__version__ = "{new_version}"', content)
+              init_path.write_text(updated)
+              print(f"Updated {init_path}")
+
+      # Commit and tag
+      subprocess.run(["git", "add", "pyproject.toml"] + [str(p) for p in init_files], check=True)
+      subprocess.run(["git", "commit", "-m", f"chore: bump version to {new_version} [skip ci]"], check=True)
+      subprocess.run(["git", "tag", "-a", f"v{new_version}", "-m", f"release {new_version}"], check=True)
+
+      # Push changes and tag
+      remote_url = f"https://gitlab-ci-token:{os.environ['GITLAB_TOKEN']}@{os.environ['CI_SERVER_HOST']}/{os.environ['CI_PROJECT_PATH']}.git"
+      subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
+      subprocess.run(["git", "push", "origin", f"HEAD:{os.environ['CI_COMMIT_BRANCH']}"], check=True)
+      subprocess.run(["git", "push", "origin", f"v{new_version}"], check=True)
+
+      print(f"Successfully bumped version to {new_version} and pushed tag v{new_version}")
+      PYEOF
 """
 
 _AGENTS_CONTENT = """\
@@ -316,4 +617,51 @@ def init_existing(cwd: Path | None = None) -> list[Path]:
     skills_dir.mkdir(parents=True, exist_ok=True)
     created.append(skills_dir)
 
+    # Add version-bump CI workflow if not already present
+    workflow_path = root / ".github" / "workflows" / "version-bump.yml"
+    if not workflow_path.exists():
+        workflow_path.parent.mkdir(parents=True, exist_ok=True)
+        workflow_path.write_text(_VERSION_BUMP_WORKFLOW)
+        created.append(workflow_path)
+
+    # Add GitLab CI version-bump workflow if no .gitlab-ci.yml exists
+    gitlab_ci_path = root / ".gitlab-ci.yml"
+    if not gitlab_ci_path.exists():
+        gitlab_ci_path.write_text(_GITLAB_VERSION_BUMP)
+        created.append(gitlab_ci_path)
+
+    # Append [tool.prothon.ci] to pyproject.toml if it exists and lacks the section
+    pyproject_path = root / "pyproject.toml"
+    if pyproject_path.exists():
+        _ensure_prothon_ci_section(pyproject_path)
+
     return created
+
+
+def _ensure_prothon_ci_section(pyproject_path: Path) -> None:
+    """Append [tool.prothon.ci] with auto_version = true if absent.
+
+    Args:
+        pyproject_path: Path to pyproject.toml to modify in place.
+    """
+    doc = tomlkit.parse(pyproject_path.read_text(encoding="utf-8"))
+    tool = doc.get("tool")
+    prothon_section = tool.get("prothon") if isinstance(tool, dict) else None
+    ci_section = (
+        prothon_section.get("ci") if isinstance(prothon_section, dict) else None
+    )
+    if ci_section is not None:
+        return
+    if not isinstance(tool, dict):
+        tool = tomlkit.table(is_super_table=True)
+        doc.add("tool", tool)
+    if not isinstance(prothon_section, dict):
+        prothon_section = tomlkit.table(is_super_table=True)
+        tool.add("prothon", prothon_section)
+    ci = tomlkit.table()
+    ci.add(
+        tomlkit.comment("Set to false to disable automatic version bumping"),
+    )
+    ci.add("auto_version", True)
+    prothon_section.add("ci", ci)
+    pyproject_path.write_text(tomlkit.dumps(doc), encoding="utf-8")

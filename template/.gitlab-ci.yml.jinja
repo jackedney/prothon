@@ -1,5 +1,6 @@
 stages:
   - check
+  - version-bump
 
 variables:
   PYTHON_VERSION: "{{ python_version }}"
@@ -18,3 +19,115 @@ check:
     - uv run vulture src/
     - uv run complexipy src/
     - uv run pytest
+
+version-bump:
+  stage: version-bump
+  image: python:${PYTHON_VERSION}
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - pip install tomlkit
+    - git config user.email "ci@gitlab"
+    - git config user.name "GitLab CI"
+  script:
+    - |
+      python - <<'PYEOF'
+      import subprocess, sys, re, os
+      from pathlib import Path
+
+      # Read auto_version config
+      try:
+          import tomlkit
+          doc = tomlkit.parse(Path("pyproject.toml").read_text())
+          auto_version = doc.get("tool", {}).get("prothon", {}).get("ci", {}).get("auto_version", True)
+      except Exception:
+          auto_version = True
+
+      if not auto_version:
+          print("auto_version is false — skipping version bump")
+          sys.exit(0)
+
+      # Detect changed files
+      before_sha = os.environ.get("CI_COMMIT_BEFORE_SHA", "")
+      current_sha = os.environ.get("CI_COMMIT_SHA", "HEAD")
+
+      if not before_sha or before_sha == "0000000000000000000000000000000000000000":
+          # Fallback: diff against previous commit
+          result = subprocess.run(
+              ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
+              capture_output=True, text=True
+          )
+      else:
+          result = subprocess.run(
+              ["git", "diff", "--name-only", before_sha, current_sha],
+              capture_output=True, text=True
+          )
+
+      if result.returncode != 0:
+          print(f"git diff failed: {result.stderr}", file=sys.stderr)
+          sys.exit(1)
+
+      files = {line for line in result.stdout.strip().splitlines() if line.strip()}
+      print(f"Changed files: {files}")
+
+      # Determine bump type
+      if "docs/SPEC.md" in files:
+          bump_type = "major"
+      elif "docs/DESIGN.md" in files:
+          bump_type = "minor"
+      elif "docs/PATTERNS.md" in files or any(f.startswith("src/") for f in files):
+          bump_type = "patch"
+      else:
+          print("No relevant files changed — skipping version bump")
+          sys.exit(0)
+
+      print(f"Bump type: {bump_type}")
+
+      # Read current version
+      doc = tomlkit.parse(Path("pyproject.toml").read_text())
+      current_version = doc["project"]["version"]
+      print(f"Current version: {current_version}")
+
+      # Semver arithmetic
+      match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", current_version)
+      if not match:
+          print(f"Invalid version format: {current_version}", file=sys.stderr)
+          sys.exit(1)
+      major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+      if bump_type == "major":
+          new_version = f"{major + 1}.0.0"
+      elif bump_type == "minor":
+          new_version = f"{major}.{minor + 1}.0"
+      else:
+          new_version = f"{major}.{minor}.{patch + 1}"
+
+      print(f"New version: {new_version}")
+
+      # Update pyproject.toml
+      doc["project"]["version"] = new_version
+      Path("pyproject.toml").write_text(tomlkit.dumps(doc))
+
+      # Update src/<package>/__init__.py
+      init_files = list(Path("src").glob("*/__init__.py"))
+      for init_path in init_files:
+          content = init_path.read_text()
+          pattern = r'__version__\s*=\s*["\'][^"\']+["\']'
+          if re.search(pattern, content):
+              updated = re.sub(pattern, f'__version__ = "{new_version}"', content)
+              init_path.write_text(updated)
+              print(f"Updated {init_path}")
+
+      # Commit and tag
+      subprocess.run(["git", "add", "pyproject.toml"] + [str(p) for p in init_files], check=True)
+      subprocess.run(["git", "commit", "-m", f"chore: bump version to {new_version} [skip ci]"], check=True)
+      subprocess.run(["git", "tag", "-a", f"v{new_version}", "-m", f"release {new_version}"], check=True)
+
+      # Push changes and tag
+      remote_url = f"https://gitlab-ci-token:{os.environ['GITLAB_TOKEN']}@{os.environ['CI_SERVER_HOST']}/{os.environ['CI_PROJECT_PATH']}.git"
+      subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
+      subprocess.run(["git", "push", "origin", f"HEAD:{os.environ['CI_COMMIT_BRANCH']}"], check=True)
+      subprocess.run(["git", "push", "origin", f"v{new_version}"], check=True)
+
+      print(f"Successfully bumped version to {new_version} and pushed tag v{new_version}")
+      PYEOF

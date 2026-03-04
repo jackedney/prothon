@@ -8,6 +8,7 @@ from enum import Enum
 from pathlib import Path
 
 import tomlkit
+import tomlkit.exceptions
 
 from prothon.exceptions import PromiseError
 from prothon.git import GitDiffProvider, SubprocessGitDiff

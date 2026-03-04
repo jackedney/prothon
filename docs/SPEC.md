@@ -27,7 +27,7 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 14. The command must create AGENTS.md and symlinks (CLAUDE.md, GEMINI.md, AGENT.md) pointing to AGENTS.md.
 15. The command must create a `.agents/skills/` directory for project-specific reference skills.
 16. The command must print a summary of created files and suggest running `prothon spec` as the next step.
-17. The command must not modify existing files, configuration, dependencies, toolchain, pre-commit hooks, CI workflows, or git history.
+17. The command must not modify existing source files, dependencies, toolchain, pre-commit hooks, or git history. The command may add CI workflows for semantic versioning.
 
 ### Documentation Hierarchy
 
@@ -63,14 +63,26 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 38. Reference skills must cover four categories: library usage, language style conventions, performance patterns, and domain knowledge.
 39. Generated reference skills must be stored in the project's local skills directory so they are available to all AI agents working on the project.
 
+### Semantic Versioning
+
+40. The system must automatically bump the project version based on which documentation level changed.
+41. Changes to SPEC.md must trigger a major version bump.
+42. Changes to DESIGN.md (without SPEC.md changes) must trigger a minor version bump.
+43. Changes to PATTERNS.md or source code only (without documentation changes) must trigger a patch version bump.
+44. Version bumps must update the version in `pyproject.toml`, `src/<package>/__init__.py`, and create a corresponding git tag.
+45. Version bumping must occur automatically in CI without requiring human approval.
+46. Scaffolded projects (`prothon new`) must include CI workflows that detect change types and perform version bumps.
+47. Adopted projects (`prothon init`) must receive CI workflows that detect change types and perform version bumps.
+48. The version bump CI workflow must be included for both GitHub Actions and GitLab CI/CD.
+
 ### CLI and Agent Integration
 
-40. All documentation and execution workflows must be invocable via CLI commands (`prothon spec`, `prothon design`, `prothon patterns`, `prothon execute`, `prothon compliance`).
-41. The system must support Claude Code and opencode as AI assistants for all agent workflows, with identical behavior and experience across both.
-42. The user must be able to select their preferred AI assistant via CLI flag, environment variable, project-level configuration, and global user-level configuration.
-43. Built-in skills must be bundled with the package and synced to the active assistant's skill directory on every CLI invocation.
-44. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
-45. When opencode is the selected assistant, the user must be able to configure a model and provider via the same configuration hierarchy (CLI flag, environment variable, project-level configuration, global user-level configuration). If neither is configured, prothon must invoke opencode without specifying model or provider, deferring to opencode's own defaults.
+49. All documentation and execution workflows must be invocable via CLI commands (`prothon spec`, `prothon design`, `prothon patterns`, `prothon execute`, `prothon compliance`).
+50. The system must support Claude Code and opencode as AI assistants for all agent workflows, with identical behavior and experience across both.
+51. The user must be able to select their preferred AI assistant via CLI flag, environment variable, project-level configuration, and global user-level configuration.
+52. Built-in skills must be bundled with the package and synced to the active assistant's skill directory on every CLI invocation.
+53. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
+54. When opencode is the selected assistant, the user must be able to configure a model and provider via the same configuration hierarchy (CLI flag, environment variable, project-level configuration, global user-level configuration). If neither is configured, prothon must invoke opencode without specifying model or provider, deferring to opencode's own defaults.
 
 ## Constraints
 

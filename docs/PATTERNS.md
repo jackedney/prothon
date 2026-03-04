@@ -797,6 +797,149 @@ These are internal to `init_existing()` — no new public functions in `scaffold
 | CI platform detection | `_detect_ci_platform()` in `scaffold.py` | Sensible default (GitHub), user can delete unwanted |
 | Idempotent config append | `_append_prothon_ci_section()` in `scaffold.py` | Safe re-runs, no duplicate sections |
 
+## Skill Authoring Patterns
+
+### Frontmatter Conventions
+
+All bundled skills live in `src/prothon/skills/` as directories containing a `SKILL.md`. Frontmatter fields vary by skill type:
+
+| Field | User-facing session skills | Subagent-mode skills |
+|-------|---------------------------|---------------------|
+| `name` | Required | Required |
+| `description` | Required | Required |
+| `model` | Omitted — user's assistant selection applies | `sonnet` — cost-effective for automated analysis |
+| `context` | Omitted — runs in user's session | `fork` — isolates subagent context |
+
+**User-facing session skills** (spec-writer, design-writer, patterns-writer, execute): launched by the user via `prothon <command>`, run interactively. No `model` or `context` frontmatter — the user controls which assistant and model they use.
+
+**Subagent-mode skills** (compliance-checker, doc-harmonizer, tech-researcher): spawned programmatically by other skills, run autonomously. Set `model: sonnet` and `context: fork` to control cost and isolation.
+
+```yaml
+---
+name: prothon-doc-harmonizer
+description: Cross-reference SPEC, DESIGN, and PATTERNS for conflicts
+model: sonnet
+context: fork
+---
+```
+
+Note: `model` and `context` are Claude Code extensions — opencode silently ignores them. Skills must not depend on these fields for correct behavior. Any skill that needs subagent isolation must use the explicit "Spawn a subagent" instruction pattern instead.
+
+### Skill Structure
+
+Standard sections in order. Not all skills need every section, but those present follow this sequence:
+
+1. **`## Role`** — One-sentence identity statement. What the skill is and does.
+2. **`## Prerequisites`** — Guard conditions checked before proceeding (e.g., which docs must exist). Directs the user to the correct CLI command if preconditions fail.
+3. **`## Focus`** — Optional. Priorities and principles that guide the skill's decisions.
+4. **`## Process`** — The bulk of the skill. Numbered steps, possibly with Path A / Path B branching (e.g., new vs update workflows for doc-writers).
+5. **`## Guards`** — Explicit prohibitions — what the skill must refuse to do. Enforces separation of concerns and doc authority.
+6. **`## Output`** — What the skill produces when complete.
+7. **`## After Writing`** — Quality gates that run post-write: commit the file, launch harmonizer subagent, etc.
+
+```markdown
+## Role
+You are the Design Writer. ...
+
+## Prerequisites
+- `docs/SPEC.md` must exist and be populated
+- If missing, refuse and direct the user to run `prothon spec`
+
+## Process
+### Path A: New Design (DESIGN.md is empty)
+...
+### Path B: Updating Existing Design (DESIGN.md has content)
+...
+
+## Guards
+You MUST refuse to include anything that contradicts SPEC.md.
+
+## Output
+A populated `docs/DESIGN.md` with all sections filled in.
+
+## After Writing
+1. Commit: `git add docs/DESIGN.md && git commit -m "docs: update DESIGN.md via design-writer"`
+2. Launch doc-harmonizer subagent.
+```
+
+### Subagent Spawning
+
+Skills that need to spawn subagents use canonical agent type names from the DESIGN's subagent type mapping table. The instruction format is:
+
+```
+Spawn a subagent (type: general-purpose, fresh context) with this prompt:
+"Load the prothon-<skill-name> skill and execute it. ..."
+```
+
+Skills must NOT reference tool-specific APIs (e.g., `Task tool, subagent_type: general-purpose` for Claude Code, or `task` tool for opencode). Each assistant's LLM translates the canonical instruction into its native tool call. The canonical names are:
+
+| Canonical name | Use case |
+|---------------|----------|
+| `general-purpose` | Quality gate subagents (harmonizer, compliance, tech-researcher) |
+| `explore` | Codebase exploration |
+| `plan` | Implementation planning |
+
+Subagent prompts should be self-contained — include enough context for the subagent to operate without reading the parent skill's conversation history. Always specify "fresh context" to ensure a clean slate.
+
+### Conversational Cadence
+
+User-facing doc-writer skills (spec-writer, design-writer, patterns-writer) enforce strict one-message-then-wait cadence:
+
+- Send ONE section or question per message, then STOP and wait for the user's response
+- Use plain text output — do NOT use the `AskUserQuestion` tool
+- Every message should end with an implicit or explicit "what do you think?"
+- Never dump all decisions or sections at once
+
+This ensures the user stays in control of design decisions and can steer direction incrementally.
+
+### Documentation Safety in Skills
+
+**Read-only guards** — Non-doc agents (execute, compliance-checker, tech-researcher) explicitly declare in their Guards section that `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` are read-only and must not be written to.
+
+**Commit-after-write** — Every skill that writes to a documentation file commits immediately after writing:
+
+```bash
+git add docs/<FILE>.md
+git commit -m "docs: update <FILE>.md via <skill-name>"
+# Do NOT push — local commit only
+```
+
+This prevents subsequent agent sessions from accidentally overwriting uncommitted changes.
+
+**Permitted writers per file:**
+
+| File | Permitted writers |
+|------|-------------------|
+| `docs/SPEC.md` | spec-writer only |
+| `docs/DESIGN.md` | design-writer, doc-harmonizer (with user approval) |
+| `docs/PATTERNS.md` | patterns-writer, doc-harmonizer (with user approval) |
+
+### CLI References in Skills
+
+Skills tell users to run CLI commands, never skill slash commands. Users should not need to know about the skill layer.
+
+```
+# Good — user runs this
+Next step: run `prothon design`
+
+# Bad — leaks implementation detail
+Next step: run `/prothon-design-writer`
+```
+
+### Generated Reference Skills
+
+The tech-researcher generates project-specific reference skills in `.agents/skills/`. These follow a simpler structure than bundled skills:
+
+```yaml
+---
+name: tech-<library>
+description: Reference guide for <library> — <one-line purpose>
+user-invocable: false
+---
+```
+
+Generated skills are reference material (not interactive agents), so they set `user-invocable: false` and contain documentation content rather than process instructions.
+
 ## Error Handling
 
 ### Custom Exception Hierarchy

@@ -185,17 +185,20 @@ def test_init_existing_returns_created_paths(tmp_path):
         "GEMINI.md",
         "AGENT.md",
         "skills",
+        "version-bump.yml",
     }
     created_names = {p.name for p in created}
     assert expected_names == created_names
 
 
 def test_init_existing_does_not_modify_existing_files(tmp_path):
-    """init_existing leaves pre-existing files untouched."""
+    """init_existing leaves pre-existing source content untouched."""
     run_git("init", cwd=tmp_path)
     (tmp_path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 88\n")
     init_existing(cwd=tmp_path)
-    assert "[tool.ruff]" in (tmp_path / "pyproject.toml").read_text()
+    content = (tmp_path / "pyproject.toml").read_text()
+    assert "[tool.ruff]" in content
+    assert "line-length = 88" in content
 
 
 def test_init_existing_spec_scaffold_has_required_sections(tmp_path):
@@ -551,3 +554,90 @@ def test_generate_license_none_excluded(tmp_path):
     generate(dest, data)
     content = (dest / "pyproject.toml").read_text()
     assert 'license = "None"' not in content
+
+
+# --- init_existing: version-bump CI workflow ---
+
+
+def test_init_existing_creates_version_bump_workflow(tmp_path):
+    """init_existing creates .github/workflows/version-bump.yml (Path B)."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    init_existing(cwd=tmp_path)
+
+    workflow = tmp_path / ".github" / "workflows" / "version-bump.yml"
+    assert workflow.exists()
+
+
+def test_init_existing_version_bump_workflow_content(tmp_path):
+    """version-bump.yml triggers on main and has version-bump job."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    init_existing(cwd=tmp_path)
+
+    content = (tmp_path / ".github" / "workflows" / "version-bump.yml").read_text()
+    assert "branches: [main]" in content
+    assert "version-bump:" in content
+    assert "name: Version Bump" in content
+
+
+def test_init_existing_appends_prothon_ci_to_pyproject(tmp_path):
+    """init_existing appends [tool.prothon.ci] to pyproject.toml (Path B)."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    init_existing(cwd=tmp_path)
+
+    content = (tmp_path / "pyproject.toml").read_text()
+    assert "[tool.prothon.ci]" in content
+    assert "auto_version = true" in content
+
+
+def test_init_existing_does_not_overwrite_existing_prothon_ci(tmp_path):
+    """init_existing does NOT modify pyproject.toml if [tool.prothon.ci] exists."""
+    run_git("init", cwd=tmp_path)
+    original = "[project]\nname = 'test'\n\n[tool.prothon.ci]\nauto_version = false\n"
+    (tmp_path / "pyproject.toml").write_text(original)
+    init_existing(cwd=tmp_path)
+
+    content = (tmp_path / "pyproject.toml").read_text()
+    assert "auto_version = false" in content
+    # Should not have duplicate sections
+    assert content.count("[tool.prothon.ci]") == 1
+
+
+def test_init_existing_creates_workflow_without_pyproject(tmp_path):
+    """init_existing creates version-bump.yml even when pyproject.toml absent (Path A)."""
+    from unittest.mock import patch
+
+    run_git("init", cwd=tmp_path)
+
+    with patch("copier.run_copy"):
+        with patch(
+            "prothon.scaffold._collect_project_details",
+            return_value={
+                "module_name": "testmod",
+                "description": "test",
+                "author_name": "Test",
+                "author_email": "test@example.com",
+                "python_version": "3.12",
+                "license": "MIT",
+            },
+        ):
+            init_existing(cwd=tmp_path)
+
+    workflow = tmp_path / ".github" / "workflows" / "version-bump.yml"
+    assert workflow.exists()
+
+
+def test_init_existing_skips_existing_workflow(tmp_path):
+    """init_existing does not overwrite pre-existing version-bump.yml."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    workflow_dir = tmp_path / ".github" / "workflows"
+    workflow_dir.mkdir(parents=True)
+    (workflow_dir / "version-bump.yml").write_text("# custom workflow\n")
+
+    init_existing(cwd=tmp_path)
+
+    content = (workflow_dir / "version-bump.yml").read_text()
+    assert content == "# custom workflow\n"

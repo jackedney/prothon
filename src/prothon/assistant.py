@@ -31,6 +31,8 @@ class AssistantBackend(Protocol):
 
     def env_overrides(self) -> dict[str, str]: ...
 
+    def subagent_type_map(self) -> dict[str, str]: ...
+
 
 class ClaudeCodeBackend:
     """Claude Code assistant backend — invokes the ``claude`` CLI."""
@@ -62,6 +64,14 @@ class ClaudeCodeBackend:
     def env_overrides(self) -> dict[str, str]:
         """Return extra environment variables for Claude Code sessions."""
         return {}
+
+    def subagent_type_map(self) -> dict[str, str]:
+        """Return mapping from canonical subagent types to Claude Code names."""
+        return {
+            "general-purpose": "general-purpose",
+            "explore": "Explore",
+            "plan": "Plan",
+        }
 
 
 class OpenCodeBackend:
@@ -103,6 +113,10 @@ class OpenCodeBackend:
     def env_overrides(self) -> dict[str, str]:
         """Return extra environment variables for opencode sessions."""
         return {}
+
+    def subagent_type_map(self) -> dict[str, str]:
+        """Return mapping from canonical subagent types to opencode names."""
+        return {"general-purpose": "general", "explore": "explore", "plan": "plan"}
 
 
 _BACKENDS: dict[str, type[AssistantBackend]] = {

@@ -46,6 +46,9 @@ class FakeBackend:
     def env_overrides(self) -> dict[str, str]:
         return {}
 
+    def subagent_type_map(self) -> dict[str, str]:
+        return {}
+
 
 # --- Protocol conformance ---
 
@@ -134,6 +137,17 @@ def test_claude_code_backend_env_overrides() -> None:
     assert backend.env_overrides() == {}
 
 
+def test_claude_code_backend_subagent_type_map() -> None:
+    """ClaudeCodeBackend returns Claude Code subagent type mappings."""
+    backend = ClaudeCodeBackend()
+    expected = {
+        "general-purpose": "general-purpose",
+        "explore": "Explore",
+        "plan": "Plan",
+    }
+    assert backend.subagent_type_map() == expected
+
+
 # --- OpenCodeBackend ---
 
 
@@ -163,6 +177,13 @@ def test_opencode_backend_env_overrides() -> None:
     """OpenCodeBackend returns empty env_overrides."""
     backend = OpenCodeBackend()
     assert backend.env_overrides() == {}
+
+
+def test_opencode_backend_subagent_type_map() -> None:
+    """OpenCodeBackend returns opencode subagent type mappings."""
+    backend = OpenCodeBackend()
+    expected = {"general-purpose": "general", "explore": "explore", "plan": "plan"}
+    assert backend.subagent_type_map() == expected
 
 
 def test_opencode_backend_build_command_with_model() -> None:

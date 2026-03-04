@@ -186,6 +186,7 @@ def test_init_existing_returns_created_paths(tmp_path):
         "AGENT.md",
         "skills",
         "version-bump.yml",
+        ".gitlab-ci.yml",
     }
     created_names = {p.name for p in created}
     assert expected_names == created_names
@@ -641,3 +642,29 @@ def test_init_existing_skips_existing_workflow(tmp_path):
 
     content = (workflow_dir / "version-bump.yml").read_text()
     assert content == "# custom workflow\n"
+
+
+def test_init_existing_creates_gitlab_ci(tmp_path):
+    """init_existing creates .gitlab-ci.yml with version-bump job."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+
+    init_existing(cwd=tmp_path)
+
+    gitlab_ci = tmp_path / ".gitlab-ci.yml"
+    assert gitlab_ci.exists()
+    content = gitlab_ci.read_text()
+    assert "version-bump" in content
+    assert "CI_COMMIT_BRANCH" in content
+
+
+def test_init_existing_skips_existing_gitlab_ci(tmp_path):
+    """init_existing does not overwrite pre-existing .gitlab-ci.yml."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    (tmp_path / ".gitlab-ci.yml").write_text("# existing ci config\n")
+
+    init_existing(cwd=tmp_path)
+
+    content = (tmp_path / ".gitlab-ci.yml").read_text()
+    assert content == "# existing ci config\n"

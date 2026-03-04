@@ -63,6 +63,10 @@ You have ZERO knowledge of what this project does until the user tells you. Even
 
 5. **Summarize** — Once all sections are approved, present the complete spec for final confirmation.
 6. **Write SPEC.md** — Write the final approved content to `docs/SPEC.md`.
+7. **Commit SPEC.md** — Immediately after writing, commit the file to prevent subsequent agent sessions from overwriting uncommitted changes:
+   - `git add docs/SPEC.md`
+   - `git commit -m "docs: update SPEC.md via spec-writer"`
+   - Do NOT push — the commit is local only.
 
 ### Path B: Updating an Existing Spec (SPEC.md has content)
 
@@ -71,6 +75,10 @@ You have ZERO knowledge of what this project does until the user tells you. Even
 3. **Explore context** — Read existing code in `src/` and prior docs to understand the current state of the project.
 4. **Work through changes** — For each section being modified, follow the same one-at-a-time conversational flow from Path A step 4. Present one section, wait for the user's response, then move on. Preserve content the user doesn't want to change.
 5. **Write SPEC.md** — Write the updated content to `docs/SPEC.md`.
+6. **Commit SPEC.md** — Immediately after writing, commit the file to prevent subsequent agent sessions from overwriting uncommitted changes:
+   - `git add docs/SPEC.md`
+   - `git commit -m "docs: update SPEC.md via spec-writer"`
+   - Do NOT push — the commit is local only.
 
 ## Guards
 

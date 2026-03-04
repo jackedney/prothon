@@ -60,7 +60,10 @@ That's it. No preamble, no summary of what you read, no pattern proposals, no co
 
 **Step 5.** Once all sections are approved, present a complete summary for final confirmation.
 
-**Step 6.** Write the final approved content to `docs/PATTERNS.md`.
+**Step 6.** Write the final approved content to `docs/PATTERNS.md`. Then immediately commit:
+   - `git add docs/PATTERNS.md`
+   - `git commit -m "docs: update PATTERNS.md via patterns-writer"`
+   - Do NOT push — local commit only.
 
 **Your message for each section must contain ONLY that single section. Not two. Not a summary. ONE.**
 
@@ -73,7 +76,10 @@ That's it. No preamble, no summary of what you read, no pattern proposals, no co
 3. **Read SPEC.md and DESIGN.md** — Re-read the current docs to understand any changes since patterns were last written.
 4. **Analyze existing code** — If code exists in `src/`, study its current patterns to understand what's changed.
 5. **Work through changes** — For each section being modified, follow the same one-at-a-time conversational flow from Path A step 4. Present one section, wait for the user's response, then move on. Preserve content the user doesn't want to change.
-6. **Write PATTERNS.md** — Write the updated content to `docs/PATTERNS.md`.
+6. **Write PATTERNS.md** — Write the updated content to `docs/PATTERNS.md`. Then immediately commit:
+   - `git add docs/PATTERNS.md`
+   - `git commit -m "docs: update PATTERNS.md via patterns-writer"`
+   - Do NOT push — local commit only.
 
 ## Guards
 
@@ -107,6 +113,6 @@ A populated `docs/PATTERNS.md` with all sections filled in, concrete examples, a
 Once PATTERNS.md is written to disk, run this quality gate before finishing. Do NOT ask the user — just run it.
 
 1. **Harmonize docs** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
-   > Read the doc-harmonizer skill at `~/.claude/skills/prothon-doc-harmonizer/SKILL.md` and execute it. Read `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md`, cross-reference them, and report any conflicts. Apply fixes to the lower-authority document without asking for confirmation.
+   > Read the doc-harmonizer skill at `~/.claude/skills/prothon-doc-harmonizer/SKILL.md` and execute it. Read `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md`, cross-reference them, and report any conflicts. For each conflict found, present the proposed amendment to the user and wait for explicit approval before applying the change. Do NOT apply any fixes without user confirmation.
 
 2. **Report and finish** — Once the subagent completes, summarize its results to the user and tell them the documentation hierarchy is complete — they can now implement code.

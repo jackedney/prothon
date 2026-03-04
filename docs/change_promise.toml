@@ -52,8 +52,8 @@ context_files = ["template/.github/workflows/ci.yml.jinja", "docs/DESIGN.md", "s
 doc_sections = ["DESIGN.md#CI-Workflow-Contract", "DESIGN.md#Version-Bumping-Contract", "SPEC.md#Semantic-Versioning"]
 reference_skills = ["domain-template-engines", "tech-copier"]
 dependencies = []
-completed = false
-attempts = 0
+completed = true
+attempts = 1
 max_attempts = 3
 
 [[tasks]]
@@ -64,7 +64,7 @@ success_criteria = "GitLab CI config includes version-bump stage with auto_versi
 files_to_create = []
 files_to_modify = ["template/.gitlab-ci.yml.jinja"]
 files_to_remove = []
-expected_lines_added = 35
+expected_lines_added = 113
 expected_lines_removed = 0
 context_files = ["docs/DESIGN.md", "src/prothon/versioning.py"]
 doc_sections = ["DESIGN.md#CI-Workflow-Contract", "DESIGN.md#Version-Bumping-Contract", "SPEC.md#Semantic-Versioning"]

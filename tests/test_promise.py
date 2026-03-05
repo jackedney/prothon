@@ -1072,6 +1072,31 @@ def test_complete_task_negative_index_rejected(tmp_path: Path):
         complete_task(-1, diff=FakeGitDiff(), path=path)
 
 
+def test_complete_task_parallel_no_lost_updates(tmp_path: Path):
+    """Concurrent completions must not overwrite each other (GH-17)."""
+    import concurrent.futures
+
+    p = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="T0"), Task(title="T1"), Task(title="T2")],
+    )
+    path = tmp_path / "promise.toml"
+    save_promise(p, path)
+    fake = FakeGitDiff()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        futures = [
+            pool.submit(complete_task, i, diff=fake, path=path) for i in range(3)
+        ]
+        for f in futures:
+            f.result()
+
+    result = load_promise(path)
+    assert all(t.completed for t in result.tasks), (
+        f"Expected all tasks completed, got: {[t.completed for t in result.tasks]}"
+    )
+
+
 # --- status detail ---
 
 

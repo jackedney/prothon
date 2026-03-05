@@ -329,6 +329,33 @@ def test_load_missing(tmp_path):
     report = load_promise(path=tmp_path / "nonexistent.toml")
 ```
 
+### File Locking for Concurrent Access
+
+When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates.
+
+```python
+@contextmanager
+def _lock_promise(path: Path) -> Iterator[None]:
+    lock_path = path.with_suffix(".toml.lock")
+    lock_path.touch(exist_ok=True)
+    fd = lock_path.open("w")
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
+
+def complete_task(task_index, ...):
+    report = check_task(...)       # read-only, no lock needed
+    with _lock_promise(path):      # exclusive lock for write
+        promise = load_promise(path)
+        promise.tasks[task_index].completed = True
+        save_promise(promise, path)
+```
+
+The lock uses a sibling `.toml.lock` file (not the TOML itself) so the promise file can be fully rewritten without interfering with the lock. Only `complete_task` needs locking — read-only operations (`status`, `check_task`, `plan`) are safe without it.
+
 ### Guard-Clause Preconditions
 
 Domain functions that require specific environmental conditions validate them upfront and raise domain exceptions. Guards come first, happy path follows. No nested `if/else` trees.

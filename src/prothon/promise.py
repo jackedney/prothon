@@ -17,6 +17,7 @@ from prothon.exceptions import PromiseError
 from prothon.git import GitDiffProvider, SubprocessGitDiff
 
 PROMISE_PATH = Path("docs/change_promise.toml")
+DEFAULT_TOLERANCE = 30
 
 
 @contextmanager
@@ -234,7 +235,7 @@ def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
 def _within_tolerance(expected: int, actual: int) -> bool:
     """Check if actual is within +/-30% or +/-30 lines of expected (whichever is greater)."""
     pct_tolerance = expected * 0.3
-    abs_tolerance = 30
+    abs_tolerance = DEFAULT_TOLERANCE
     tolerance = int(max(pct_tolerance, abs_tolerance))
     return abs(actual - expected) <= tolerance
 

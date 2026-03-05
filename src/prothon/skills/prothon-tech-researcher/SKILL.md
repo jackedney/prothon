@@ -37,7 +37,7 @@ These skills are auto-discovered by agents and loaded when relevant, giving them
 
 For each category, research and generate skill files as described below. The `.agents/skills/` directory is symlinked to `.claude/skills/` and `.opencode/skills/`, so generated skills are auto-discovered by both tools.
 
-**Use parallel subagents** (via the Task tool) to research multiple targets concurrently where possible.
+**Use parallel subagents** to research multiple targets concurrently where possible.
 
 #### A. Technology references (`tech-<package-name>`)
 

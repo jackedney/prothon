@@ -29,14 +29,14 @@ if sys.platform == "win32":
     def _lock_promise(path: Path) -> Iterator[None]:
         """Acquire an exclusive file lock on the promise file (Windows)."""
         lock_path = path.with_suffix(".toml.lock")
-        lock_path.touch(exist_ok=True)
-        fd = lock_path.open("w")
-        try:
+        if not lock_path.exists() or lock_path.stat().st_size == 0:
+            lock_path.write_bytes(b"\0")
+        with lock_path.open("r+b") as fd:
             msvcrt.locking(fd.fileno(), msvcrt.LK_LOCK, 1)
-            yield
-        finally:
-            msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)
-            fd.close()
+            try:
+                yield
+            finally:
+                msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)
 
 else:
     import fcntl
@@ -46,13 +46,12 @@ else:
         """Acquire an exclusive file lock on the promise file (Unix)."""
         lock_path = path.with_suffix(".toml.lock")
         lock_path.touch(exist_ok=True)
-        fd = lock_path.open("w")
-        try:
+        with lock_path.open("w") as fd:
             fcntl.flock(fd, fcntl.LOCK_EX)
-            yield
-        finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-            fd.close()
+            try:
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
 
 
 class CheckStatus(Enum):
@@ -251,10 +250,14 @@ def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
     try:
         os.write(fd, content.encode("utf-8"))
         os.fsync(fd)
-        os.close(fd)
-        os.replace(tmp, path)
     except BaseException:
         os.close(fd)
+        os.unlink(tmp)
+        raise
+    os.close(fd)
+    try:
+        os.replace(tmp, path)
+    except BaseException:
         os.unlink(tmp)
         raise
 

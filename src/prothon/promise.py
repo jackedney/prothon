@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import fcntl
 import os
+import sys
 import tempfile
 import uuid
 from contextlib import contextmanager
@@ -22,22 +22,37 @@ PROMISE_PATH = Path("docs/change_promise.toml")
 DEFAULT_TOLERANCE = 30
 
 
-@contextmanager
-def _lock_promise(path: Path) -> Iterator[None]:
-    """Acquire an exclusive file lock on the promise file.
+if sys.platform == "win32":
+    import msvcrt
 
-    Uses a sibling .lock file so the promise TOML can be fully rewritten
-    without interfering with the lock.
-    """
-    lock_path = path.with_suffix(".toml.lock")
-    lock_path.touch(exist_ok=True)
-    fd = lock_path.open("w")
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
-    finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        fd.close()
+    @contextmanager
+    def _lock_promise(path: Path) -> Iterator[None]:
+        """Acquire an exclusive file lock on the promise file (Windows)."""
+        lock_path = path.with_suffix(".toml.lock")
+        lock_path.touch(exist_ok=True)
+        fd = lock_path.open("w")
+        try:
+            msvcrt.locking(fd.fileno(), msvcrt.LK_LOCK, 1)
+            yield
+        finally:
+            msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)
+            fd.close()
+
+else:
+    import fcntl
+
+    @contextmanager
+    def _lock_promise(path: Path) -> Iterator[None]:
+        """Acquire an exclusive file lock on the promise file (Unix)."""
+        lock_path = path.with_suffix(".toml.lock")
+        lock_path.touch(exist_ok=True)
+        fd = lock_path.open("w")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            fd.close()
 
 
 class CheckStatus(Enum):

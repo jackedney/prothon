@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import fcntl
+import os
+import tempfile
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -229,7 +231,17 @@ def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
         tasks_aot.append(tbl)
     doc.add("tasks", tasks_aot)
 
-    path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    content = tomlkit.dumps(doc)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        os.write(fd, content.encode("utf-8"))
+        os.fsync(fd)
+        os.close(fd)
+        os.replace(tmp, path)
+    except BaseException:
+        os.close(fd)
+        os.unlink(tmp)
+        raise
 
 
 def _within_tolerance(expected: int, actual: int) -> bool:

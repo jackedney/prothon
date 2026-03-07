@@ -48,7 +48,7 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 29. The user must approve the plan before any code is written.
 30. Each task must execute in an isolated agent context with only the files and skills relevant to that task.
 31. After each task completes, the system must verify the actual changes against the declared plan, including checking that files exist or were removed as expected and that line counts are within tolerance.
-32. The system must run all toolchain quality checks after each task.
+32. The system must run the project's pre-commit hooks after each task to enforce all toolchain quality checks, and must treat hook failures as task failures.
 33. If a task fails verification or quality checks, the system must retry up to a configurable number of attempts before reporting failure.
 
 ### Compliance Verification

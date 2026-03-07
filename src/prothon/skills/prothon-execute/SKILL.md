@@ -87,9 +87,9 @@ You are implementing a single task. Follow this loop:
    - Success criteria: {success_criteria}
 
 3. QUALITY GATE:
-   a) Stage task files: git add {all task files}
+   a) Stage all changes (including deletions and any hook auto-fixes): git add -A
    b) Run: pre-commit run --all-files --show-diff-on-failure
-   c) If hooks auto-fixed files, re-stage (git add {all task files}) and re-run pre-commit once
+   c) If hooks auto-fixed files, re-stage (git add -A) and re-run pre-commit once
    d) If hooks still fail, go to step 4
 
 4. COMMIT AND VERIFY:
@@ -107,8 +107,8 @@ You are implementing a single task. Follow this loop:
 ```
 
 **Key details:**
-- Stage files BEFORE running pre-commit — hooks need staged content to check
-- Pre-commit hooks may auto-fix files (trailing whitespace, formatting) — re-stage and re-run once if they do
+- Stage with `git add -A` BEFORE running pre-commit — hooks need staged content, and `-A` handles creations, modifications, and deletions
+- Pre-commit hooks may auto-fix files (trailing whitespace, formatting) outside the task file list — re-stage with `git add -A` and re-run once if they do
 - `--no-verify` on commit avoids double-executing hooks that already passed in step 3
 - Subagent commits before promise check — `git diff <base_commit>` sees committed changes
 - `max_attempts` comes from the task's `max_attempts` field in the promise file (default: 3)

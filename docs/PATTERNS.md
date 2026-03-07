@@ -4,13 +4,7 @@
 
 ### Module Layout
 
-Flat structure — one module per subsystem, as defined in DESIGN.md. Each module owns its public API at the top level. No re-exports through `__init__.py`.
-
-```python
-# __init__.py stays minimal
-"""Prothon: docs-first Python project generator."""
-__version__ = "0.1.0"
-```
+Flat structure — one module per subsystem, as defined in DESIGN.md. Each module owns its public API at the top level. No re-exports through `__init__.py` beyond the version string.
 
 ### Naming Conventions
 
@@ -26,27 +20,14 @@ __version__ = "0.1.0"
 
 ### Import Order
 
-```python
-from __future__ import annotations          # 1. future annotations (every file)
-
-import subprocess                            # 2. stdlib (grouped, alphabetical)
-import tomllib
-from dataclasses import dataclass, field
-from pathlib import Path
-
-import tomlkit                               # 3. third-party (alphabetical)
-import typer
-
-from prothon.project import find_project_root  # 4. local (explicit names, no star imports)
-from prothon.exceptions import PromiseError
-```
+Four groups, separated by blank lines, each group alphabetical: (1) `from __future__ import annotations` in every file, (2) stdlib, (3) third-party, (4) local with explicit names — no star imports.
 
 ### Module API Surface
 
-Each module exposes a small public API. Internal helpers stay private. The `_` prefix convention is sufficient at this scale — no `__all__` needed.
+Each module exposes a small public API. Internal helpers use the `_` prefix. No `__all__` — the underscore convention is sufficient at this scale. Public signatures per module:
 
+**promise.py:**
 ```python
-# promise.py — public API
 def load_promise(path: Path = PROMISE_PATH) -> Promise: ...
 def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None: ...
 def check_task(task_index: int, ...) -> TaskCheckReport: ...
@@ -54,60 +35,40 @@ def complete_task(task_index: int, ...) -> None: ...
 def status(path: Path = PROMISE_PATH) -> str: ...
 def plan(path: Path = PROMISE_PATH) -> str: ...
 def cleanup(path: Path = PROMISE_PATH) -> None: ...
-
-# Everything else is _private
-def _git_diff_names(base_commit: str) -> set[str]: ...
-def _within_tolerance(expected: int, actual: int) -> bool: ...
 ```
 
+**scaffold.py:**
 ```python
-# scaffold.py — public API
 def generate(dest: Path, data: dict | None = None) -> None: ...
 def init_existing(cwd: Path | None = None) -> list[Path]: ...
-
-# Private
-def _template_dir() -> Path: ...
-def _post_generate(dest: Path) -> None: ...
-def _collect_project_details() -> dict[str, str]: ...  # init_existing Path A only
-def _run_copier_init(dest: Path, data: dict[str, str]) -> None: ...
 ```
 
+**project.py:**
 ```python
-# project.py — public API
 def find_project_root(start: Path | None = None) -> Path: ...
 ```
 
+**git.py:**
 ```python
-# git.py — public API
-DiffStat = dict[str, tuple[int, int]]
-
 def run_git(*args: str, cwd: Path | None = None) -> str: ...
 def rev_parse_head(cwd: Path | None = None) -> str: ...
-
-# Protocol + real implementation (also public)
-class GitDiffProvider(Protocol): ...
-class SubprocessGitDiff: ...
 ```
 
+**skills.py:**
 ```python
-# skills.py — public API
 def bundled_skills_dir() -> Path: ...
 def sync_skills(target: Path | None = None) -> None: ...
 ```
 
+**assistant.py:**
 ```python
-# assistant.py — public API
-class AssistantBackend(Protocol): ...   # 7-member contract
-class ClaudeCodeBackend: ...            # Category A backend
-class OpenCodeBackend: ...              # Category A backend (XDG-aware)
-
 def register_backend(name: str, cls: type) -> None: ...
 def get_backend(name: str = "claude-code") -> AssistantBackend: ...
 def launch(backend: AssistantBackend, skill_name: str, cwd: Path, model: str | None = None) -> int: ...
 ```
 
+**versioning.py:**
 ```python
-# versioning.py — public API
 def parse_version(v: str) -> tuple[int, int, int]: ...
 def bump_major(v: str) -> str: ...
 def bump_minor(v: str) -> str: ...
@@ -122,240 +83,61 @@ def detect_bump_type(before_sha: str, after_sha: str, cwd: Path | None = None) -
 
 ### Functions First, Classes When Needed
 
-Most modules are plain functions with typed signatures. Reserve classes for two cases: **data carriers** (dataclasses) and **behavioral contracts** (protocols).
+Most modules are plain functions with typed signatures. Reserve classes for two cases: **data carriers** (dataclasses) and **behavioral contracts** (protocols). If a piece of logic doesn't need state between calls, it's a function.
 
-```python
-# Plain function — the default
-def check_task(task_index: int, *, path: Path = PROMISE_PATH) -> TaskCheckReport:
-    ...
+### Dataclasses for Structured Data
 
-# Dataclass — for structured data
-@dataclass
-class TaskCheckReport:
-    task_index: int
-    title: str
-    checks: list[CheckResult] = field(default_factory=list)
-
-    @property
-    def passed(self) -> bool:
-        return all(c.passed for c in self.checks)
-```
+Use `@dataclass` with `field(default_factory=...)` for mutable defaults. Dataclasses carry data and may expose computed properties, but should not contain complex business logic. The promise system uses this for `Task`, `Metadata`, `Promise`, `CheckResult`, `FileCheckDetail`, and `TaskCheckReport`. The `TaskCheckReport.passed` property is an example of a lightweight computed property on a data carrier.
 
 ### Protocols for Dependency Injection
 
-Use `typing.Protocol` for dependency injection boundaries where a module needs a swappable capability (primarily for testing). Protocols provide structural typing without inheritance.
+Use `typing.Protocol` where a module needs a swappable capability — primarily for testing. Protocols provide structural typing without inheritance. Implementations satisfy the contract structurally without inheriting from the protocol.
 
-```python
-from typing import Protocol
+Two protocols exist in the codebase:
 
-class GitDiffProvider(Protocol):
-    def diff_names(self, base_commit: str) -> set[str]: ...
-    def diff_numstat(self, base_commit: str) -> dict[str, tuple[int, int]]: ...
-```
+`GitDiffProvider` declares `diff_names(base_commit: str) -> set[str]` and `diff_numstat(base_commit: str) -> DiffStat`. It enables subprocess-free testing of promise verification.
 
-Protocol implementations are standalone classes — they satisfy the contract structurally without inheriting from the protocol.
-
-```python
-class SubprocessGitDiff:
-    def diff_names(self, base_commit: str) -> set[str]:
-        output = run_git("diff", base_commit, "--name-only")
-        return {line for line in output.strip().splitlines() if line.strip()}
-
-    def diff_numstat(self, base_commit: str) -> DiffStat:
-        stats: DiffStat = {}
-        output = run_git("diff", base_commit, "--numstat")
-        for line in output.strip().splitlines():
-            parts = line.split("\t")
-            if len(parts) == 3:
-                added_str, removed_str, filepath = parts
-                if added_str == "-" or removed_str == "-":
-                    continue  # binary file
-                stats[filepath] = (int(added_str), int(removed_str))
-        return stats
-```
-
-### Protocol for Assistant Backends
-
-The assistant backend contract is a protocol. Each backend is a plain class that structurally satisfies it — no inheritance required.
-
-```python
-class AssistantBackend(Protocol):
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def cli_command(self) -> str: ...
-
-    @property
-    def install_hint(self) -> str: ...
-
-    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]: ...
-
-    def sync_skills(self) -> None: ...
-
-    def env_overrides(self) -> dict[str, str]: ...
-
-    def subagent_type_map(self) -> dict[str, str]: ...
-
-
-class ClaudeCodeBackend:
-    @property
-    def name(self) -> str:
-        return "Claude Code"
-
-    @property
-    def cli_command(self) -> str:
-        return "claude"
-
-    @property
-    def install_hint(self) -> str:
-        return "https://docs.anthropic.com/en/docs/claude-code"
-
-    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]:
-        # model is silently ignored — Claude Code does not support model selection via prothon
-        return [self.cli_command, "--dangerously-skip-permissions", f"/{skill_name}"]
-
-    def sync_skills(self) -> None:
-        from prothon.skills import sync_skills
-        sync_skills(target=Path.home() / ".claude" / "skills")
-
-    def env_overrides(self) -> dict[str, str]:
-        return {}
-
-    def subagent_type_map(self) -> dict[str, str]:
-        return {"general-purpose": "general-purpose", "explore": "Explore", "plan": "Plan"}
-
-
-class OpenCodeBackend:
-    @property
-    def name(self) -> str:
-        return "opencode"
-
-    @property
-    def cli_command(self) -> str:
-        return "opencode"
-
-    @property
-    def install_hint(self) -> str:
-        return "https://opencode.ai"
-
-    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]:
-        cmd = [self.cli_command, "--prompt", f"/{skill_name}"]
-        if model is not None:
-            cmd.extend(["--model", model])
-        return cmd
-
-    def sync_skills(self) -> None:
-        from prothon.skills import sync_skills
-        raw_xdg = os.environ.get("XDG_CONFIG_HOME")
-        xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
-        sync_skills(target=xdg / "opencode" / "skills")
-
-    def env_overrides(self) -> dict[str, str]:
-        return {}
-
-    def subagent_type_map(self) -> dict[str, str]:
-        return {"general-purpose": "general", "explore": "explore", "plan": "plan"}
-```
-
-### XDG_CONFIG_HOME Resolution
-
-Backends and configuration readers that access user-level directories respect `$XDG_CONFIG_HOME` with a `~/.config` fallback. Use a one-liner pattern:
-
-```python
-raw_xdg = os.environ.get("XDG_CONFIG_HOME")
-xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
-```
-
-Empty or relative `XDG_CONFIG_HOME` values fall back to `~/.config` to avoid syncing into repo-relative paths. This applies to `OpenCodeBackend.sync_skills()` and `resolve_agent()` (global config lookup).
+`AssistantBackend` declares read-only properties `name -> str`, `cli_command -> str`, and `install_hint -> str`, plus methods `build_command(skill_name: str, cwd: Path, model: str | None = None) -> list[str]`, `sync_skills() -> None`, `env_overrides() -> dict[str, str]`, and `subagent_type_map() -> dict[str, str]`. It enables pluggable assistant backends with a shared launch lifecycle.
 
 ### Registry for Backend Lookup
 
-A simple dict maps names to factory callables. Used where a user or config string selects a concrete implementation at runtime.
-
-```python
-_BACKENDS: dict[str, type[AssistantBackend]] = {
-    "claude-code": ClaudeCodeBackend,
-    "opencode": OpenCodeBackend,
-}
-
-
-def register_backend(name: str, cls: type) -> None:
-    """Public extension hook for programmatic use and testing."""
-    _BACKENDS[name] = cls
-
-
-def get_backend(name: str = "claude-code") -> AssistantBackend:
-    cls = _BACKENDS.get(name)
-    if cls is None:
-        registered = ", ".join(sorted(_BACKENDS.keys()))
-        raise UnknownBackendError(
-            f"no backend registered for '{name}' (available: {registered})"
-        )
-    return cls()
-```
+A module-level dict maps string names to backend classes. A `register_backend()` function provides a public extension hook for programmatic use and testing. `get_backend()` instantiates by name, listing all registered backends in the error message when the name is unknown.
 
 ### Shared Lifecycle as Standalone Function
 
-The shared launch lifecycle is a plain function that accepts anything satisfying `AssistantBackend`. This follows the "functions first" default — shared behavior doesn't require a base class.
-
-```python
-def launch(backend: AssistantBackend, skill_name: str, cwd: Path, model: str | None = None) -> int:
-    """Shared assistant launch lifecycle."""
-    if not shutil.which(backend.cli_command):
-        raise AssistantNotFoundError(
-            f"{backend.name} ({backend.cli_command}) not found on PATH. "
-            f"Install: {backend.install_hint}"
-        )
-    try:
-        backend.sync_skills()
-    except (IOError, OSError) as exc:
-        raise ProthonError(f"failed to sync skills for {backend.name}: {exc}") from exc
-    env = {**os.environ, **backend.env_overrides()}
-    return subprocess.run(
-        backend.build_command(skill_name, cwd, model=model), cwd=cwd, env=env,
-    ).returncode
-```
+The `launch()` function accepts anything satisfying `AssistantBackend` and runs the shared lifecycle: binary existence check via `shutil.which()`, skill syncing, environment merging, subprocess execution, and return code reporting. Shared behavior lives in a function, not a base class — this follows the functions-first default and keeps protocols as pure interfaces.
 
 ### Default Arguments for Production, Parameters for Testing
 
-Functions use production defaults but accept overrides so tests never touch real state.
+Functions use production defaults (e.g., `path: Path = PROMISE_PATH`) but accept overrides so tests never touch real state and never need monkeypatching. This applies to all promise functions, git functions, and skill sync.
 
-```python
-def load_promise(path: Path = PROMISE_PATH) -> Promise:
-    ...
+### File Locking and Atomic Persistence
 
-# In tests — no global state, no monkeypatching
-def test_load_missing(tmp_path):
-    report = load_promise(path=tmp_path / "nonexistent.toml")
-```
+When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates. `save_promise()` writes atomically via `tempfile.mkstemp` + `os.fsync` + `os.replace`, so readers never see partially-written content — read-only operations (`status`, `check_task`, `plan`) are safe without locking.
 
-### File Locking for Concurrent Access
-
-When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates.
+The lock implementation is cross-platform: `fcntl.flock` on Unix, `msvcrt.locking` on Windows.
 
 ```python
 @contextmanager
 def _lock_promise(path: Path) -> Iterator[None]:
     lock_path = path.with_suffix(".toml.lock")
     lock_path.touch(exist_ok=True)
-    fd = lock_path.open("w")
-    try:
+    with lock_path.open("w") as fd:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
-    finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        fd.close()
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
 
 def complete_task(task_index, ...):
-    report = check_task(...)       # read-only, no lock needed
-    with _lock_promise(path):      # exclusive lock for write
+    report = check_task(...)       # read-only, no lock needed (atomic writes)
+    with _lock_promise(path):      # exclusive lock for read-modify-write
         promise = load_promise(path)
         promise.tasks[task_index].completed = True
         save_promise(promise, path)
 ```
 
-The lock uses a sibling `.toml.lock` file (not the TOML itself) so the promise file can be fully rewritten without interfering with the lock. Only `complete_task` needs locking — read-only operations (`status`, `check_task`, `plan`) are safe without it.
+The lock uses a sibling `.toml.lock` file (not the TOML itself) so the promise file can be fully rewritten without interfering with the lock.
 
 ### Guard-Clause Preconditions
 
@@ -377,52 +159,21 @@ This keeps validation in the domain layer (not the CLI) and follows the existing
 
 ### Inline Content Constants
 
-Per the DESIGN key decision, doc scaffolds for `init` are inlined as module-level constants rather than read from the Copier template at runtime. This decouples `init` from Copier's file layout.
+Doc scaffolds, CI workflow templates, and agent instruction content are inlined as `_UPPER_SNAKE` module-level constants in `scaffold.py` rather than read from the Copier template at runtime. This decouples `init` from Copier's file layout — template restructuring cannot break init.
 
-```python
-_SPEC_SCAFFOLD = """\
-# Project Specification
+### Idempotent Symlink Creation
 
-## Purpose
-## Requirements
-## Constraints
-## Out of Scope
-"""
+Both `scaffold.py` and `skills.py` create symlinks. The pattern is: remove stale target (symlink or real directory), then create. This ensures re-running is safe. `scaffold.py` uses relative symlinks for portability within a repo. `skills.py` uses absolute symlinks because the source is outside the project tree.
 
-_DESIGN_SCAFFOLD = """\
-# Design Document
-...
-"""
-```
+### XDG_CONFIG_HOME Resolution
 
-Convention: `_UPPER_SNAKE` prefix, raw triple-quoted strings, kept together at the top of the module after imports.
-
-### Symlink Idempotent Creation
-
-Both `scaffold.py` and `skills.py` create symlinks. The shared pattern is: remove stale target (symlink or real dir), then create. This ensures re-running is safe.
-
-```python
-# Idempotent symlink: unlink stale, then create
-if dest.is_symlink():
-    dest.unlink()
-elif dest.exists():
-    shutil.rmtree(dest)
-dest.symlink_to(source)
-```
-
-`scaffold.py` uses relative symlinks (`os.symlink("AGENTS.md", link)`) for portability within a repo. `skills.py` uses absolute symlinks (`.symlink_to(skill_dir.resolve())`) because the source is outside the project tree.
+Backends and configuration readers that access user-level directories respect `$XDG_CONFIG_HOME` with a `~/.config` fallback. Empty or relative values fall back to `~/.config` to avoid syncing into repo-relative paths. This applies to `OpenCodeBackend.sync_skills()` and the config resolution functions in `cli.py`.
 
 ### Rich Table Rendering as Private Helpers
 
-`cli.py` builds tables via private `_render_*` functions that return `Table` objects. Commands print them. This separates rendering logic from I/O.
+`cli.py` builds tables via private `_render_*` functions that return `Table` objects. Commands print them. This separates rendering logic from I/O. Status styling uses a dict mapping enum values to label/style tuples to avoid branching.
 
-```python
-def _render_plan(p: Promise) -> Table:
-    table = Table(title=f"PLAN: {len(p.tasks)} tasks (base: {base})")
-    table.add_column("#", style="bold", width=3)
-    table.add_column("Title", style="bold")
-    ...
-    return table
+### Per-Command Options with Annotated Types
 
 @promise_app.command("plan")
 def promise_plan() -> None:
@@ -495,107 +246,11 @@ This allows natural usage like `prothon spec --agent opencode --model glm-5 --pr
 
 ### Fallthrough Precedence Chain
 
-`resolve_agent(cli_value)` implements a 5-level precedence chain where the first non-empty value wins. Each level is a simple `if val: return val` guard, falling through to the next. The `cli_value` parameter receives the value from Typer (which resolves both CLI flag and env var). The function lives in `cli.py` (not `assistant.py`) because levels 3-4 read config files — these are CLI concerns, not backend concerns.
+`resolve_agent()` and `_resolve_config_value()` implement multi-level precedence chains where the first non-empty value wins. Each level is a simple guard with fallthrough to the next. The chain lives in `cli.py` because levels 3-4 read config files — these are CLI concerns, not backend concerns.
 
-```python
-def _read_toml(path: Path) -> dict:
-    """Read a TOML file, returning an empty dict on parse error or missing file."""
-    if not path.exists():
-        return {}
-    try:
-        return tomlkit.parse(path.read_text(encoding="utf-8"))
-    except tomlkit.exceptions.TOMLKitError:
-        return {}
+### Model/Provider Join Rule
 
-
-def _nested_get(doc: dict, *keys: str) -> str | None:
-    """Walk *keys* through nested dicts, returning None if any level is not a mapping."""
-    current: object = doc
-    for key in keys:
-        if not isinstance(current, dict):
-            return None
-        current = current.get(key)
-    return str(current) if current is not None else None
-
-
-def resolve_agent(cli_value: str | None = None) -> str:
-    # Levels 1-2: CLI flag / env var (Typer resolves both into cli_value)
-    if cli_value:
-        return cli_value
-
-    # Level 3: pyproject.toml [tool.prothon].agent
-    try:
-        root = find_project_root()
-        val = _nested_get(_read_toml(root / "pyproject.toml"), "tool", "prothon", "agent")
-        if val:
-            return val
-    except ProthonError:
-        pass  # No project root — fall through
-
-    # Level 4: global config
-    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
-    xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
-    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "agent")
-    if val:
-        return val
-
-    # Level 5: default
-    return "claude-code"
-```
-
-Level 3 wraps `find_project_root()` in a `try/except ProthonError` because it's valid to run prothon outside a project (the resolution just falls through to level 4).
-
-### Model/Provider Resolution and Join Rule
-
-`resolve_model(cli_model, cli_provider)` implements two 5-level precedence chains (one for model, one for provider), then joins them into opencode's required `provider/model` format:
-
-```python
-def _resolve_model_value(cli_value: str | None) -> str | None:
-    if cli_value:
-        return cli_value
-    try:
-        root = find_project_root()
-        val = _nested_get(_read_toml(root / "pyproject.toml"), "tool", "prothon", "model")
-        if val:
-            return val
-    except ProthonError:
-        pass
-    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
-    xdg = Path(raw_xdg) if raw_xdg and Path(raw_xdg).is_absolute() else Path.home() / ".config"
-    val = _nested_get(_read_toml(xdg / "prothon" / "config.toml"), "model")
-    if val:
-        return val
-    return None  # defer to opencode defaults
-
-
-def _resolve_provider_value(cli_value: str | None) -> str | None:
-    # Same structure as _resolve_model_value, but for "provider" key
-    ...
-
-
-def resolve_model(cli_model: str | None, cli_provider: str | None) -> str | None:
-    model = _resolve_model_value(cli_model)
-    provider = _resolve_provider_value(cli_provider)
-
-    if model is None and provider is None:
-        return None  # defer to opencode defaults
-
-    if model is not None and "/" in model:
-        return model  # already in provider/model format, ignore provider flag
-
-    if model is not None and provider is not None:
-        return f"{provider}/{model}"
-
-    raise ProthonError(
-        "--provider requires --model (and vice versa). "
-        "Use provider/model format or set both."
-    )
-```
-
-Resolution rules:
-- If `--model` already contains `/`, treat it as complete `provider/model` and ignore `--provider`
-- If only one of model/provider resolves to a value (and model has no `/`), exit with error
-- If neither resolves, return `None` so opencode uses its own defaults
+`resolve_model()` resolves model and provider independently via the same precedence chain, then joins them into opencode's required `provider/model` format. If `--model` already contains `/`, it's treated as a complete specifier. If only one resolves, the function raises an error. If neither resolves, it returns `None` to defer to opencode's defaults.
 
 ### CLI Guard and Launch Helpers
 
@@ -665,17 +320,17 @@ def init_existing(cwd: Path | None = None) -> list[Path]:
 
 ### Lazy Imports for Heavy Dependencies
 
-Copier is imported inside the function body, not at module level. This avoids loading Copier (and its transitive dependencies) when the module is imported for lightweight operations like `init_existing()`.
+Copier is imported inside the function body, not at module level, to avoid loading it and its transitive dependencies when the module is imported for lightweight operations. This is an intentional exception to the standard import order — use it only for genuinely heavy packages.
 
-```python
-def generate(dest: Path, data: dict | None = None) -> None:
-    from copier import run_copy   # lazy — heavy dependency
-    ...
-```
+### Versioning as Pure Functions
 
-This is an intentional exception to the standard import order. Use it only for genuinely heavy third-party packages where the import cost matters.
+Semver arithmetic uses pure functions with no external library — parse, bump major/minor/patch, return new string. File update functions are split: one for `pyproject.toml` (tomlkit preserves formatting) and one for `__init__.py` (regex replacement). Change detection takes before/after SHAs and returns the bump type based on which doc files changed.
 
-### Versioning Patterns
+### SPEC.md Tamper Detection
+
+`_launch_skill()` computes a SHA-256 hash of `docs/SPEC.md` before launching any non-spec-writer skill and compares it after the session completes. If the hash differs, a warning is emitted. This is a soft guard complementing the skill-level edit restrictions — it detects accidental SPEC modification by agents that shouldn't be writing to it.
+
+### Versioning as Pure Functions
 
 **Semver arithmetic** — Pure functions, no external library. Parses version string, bumps major/minor/patch, returns new string.
 
@@ -782,9 +437,9 @@ version-bump:
 |---------|-------|-----|
 | Plain functions | Default for all modules | Simplest unit, easiest to test |
 | Dataclasses | Data carriers (`Promise`, `CheckResult`, `Task`) | Typed, immutable-friendly, no boilerplate |
-| Protocols | All dependency injection boundaries (`GitDiffProvider`, `AssistantBackend`) | Structural typing, no inheritance, swappable for testing |
-| Standalone function | Shared lifecycle (`launch()`) | Keeps protocols pure interface, follows functions-first default |
-| Registry dict + `register_backend()` | Backend lookup by name | Explicit, debuggable, extensible without caller changes |
+| Protocols | DI boundaries (`GitDiffProvider`, `AssistantBackend`) | Structural typing, swappable for testing |
+| Standalone function | Shared lifecycle (`launch()`) | Keeps protocols as pure interfaces |
+| Registry dict | Backend lookup by name | Explicit, debuggable, extensible |
 | Default args | Production vs test paths | Avoids monkeypatching |
 | Guard clauses | Domain precondition validation (`init_existing()`) | Fail fast, domain exceptions, no nested conditionals |
 | Inline constants | Doc scaffolds, CI workflows in `scaffold.py` | Decouples init from Copier template layout |
@@ -801,6 +456,7 @@ version-bump:
 | Conditional path branching | `init_existing()` Path A/B | Guards first, branch on state, converge on common overlay |
 | Separate input collection | `new` in `cli.py` vs `_collect_project_details()` in `scaffold.py` | `new` uses Typer prompts directly (CLI concern); `_collect_project_details()` is only for `init_existing` Path A. Intentionally not shared — different UX contexts. |
 | Semver pure functions | `versioning.py` bump functions | Zero dependencies, ~30 lines, full control over format |
+| SPEC tamper detection | `_launch_skill()` | Soft guard against accidental SPEC writes |
 
 ## Skill Authoring Patterns
 
@@ -949,129 +605,27 @@ Generated skills are reference material (not interactive agents), so they set `u
 
 ### Custom Exception Hierarchy
 
-Flat hierarchy under a single base in `exceptions.py`. No deep trees.
+Flat hierarchy under a single base in `exceptions.py`. No deep inheritance trees. Each exception maps to one failure domain.
 
-```python
-class ProthonError(Exception):
-    """Base for all prothon errors. CLI catches this for clean exit."""
-
-class ProjectNotFoundError(ProthonError):
-    """No prothon project root found walking up from cwd."""
-
-class ProjectAlreadyInitError(ProthonError):
-    """docs/SPEC.md already exists — project already initialized."""
-
-class PromiseError(ProthonError):
-    """Promise file missing, malformed, or task index out of range."""
-
-class AssistantNotFoundError(ProthonError):
-    """Assistant CLI binary not found on PATH."""
-
-class UnknownBackendError(ProthonError):
-    """Backend name not in registry."""
-
-class ComplianceError(ProthonError):
-    """Compliance check found failures."""
-
-class GitError(ProthonError):
-    """Git subprocess command failed."""
-
-class VersionError(ProthonError):
-    """Version string is malformed or bump operation failed."""
-```
+`ProthonError` is the base exception. Subclasses — `ProjectNotFoundError`, `ProjectAlreadyInitError`, `PromiseError`, `AssistantNotFoundError`, `UnknownBackendError`, `ComplianceError`, `GitError`, `VersionError` — each map to one failure domain. `ProthonError` is the catch-all at the CLI boundary. Specific subclasses allow callers to handle individual failure modes when needed, but the CLI only needs to catch the base.
 
 ### Raise at Source, Catch at Boundary
 
-Domain modules raise specific exceptions. `cli.py` is the only place that catches `ProthonError` and converts it to a user-facing message with a non-zero exit code. Domain modules never call `sys.exit()` or print errors.
-
-```python
-# promise.py — raises, never prints
-def load_promise(path: Path = PROMISE_PATH) -> Promise:
-    if not path.exists():
-        raise PromiseError(f"no promise file at {path}")
-    ...
-
-# cli.py — catches at the boundary
-@app.command()
-def status() -> None:
-    try:
-        report = promise.status()
-        typer.echo(report)
-    except ProthonError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
-```
-
-Adoption follows the same boundary pattern — `init_existing()` raises domain exceptions, `cli.py` catches and formats:
-
-```python
-# cli.py — init command
-@app.command()
-def init() -> None:
-    """Adopt an existing project into the docs-first workflow."""
-    try:
-        created = init_existing()
-        for path in created:
-            typer.echo(f"  created {path}")
-        typer.echo("\nNext step: uvx prothon spec")
-    except ProthonError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
-```
+Domain modules raise specific exceptions at the point of failure. `cli.py` is the only place that catches `ProthonError` and converts it to a user-facing message with a non-zero exit code. Domain modules never call `sys.exit()` or print errors — they raise and let the boundary handle presentation.
 
 ### No Bare Exceptions, No Silent Swallowing
 
-Catch the specific failure, re-raise as a domain exception with context.
-
-```python
-# Good
-try:
-    data = tomllib.loads(text)
-except tomllib.TOMLDecodeError as exc:
-    raise PromiseError(f"malformed promise file: {exc}") from exc
-
-# Bad — hides bugs
-try:
-    data = tomllib.loads(text)
-except Exception:
-    return None
-```
+Always catch the specific failure type. Re-raise as a domain exception with context about what went wrong. Never catch `Exception` and return `None` — this hides bugs.
 
 ### Subprocess Error Wrapping
 
-All git interaction goes through `run_git()` which converts subprocess failures immediately. Callers never see raw `subprocess.CalledProcessError`. `GIT_TERMINAL_PROMPT=0` prevents interactive auth prompts from hanging the process. Adoption reuses this — checking "is this a git repo" via `run_git("rev-parse", "--git-dir")` naturally raises `GitError` if the directory isn't a repo.
+All git interaction goes through `run_git()` which converts `subprocess` failures into `GitError` immediately. Callers never see raw `subprocess.CalledProcessError`. The environment includes `GIT_TERMINAL_PROMPT=0` to prevent interactive auth prompts from hanging the process.
 
-```python
-def run_git(*args: str, cwd: Path | None = None) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        capture_output=True, text=True, cwd=cwd,
-        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
-    )
-    if result.returncode != 0:
-        full_cmd = " ".join(["git", *args])
-        raise GitError(f"{full_cmd} failed (exit {result.returncode}): {result.stderr.strip()}")
-    return result.stdout
-```
-
-When re-raising a caught exception as a domain error but the original traceback is noise, use `from None` to suppress chaining:
-
-```python
-try:
-    run_git("rev-parse", "--git-dir", cwd=root)
-except GitError:
-    raise GitError(f"not a git repository: {root}") from None
-```
+When the original traceback adds noise rather than clarity, use `from None` to suppress exception chaining — for example, when re-raising a `GitError` with a more descriptive message like "not a git repository."
 
 ### Error Message Convention
 
-Lowercase, specific, include the value that caused the problem.
-
-```python
-raise PromiseError(f"task index {task_index} out of range (0-{len(tasks) - 1})")
-raise UnknownBackendError(f"no backend registered for '{name}' (available: {registered})")
-raise VersionError(f"invalid version format: {v!r}")
-```
+Lowercase, specific, include the value that caused the problem. Examples: `"task index 5 out of range (0-3)"`, `"no backend registered for 'foo' (available: claude-code, opencode)"`, `"invalid version format: 'abc'"`. This makes messages greppable and self-diagnosing.
 
 ## Testing Patterns
 
@@ -1098,235 +652,39 @@ tests/
 - **Functions:** `test_{function}_{scenario}` — descriptive enough to diagnose failures from the name alone
 - **No test classes** unless shared setup can't be handled by fixtures
 
-```python
-def test_check_task_passes_when_all_files_created(): ...
-def test_check_task_fails_when_file_missing(): ...
-def test_load_promise_raises_on_malformed_toml(): ...
-def test_within_tolerance_boundary_values(): ...
-def test_bump_major_resets_minor_and_patch(): ...
-```
-
 ### Protocol Fakes Over Mocks
 
-Write simple fake implementations that satisfy protocols. Fakes are real code — they break when the protocol changes. Mocks don't.
-
-```python
-# conftest.py
-class FakeGitDiff:
-    def __init__(
-        self,
-        names: set[str] | None = None,
-        stats: dict[str, tuple[int, int]] | None = None,
-    ):
-        self._names = names or set()
-        self._stats = stats or {}
-
-    def diff_names(self, base_commit: str) -> set[str]:
-        return self._names
-
-    def diff_numstat(self, base_commit: str) -> dict[str, tuple[int, int]]:
-        return self._stats
-
-# test_promise.py
-def test_check_task_passes_when_all_files_created(tmp_path):
-    write_promise(tmp_path / "promise.toml", tasks=[...])
-    diff = FakeGitDiff(names={"src/foo.py"}, stats={"src/foo.py": (50, 0)})
-    report = check_task(0, diff=diff, path=tmp_path / "promise.toml")
-    assert report.passed
-```
-
-Reserve `unittest.mock` for cases where you genuinely can't control the dependency (e.g., patching `shutil.which`). Prefer restructuring to make fakes possible.
+Write simple fake implementations that satisfy protocols. Fakes are real code — they break when the protocol changes. Mocks don't. A `FakeGitDiff` in `conftest.py` accepts canned `names` and `stats` data, satisfying `GitDiffProvider` structurally. Reserve `unittest.mock` for cases where you genuinely can't control the dependency (e.g., patching `shutil.which`). Prefer restructuring to make fakes possible.
 
 ### Fixture Conventions
 
 - `tmp_path` (built-in) for any test that touches the filesystem
 - Shared fakes and factories in `conftest.py`
-- **Factories over static fixtures** — functions with sensible defaults and keyword overrides:
-
-```python
-def make_task(
-    title: str = "test task",
-    files_to_create: list[str] | None = None,
-    expected_lines_added: int = 50,
-    **overrides,
-) -> dict:
-    base = {
-        "title": title,
-        "files_to_create": files_to_create or [],
-        "files_to_modify": [],
-        "files_to_remove": [],
-        "expected_lines_added": expected_lines_added,
-        "expected_lines_removed": 0,
-        "completed": False,
-        "attempts": 0,
-    }
-    return {**base, **overrides}
-```
+- **Factories over static fixtures** — functions with sensible defaults and keyword overrides for constructing test data like tasks and promises. Override only what the test cares about.
 
 ### Guard Clause Tests
 
-Each precondition in a domain function gets a dedicated test. Use `tmp_path` to create the exact failing condition, assert the specific exception. One test per guard, name encodes the failing condition (`_raises_when_{condition}`).
-
-```python
-def test_init_existing_raises_when_not_git_repo(tmp_path):
-    with pytest.raises(GitError, match="not a git repository"):
-        init_existing(cwd=tmp_path)
-
-def test_init_existing_raises_when_spec_exists(tmp_path):
-    run_git("init", cwd=tmp_path)
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "SPEC.md").write_text("# existing")
-    with pytest.raises(ProjectAlreadyInitError):
-        init_existing(cwd=tmp_path)
-```
+Each precondition in a domain function gets a dedicated test. Use `tmp_path` to create the exact failing condition, assert the specific exception type and message. One test per guard, name encodes the failing condition (`_raises_when_{condition}`).
 
 ### Filesystem Assertion Helpers
 
-Adoption creates files, directories, and symlinks. Use simple helpers in `conftest.py` to keep happy-path tests readable:
-
-```python
-# conftest.py
-def assert_symlink_to(link: Path, target_name: str) -> None:
-    """Assert that link is a symlink pointing to target_name."""
-    assert link.is_symlink(), f"{link} is not a symlink"
-    assert os.readlink(link) == target_name, (
-        f"{link} points to {os.readlink(link)}, expected {target_name}"
-    )
-
-# test_scaffold.py
-def test_init_existing_creates_all_artifacts(tmp_path):
-    run_git("init", cwd=tmp_path)
-    created = init_existing(cwd=tmp_path)
-
-    assert (tmp_path / "docs" / "SPEC.md").exists()
-    assert (tmp_path / "docs" / "DESIGN.md").exists()
-    assert (tmp_path / "docs" / "PATTERNS.md").exists()
-    assert (tmp_path / ".agents" / "skills").is_dir()
-    assert_symlink_to(tmp_path / "CLAUDE.md", "AGENTS.md")
-    assert_symlink_to(tmp_path / "GEMINI.md", "AGENTS.md")
-    assert_symlink_to(tmp_path / "AGENT.md", "AGENTS.md")
-```
+Adoption creates files, directories, and symlinks. Keep happy-path tests readable with simple helpers in `conftest.py` — for example, an `assert_symlink_to` helper that checks both that a path is a symlink and that it points to the expected target.
 
 ### Idempotency and Non-Destructiveness Tests
 
-Since R17 requires `init` must not modify existing files, test that pre-existing content survives:
-
-```python
-def test_init_existing_does_not_modify_existing_files(tmp_path):
-    run_git("init", cwd=tmp_path)
-    (tmp_path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 88\n")
-    init_existing(cwd=tmp_path)
-    assert "[tool.ruff]" in (tmp_path / "pyproject.toml").read_text()
-```
+Since R17 requires `init` must not modify existing files, test that pre-existing content survives. Write content to a file before calling `init_existing()`, then assert the original content is still present afterward.
 
 ### Hypothesis for Boundary Logic
 
-Use Hypothesis for functions with numeric or string boundaries — tolerance checks, path parsing, TOML roundtrips.
-
-```python
-from hypothesis import given, strategies as st
-
-@given(expected=st.integers(0, 10000), actual=st.integers(0, 10000))
-def test_within_tolerance_is_symmetric(expected, actual):
-    from prothon.promise import _within_tolerance
-    assert _within_tolerance(expected, actual) == _within_tolerance(actual, expected)
-```
-
-Don't use Hypothesis for everything — plain `parametrize` is clearer for known edge cases.
+Use Hypothesis for functions with numeric or string boundaries — tolerance checks, version parsing, TOML roundtrips. Don't use Hypothesis for everything — plain `parametrize` is clearer for known edge cases.
 
 ### CLI Integration Tests
 
-Test CLI commands via Typer's `CliRunner`, not subprocess. Fast and in-process.
-
-```python
-from typer.testing import CliRunner
-from prothon.cli import app
-
-runner = CliRunner()
-
-def test_status_shows_progress(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    write_promise(tmp_path / "docs" / "change_promise.toml", ...)
-    result = runner.invoke(app, ["promise", "status"])
-    assert result.exit_code == 0
-    assert "0/3 tasks completed" in result.output
-```
+Test CLI commands via Typer's `CliRunner`, not subprocess. Fast and in-process. Use `monkeypatch.chdir(tmp_path)` to isolate the working directory. Assert on exit codes and output content.
 
 ### Versioning Tests
 
-**Unit tests for semver arithmetic** — Direct function tests, no filesystem:
-
-```python
-# test_versioning.py
-
-def test_parse_version_extracts_components():
-    assert parse_version("1.2.3") == (1, 2, 3)
-    assert parse_version("v2.0.0") == (2, 0, 0)
-
-def test_parse_version_rejects_invalid():
-    with pytest.raises(VersionError, match="invalid version"):
-        parse_version("not-a-version")
-
-def test_bump_major_resets_minor_and_patch():
-    assert bump_major("1.2.3") == "2.0.0"
-
-def test_bump_minor_resets_patch():
-    assert bump_minor("1.2.3") == "1.3.0"
-
-def test_bump_patch_increments_patch():
-    assert bump_patch("1.2.3") == "1.2.4"
-```
-
-**File update tests** — Use `tmp_path`:
-
-```python
-def test_update_pyproject_preserves_comments(tmp_path):
-    pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text('[project]\nversion = "0.1.0"\n# comment\n')
-    update_pyproject_version(pyproject, "0.2.0")
-    content = pyproject.read_text()
-    assert 'version = "0.2.0"' in content
-    assert "# comment" in content
-
-def test_update_init_version(tmp_path):
-    init = tmp_path / "__init__.py"
-    init.write_text('__version__ = "0.1.0"\n')
-    update_init_version(init, "0.2.0")
-    assert '__version__ = "0.2.0"' in init.read_text()
-```
-
-**Change detection tests** — Use `run_git` with temp repo:
-
-```python
-def test_detect_bump_type_returns_major_for_spec_change(tmp_path):
-    run_git("init", cwd=tmp_path)
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "SPEC.md").write_text("# spec")
-    run_git("add", ".", cwd=tmp_path)
-    run_git("commit", "-m", "initial", cwd=tmp_path)
-    before = rev_parse_head(cwd=tmp_path)
-
-    (tmp_path / "docs" / "SPEC.md").write_text("# updated")
-    run_git("add", ".", cwd=tmp_path)
-    run_git("commit", "-m", "spec change", cwd=tmp_path)
-    after = rev_parse_head(cwd=tmp_path)
-
-    assert detect_bump_type(before, after, cwd=tmp_path) == "major"
-
-def test_detect_bump_type_returns_none_for_readme_only(tmp_path):
-    run_git("init", cwd=tmp_path)
-    (tmp_path / "README.md").write_text("# readme")
-    run_git("add", ".", cwd=tmp_path)
-    run_git("commit", "-m", "initial", cwd=tmp_path)
-    before = rev_parse_head(cwd=tmp_path)
-
-    (tmp_path / "README.md").write_text("# updated")
-    run_git("add", ".", cwd=tmp_path)
-    run_git("commit", "-m", "readme update", cwd=tmp_path)
-    after = rev_parse_head(cwd=tmp_path)
-
-    assert detect_bump_type(before, after, cwd=tmp_path) is None
-```
+Three levels: (1) unit tests for semver arithmetic as direct function calls with no filesystem, (2) file update tests using `tmp_path` to verify tomlkit preserves comments and regex replacement works, (3) change detection tests using `run_git` with temp repos to verify the correct bump type for different file changes.
 
 ### What Not to Test
 

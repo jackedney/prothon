@@ -23,7 +23,7 @@ src/prothon/
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, doc agents, execution, compliance, promise system, versioning, skill management — requirements 1-9, 22, 25-26, 32-35, 40-48, 52) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
+This layout is driven by the number of subsystems in the SPEC (scaffolding, doc agents, execution, compliance, promise system, versioning, skill management — requirements 1-9, 22, 27-28, 34-37, 42-50, 54) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
 
 ### Module Dependencies
 
@@ -51,13 +51,13 @@ All modules
   └── exceptions.*
 ```
 
-`cli.py` is the only module that depends on Typer for command definitions. Domain modules (`scaffold.py`, `promise.py`, `versioning.py`, etc.) are plain Python and independently testable without invoking the CLI framework. This separation serves requirement 49 (all workflows invocable via CLI) while keeping domain logic framework-independent.
+`cli.py` is the only module that depends on Typer for command definitions. Domain modules (`scaffold.py`, `promise.py`, `versioning.py`, etc.) are plain Python and independently testable without invoking the CLI framework. This separation serves requirement 51 (all workflows invocable via CLI) while keeping domain logic framework-independent.
 
 ### Bundled Assets
 
 Two non-Python asset directories are bundled with the project:
 
-- `skills/` — 7 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 52 (skills bundled with package) and 22 (dedicated interactive agents).
+- `skills/` — 7 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 54 (skills bundled with package) and 22 (dedicated interactive agents).
 - `template/` — Copier project template at the repository root (not inside the package), with `copier.yml`, Jinja2-templated files, and post-generation tasks. Serves requirements 1-9 (project scaffolding).
 
 `skills/` is included automatically as part of the `src/prothon` package. `template/` is included via `[tool.hatch.build.targets.wheel.force-include]` since it lives outside the package root.
@@ -71,13 +71,47 @@ AI coding CLIs fall into two structural categories based on how they receive ski
 - **Category A (native skill directories)** — Claude Code and opencode have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name via slash commands.
 - **Category B (prompt injection)** — Tools like Codex CLI, Gemini CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. These are out of scope per the SPEC but the abstraction accommodates them for future expansion.
 
-A registry maps assistant names to backend classes. Claude Code and opencode are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 50-51 (Claude Code and opencode support, assistant selection).
+A registry maps assistant names to backend classes. Claude Code and opencode are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 52-53 (Claude Code and opencode support, assistant selection).
 
 ### Promise Verification
 
 The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) to represent the change contract declared in `docs/change_promise.toml`. Verification logic lives in a standalone `check_task()` function that accepts a `GitDiffProvider` protocol, enabling subprocess-free testing with a fake implementation.
 
-Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers. This serves requirements 25-31 (execution verification) and 32-35 (compliance verification).
+Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers. This serves requirements 27-33 (execution verification) and 34-37 (compliance verification).
+
+### Task Lifecycle
+
+Each task in the execute workflow follows this lifecycle:
+
+1. **Dependency check** — wait for all tasks in `dependencies` to be marked complete.
+2. **Read context** — read `doc_sections`, `reference_skills`, and `context_files`.
+3. **Implement** — create, modify, or remove files per the plan.
+4. **Quality gate (R32)** — stage all task files (`git add`), then run `pre-commit run --all-files --show-diff-on-failure`. If hooks auto-fix files, re-stage and re-run once. If hooks still fail, enter the retry loop.
+5. **Commit** — `git commit --no-verify` (hooks already ran explicitly in step 4; `--no-verify` avoids double execution).
+6. **Plan verification (R31)** — run `check_task()` which uses `git diff <base_commit>` (requires committed changes, so this must follow the commit step).
+7. **Completion** — mark the task complete via `complete_task()`.
+
+If step 4 or step 6 fails, the subagent increments its attempt counter and retries from step 3. If `attempts >= max_attempts`, the subagent reports failure to the orchestrator, which asks the user to skip, retry (reset counter), or abort.
+
+Pre-commit hooks run with `--all-files` rather than scoped to declared task files because a task modifying one file may break checks in files that import from it. This matches what a real `git commit` would trigger, satisfying R32's requirement to run "the project's pre-commit hooks."
+
+### Retry Configuration (R33)
+
+The `max_attempts` value is resolved via a two-level precedence:
+
+| Priority | Source | Mechanism |
+|----------|--------|-----------|
+| 1 (highest) | Per-task override | `max_attempts` field in `[[tasks]]` section of `change_promise.toml` |
+| 2 | Project default | `[tool.prothon].max_attempts` in `pyproject.toml` |
+| 3 (lowest) | Hardcoded default | `3` |
+
+When the executor creates the promise file, it reads `[tool.prothon].max_attempts` and sets it as the default for each task. The planning agent can override `max_attempts` on specific tasks (e.g., a complex migration task might get 5 attempts while a simple file rename gets 2).
+
+Retry enforcement lives in the skill prompt — the subagent reads `max_attempts` from the promise file and bounds its retry loop accordingly. Programmatic enforcement (an `attempt_task()` function that increments under file lock) can be added later if stricter guarantees are needed.
+
+### Concurrency
+
+Because independent tasks can run in parallel (per requirement 30), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
 
 Because independent tasks can run in parallel (per requirement 28), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
 
@@ -85,11 +119,11 @@ Because independent tasks can run in parallel (per requirement 28), `complete_ta
 
 | Package | Purpose | Serves Requirement | Alternatives Considered |
 |---------|---------|-------------------|------------------------|
-| typer (>=0.15) | CLI framework with type-hint-driven parameter inference | R49: CLI-invocable workflows | click, argparse |
-| copier (>=9.0) | Project templating with native `copier update` support | R1-R9: project scaffolding | cookiecutter, custom Jinja2 |
-| tomlkit (>=0.13,<1.0) | TOML read/write with comment and formatting preservation | R25-R26: change promise contract | tomllib+tomli-w, toml |
-| rich (via typer) | Table rendering for promise plans, status, and compliance reports | R33: compliance report with PASS/FAIL/SKIP status | tabulate, click echo/style |
-| subprocess (stdlib) | Git CLI interaction via thin typed wrapper | R7: git init, R29: promise verification | GitPython, pygit2, dulwich |
+| typer (>=0.15) | CLI framework with type-hint-driven parameter inference | R51: CLI-invocable workflows | click, argparse |
+| copier (>=9.0) | Project templating with native `copier update` support | R1-R9: project scaffolding, R10-R17: project adoption | cookiecutter, custom Jinja2 |
+| tomlkit (>=0.13,<1.0) | TOML read/write with comment and formatting preservation | R27-R28: change promise contract | tomllib+tomli-w, toml |
+| rich (via typer) | Table rendering for promise plans, status, and compliance reports | R35: compliance report with PASS/FAIL/SKIP status | tabulate, click echo/style |
+| subprocess (stdlib) | Git CLI interaction via thin typed wrapper | R7: git init, R31: promise verification | GitPython, pygit2, dulwich |
 
 ### Rationale
 
@@ -283,9 +317,15 @@ All other agents (execute, compliance, tech-researcher, and any subagents they s
 
 The commit message follows the format `docs: update <FILENAME> via <agent-name>`. No push is performed — the commit is local only.
 
+**Content constraints** — In addition to edit permissions, PATTERNS.md has content form rules (R25-R26):
+
+- The patterns-writer skill guards must refuse implementation logic in code blocks and limit code examples to function and method signatures (name, parameter types, return types) only.
+- The compliance checker includes doc-form verification as part of its SPEC compliance pass, checking PATTERNS.md code blocks against R25-R26 and reporting violations as FAIL rows.
+- No runtime enforcement is needed — these are authored content constraints enforced at write-time (patterns-writer guards) and audit-time (compliance checker).
+
 ### Tech Research Contract
 
-The tech-researcher generates reference skills in `.agents/skills/` based on the technology choices in DESIGN.md (serves R36-R39). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
+The tech-researcher generates reference skills in `.agents/skills/` based on the technology choices in DESIGN.md (serves R38-R41). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
 
 **Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
 
@@ -294,6 +334,54 @@ The tech-researcher generates reference skills in `.agents/skills/` based on the
 ### Compliance Report Contract
 
 The compliance checker reads all three documentation levels and all source code, then produces three tables (SPEC compliance, DESIGN compliance, PATTERNS compliance). Each row contains: the checkable statement, a PASS/FAIL/SKIP status, and `file:line` evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category). A summary section reports overall percentage and prioritized action items.
+
+### SPEC.md Content Contract
+
+SPEC.md is the highest-authority document in the hierarchy. It defines *what* the system must do without prescribing *how*. Its expected sections are:
+
+- **Purpose** — A concise description of what the tool does and why it exists. States the problems it solves.
+- **Requirements** — Grouped by subsystem, each requirement is a numbered statement (R1, R2, ...) using "must" language. Requirements must be testable and verifiable — vague aspirations are not requirements.
+- **Constraints** — Hard limits on technology, process, or scope that are non-negotiable.
+- **Out of Scope** — Explicitly excluded features or capabilities, with optional notes on future consideration.
+
+Content rules:
+- No technology choices (package names, frameworks) — those belong in DESIGN.md.
+- No architecture or component structure — those belong in DESIGN.md.
+- No code patterns or conventions — those belong in PATTERNS.md.
+- Requirements must be self-contained — each one should be understandable without reading the others.
+
+### DESIGN.md Content Contract
+
+DESIGN.md is the middle-authority document. It defines *how* the system is built — architecture, technology choices, and interfaces — without specifying code-level patterns. Its expected sections are:
+
+- **Architecture** — High-level component structure, module layout, how components connect and communicate. References which SPEC requirements drive each architectural choice.
+- **Technology Choices** — Table format: Package | Purpose | Serves Requirement | Alternatives Considered. Followed by rationale for each choice.
+- **Interfaces** — API boundaries, data formats, contracts between components. Defines the "what" of each interface, not the "how." Includes all named contracts (Promise Contract, Backend Contract, etc.).
+- **Key Decisions** — Each decision that required research. Format: Decision | Choice | Alternatives | Rationale.
+
+Content rules:
+- No code snippets or implementation details — those belong in PATTERNS.md.
+- No design patterns (e.g., "use factory pattern") — those belong in PATTERNS.md.
+- Every technology choice and architectural decision must trace back to a specific SPEC requirement.
+- Nothing may contradict SPEC.md — SPEC has higher authority.
+
+### PATTERNS.md Content Contract
+
+PATTERNS.md defines the code patterns, conventions, and testing approaches for a project. Its content is constrained by R25-R26:
+
+- **Natural language first** — Pattern rationale, behavioral logic, and design decisions must be expressed in prose, not code. Each pattern section explains *what* the pattern achieves, *when* to use it, and *why* it was chosen.
+- **Signature-only code examples** — Code blocks in PATTERNS.md are limited to function and method signatures: name, parameter types, and return type. No function bodies, control flow, import blocks, or implementation logic may appear in code form.
+- **Design pattern focus** — PATTERNS.md selects and describes Python design patterns suitable for achieving the architecture defined in DESIGN.md. It does not prescribe implementation details — those emerge from the combination of the pattern description and the developer's (or agent's) judgment.
+
+Examples of **allowed** content:
+- Prose describing when to use the protocol pattern vs ABC inheritance
+- `def check_task(task_index: int, *, diff_provider: GitDiffProvider) -> TaskCheckReport` as a signature example
+- A table comparing pattern trade-offs
+
+Examples of **forbidden** content:
+- Full function bodies with if/else logic, loops, or error handling
+- Import blocks showing how to wire modules together
+- Test implementations beyond test function signatures
 
 ### Adoption Contract
 
@@ -312,7 +400,7 @@ The command must not modify existing source files, dependencies, toolchain confi
 
 ### Scaffolding Contract
 
-`prothon new` collects six inputs (module name, description, author name, author email, Python version, license) and passes them to Copier's `run_copy()`. The template produces a complete project with: `src/` layout, `pyproject.toml`, pre-commit hooks, CI workflows, git repo with initial commit, agent instruction files, doc scaffolds, `.agents/skills/` directory, and version-bump CI workflows for GitHub Actions and GitLab CI/CD. A `.copier-answers.yml` file is written to enable future `copier update` calls.
+`prothon new` collects six inputs (module name, description, author name, author email, Python version, license) and passes them to Copier's `run_copy()`. The template produces a complete project with: `src/` layout, `pyproject.toml`, pre-commit hooks, CI workflows, git repo with initial commit, `AGENTS.md` with agent instruction content plus symlinks (`CLAUDE.md → AGENTS.md`, `GEMINI.md → AGENTS.md`, `AGENT.md → AGENTS.md`), doc scaffolds, `.agents/skills/` directory, and version-bump CI workflows for GitHub Actions and GitLab CI/CD. A `.copier-answers.yml` file is written to enable future `copier update` calls.
 
 The generated `pyproject.toml` includes `[tool.prothon.ci]` with `auto_version = true`.
 
@@ -428,3 +516,8 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 | CI configurability | Basic toggle (`auto_version = true/false`) | No config; full branch/trigger configurability | "Minorly configurable" per SPEC. Single toggle lets users disable without deleting files. Branch/trigger customization belongs in the workflow YAML itself — users comfortable with CI can edit directly. |
 | Subagent invocation in skills | Canonical names with per-backend mapping | Tool-specific instructions per assistant; backend-specific skill variants | Single set of skills works across both backends. Canonical names are translated by each backend's `subagent_type_map`. Backend-specific variants would double maintenance. Tool-specific instructions (e.g., `Task tool, subagent_type:`) break when the other assistant has a different tool API. |
 | Skill frontmatter portability | Assistant-specific fields ignored by non-supporting backends | Require all backends to support all fields; strip unsupported fields at sync time | opencode silently ignores unknown frontmatter (`context: fork`, `model:`). Requiring support would block backend addition. Stripping adds complexity for zero benefit since unknown fields are already harmless. |
+| Task quality gate | `pre-commit run --all-files` replacing `poe check` | `poe check`; hooks as part of `git commit` (no `--no-verify`); scoped `--files` | Pre-commit is a superset of `poe check` (adds trailing-whitespace, end-of-file-fixer, check-yaml, auto-fixing). Explicit hook run before commit gives parseable output and handles auto-fixes cleanly. `--all-files` catches cross-file regressions. `--no-verify` on commit avoids double execution. |
+| Retry configuration | Project default in `[tool.prothon].max_attempts` + per-task override in promise TOML | CLI flag; env var; promise metadata section | Two-level resolution (project + per-task) follows existing config patterns. Retry count doesn't warrant CLI flag or env var precedence levels. Per-task override lets the planning agent adjust for task complexity. |
+| Retry enforcement | Skill prompt reads `max_attempts` from promise file | Programmatic `attempt_task()` with file locking; hybrid skill + validation | Skill prompt already manages the retry loop. Reading `max_attempts` from the promise file is the minimal change. Programmatic enforcement can be added later if stricter guarantees are needed. |
+| PATTERNS.md content form | Signature-only code, natural language rationale | Allow full code examples; no code at all | Signatures communicate interface contracts without prescribing implementation. Full code examples drift from actual implementations and constrain developer judgment. No code at all loses the precision of typed signatures. |
+| Documentation content contracts | Explicit section structure and content rules for all three doc levels | Implicit via skill instructions only; single combined contract | Each doc level has distinct content rules (SPEC: no tech choices; DESIGN: no code; PATTERNS: no implementation logic). Explicit contracts make the hierarchy self-describing and enable compliance checking. Per-level contracts are clearer than a single combined contract. |

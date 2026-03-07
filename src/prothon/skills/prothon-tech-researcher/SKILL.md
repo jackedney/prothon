@@ -35,7 +35,7 @@ These skills are auto-discovered by agents and loaded when relevant, giving them
 
 ### Phase 2: Research and generate
 
-For each category, research and generate skill files as described below. The `.agents/skills/` directory is symlinked to `.claude/skills/` and `.opencode/skills/`, so generated skills are auto-discovered by both tools.
+For each category, research and generate skill files as described below. Both Claude Code and opencode discover `.agents/skills/` natively — no symlinks or additional configuration needed.
 
 **Use parallel subagents** to research multiple targets concurrently where possible.
 

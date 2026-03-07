@@ -386,7 +386,7 @@ corresponding `prothon` CLI commands in order:
 - DESIGN-level change → `prothon design`, then `prothon patterns`
 - PATTERNS-level change → `prothon patterns` only
 
-Each command launches a separate Claude session. Do NOT invoke \
+Each command launches a separate assistant session. Do NOT invoke \
 `/spec-writer`, `/design-writer`, or `/patterns-writer` directly — the user \
 runs these via the CLI.
 
@@ -401,11 +401,11 @@ Write the code changes.
 ### 6. Verify Compliance (Automatic)
 
 **This is an always-on quality gate.** Before claiming any implementation \
-work is complete, you MUST launch a **dedicated subagent** (using the Task \
-tool) to verify code matches documentation. Do not perform this check \
-inline — spawn a fresh subagent with the compliance-checker skill content so \
-it gets a clean context focused solely on compliance verification. Report the \
-subagent's findings to the user.
+work is complete, you MUST spawn a dedicated subagent (type: general-purpose, \
+fresh context) to verify code matches documentation. Do not perform this \
+check inline — spawn a fresh subagent with the compliance-checker skill \
+content so it gets a clean context focused solely on compliance verification. \
+Report the subagent's findings to the user.
 
 If the compliance check reports failures, fix the code or update docs and \
 re-check.
@@ -414,19 +414,12 @@ For explicit full compliance scans, the user can run `prothon compliance`.
 
 ## Skills Directory
 
-Skills live in `.agents/skills/` as the canonical location. This directory \
-is symlinked to both `.claude/skills/` and `.opencode/skills/` for automatic \
-discovery by Claude Code and OpenCode respectively.
+Project-specific reference skills live in `.agents/skills/` as directories \
+containing `SKILL.md`. Both Claude Code and opencode discover this directory \
+natively — no symlinks or additional configuration needed.
 
-```
-.agents/skills/           <- canonical location (edit here)
-.claude/skills -> .agents/skills   <- symlink (auto-discovered by Claude Code)
-.opencode/skills -> .agents/skills <- symlink (auto-discovered by OpenCode)
-```
-
-When creating new skills, always place them in \
-`.agents/skills/<skill-name>/SKILL.md`. The symlinks ensure both tools \
-discover them automatically.
+When creating new skills, place them in \
+`.agents/skills/<skill-name>/SKILL.md`.
 
 ## Conventions
 

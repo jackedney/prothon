@@ -465,6 +465,8 @@ def complete_task(
                 f"(expected task_id {report.task_id!r}, got {promise.tasks[task_index].task_id!r}); "
                 "re-run `promise check` and retry"
             )
+        if promise.tasks[task_index].completed:
+            return
         promise.tasks[task_index].completed = True
         promise.tasks[task_index].attempts = attempts
         save_promise(promise, path)

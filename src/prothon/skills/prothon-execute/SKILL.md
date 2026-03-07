@@ -72,7 +72,8 @@ For each task (respecting dependency order):
 ### Subagent Prompt Template
 
 ```
-You are implementing a single task. Follow this loop:
+You are implementing a single task. One "attempt" is a full iteration of steps 3–5.
+Before each attempt, check: if attempts >= {max_attempts}, stop and report failure.
 
 1. READ CONTEXT:
    - Read these doc sections: {doc_sections}
@@ -87,31 +88,30 @@ You are implementing a single task. Follow this loop:
    - Success criteria: {success_criteria}
 
 3. QUALITY GATE:
-   a) Stage all changes (including deletions and any hook auto-fixes): git add -A
+   a) Stage selectively:
+      - Stage modifications to tracked files: git add -u
+      - Stage new files: git add {files_to_create}
+      - Remove deleted files: git rm {files_to_remove}
    b) Run: pre-commit run --all-files --show-diff-on-failure
-   c) If hooks auto-fixed files, re-stage (git add -A) and re-run pre-commit once
-   d) If hooks still fail, go to step 4
+   c) If hooks auto-fixed files, re-stage (git add -u) and re-run pre-commit once
+   d) If pre-commit still fails, increment attempts and go to step 2 to fix
 
-4. COMMIT AND VERIFY:
-   a) Commit: git commit --no-verify -m "feat: {title}"
+4. COMMIT AND VERIFY (only after pre-commit passes):
+   a) Commit: git commit -m "feat: {title}"
    b) Run: uvx prothon promise check {task_index}
+   c) If promise check fails, increment attempts and go to step 2 to fix
 
-5. IF ANY CHECK FAILS:
-   - Read the error output
-   - Fix the issues
-   - Go to step 3 (max {max_attempts} total attempts)
-
-6. IF ALL PASS:
+5. IF ALL PASS:
    - Run: uvx prothon promise complete {task_index} {attempts}
    - Report success
 ```
 
 **Key details:**
-- Stage with `git add -A` BEFORE running pre-commit — hooks need staged content, and `-A` handles creations, modifications, and deletions
-- Pre-commit hooks may auto-fix files (trailing whitespace, formatting) outside the task file list — re-stage with `git add -A` and re-run once if they do
-- `--no-verify` on commit avoids double-executing hooks that already passed in step 3
+- Stage selectively — `git add -u` for tracked file modifications, explicit `git add` for new files, `git rm` for deletions. Avoids accidentally staging unrelated files
+- Pre-commit hooks may auto-fix files (trailing whitespace, formatting) outside the task file list — re-stage with `git add -u` and re-run once if they do
+- Pre-commit MUST pass before committing — do not use `--no-verify`
 - Subagent commits before promise check — `git diff <base_commit>` sees committed changes
-- `max_attempts` comes from the task's `max_attempts` field in the promise file (default: 3)
+- One attempt = one full iteration of steps 3–4. Increment `attempts` on any failure (pre-commit or promise check). Stop when `attempts >= max_attempts` (default: 3)
 - Keep your own context lean: reference file paths in subagent prompts — do NOT paste file contents
 
 ---

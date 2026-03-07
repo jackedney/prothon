@@ -111,36 +111,33 @@ The `launch()` function accepts anything satisfying `AssistantBackend` and runs 
 
 Functions use production defaults (e.g., `path: Path = PROMISE_PATH`) but accept overrides so tests never touch real state and never need monkeypatching. This applies to all promise functions, git functions, and skill sync.
 
-### File Locking for Concurrent Access
+### File Locking and Atomic Persistence
 
-When parallel subagents mark tasks complete simultaneously, `complete_task()` wraps its load-modify-save cycle in an exclusive file lock using `fcntl.flock` on a sibling `.toml.lock` file. The lock file is separate from the TOML file so the promise can be fully rewritten without interfering with the lock. Only write operations need locking — read-only operations are safe without it.
+When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates. `save_promise()` writes atomically via `tempfile.mkstemp` + `os.fsync` + `os.replace`, so readers never see partially-written content — read-only operations (`status`, `check_task`, `plan`) are safe without locking.
 
-### File Locking for Concurrent Access
-
-When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates.
+The lock implementation is cross-platform: `fcntl.flock` on Unix, `msvcrt.locking` on Windows.
 
 ```python
 @contextmanager
 def _lock_promise(path: Path) -> Iterator[None]:
     lock_path = path.with_suffix(".toml.lock")
     lock_path.touch(exist_ok=True)
-    fd = lock_path.open("w")
-    try:
+    with lock_path.open("w") as fd:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
-    finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        fd.close()
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
 
 def complete_task(task_index, ...):
-    report = check_task(...)       # read-only, no lock needed
-    with _lock_promise(path):      # exclusive lock for write
+    report = check_task(...)       # read-only, no lock needed (atomic writes)
+    with _lock_promise(path):      # exclusive lock for read-modify-write
         promise = load_promise(path)
         promise.tasks[task_index].completed = True
         save_promise(promise, path)
 ```
 
-The lock uses a sibling `.toml.lock` file (not the TOML itself) so the promise file can be fully rewritten without interfering with the lock. Only `complete_task` needs locking — read-only operations (`status`, `check_task`, `plan`) are safe without it.
+The lock uses a sibling `.toml.lock` file (not the TOML itself) so the promise file can be fully rewritten without interfering with the lock.
 
 ### Guard-Clause Preconditions
 

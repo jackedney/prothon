@@ -246,9 +246,12 @@ def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
     doc.add("tasks", tasks_aot)
 
     content = tomlkit.dumps(doc)
+    data = content.encode("utf-8")
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
-        os.write(fd, content.encode("utf-8"))
+        written = 0
+        while written < len(data):
+            written += os.write(fd, data[written:])
         os.fsync(fd)
     except BaseException:
         os.close(fd)

@@ -4,11 +4,16 @@ on:
   push:
     branches: [master]
 
+concurrency:
+  group: version-bump
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
 jobs:
   version-bump:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
 
     steps:

@@ -33,7 +33,7 @@ jobs:
               try:
                   import tomli as tomllib
               except ImportError:
-                  print("true")
+                  print("false")
                   sys.exit(0)
           try:
               with open("pyproject.toml", "rb") as f:
@@ -41,7 +41,7 @@ jobs:
               val = data.get("tool", {}).get("prothon", {}).get("ci", {}).get("auto_version", True)
               print("true" if val else "false")
           except Exception:
-              print("true")
+              print("false")
           PYEOF
           )
           echo "auto_version=$AUTO_VERSION" >> "$GITHUB_OUTPUT"
@@ -100,8 +100,10 @@ jobs:
         run: |
           pip install tomlkit
           python3 - <<'PYEOF'
+          import io
           import os
           import re
+          import subprocess
           import sys
 
           try:
@@ -121,9 +123,19 @@ jobs:
 
           bump_type = os.environ["BUMP_TYPE"]
 
-          # Read current version from pyproject.toml
-          with open("pyproject.toml", "rb") as f:
-              raw = tomllib.load(f)
+          # Read current version from pyproject.toml at origin/master tip
+          try:
+              subprocess.run(["git", "fetch", "origin", "master"], capture_output=True)
+              res = subprocess.run(
+                  ["git", "show", "origin/master:pyproject.toml"],
+                  capture_output=True,
+                  check=True,
+              )
+              raw = tomllib.load(io.BytesIO(res.stdout))
+          except Exception as e:
+              print(f"ERROR: failed to read pyproject.toml from origin/master: {e}", file=sys.stderr)
+              sys.exit(1)
+
           current = raw.get("project", {}).get("version", "")
           if not current:
               print("ERROR: no version found in pyproject.toml [project]", file=sys.stderr)

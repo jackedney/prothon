@@ -333,6 +333,36 @@ The tech-researcher generates reference skills in `.agents/skills/` based on the
 
 The compliance checker reads all three documentation levels and all source code, then produces three tables (SPEC compliance, DESIGN compliance, PATTERNS compliance). Each row contains: the checkable statement, a PASS/FAIL/SKIP status, and `file:line` evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category). A summary section reports overall percentage and prioritized action items.
 
+### SPEC.md Content Contract
+
+SPEC.md is the highest-authority document in the hierarchy. It defines *what* the system must do without prescribing *how*. Its expected sections are:
+
+- **Purpose** — A concise description of what the tool does and why it exists. States the problems it solves.
+- **Requirements** — Grouped by subsystem, each requirement is a numbered statement (R1, R2, ...) using "must" language. Requirements must be testable and verifiable — vague aspirations are not requirements.
+- **Constraints** — Hard limits on technology, process, or scope that are non-negotiable.
+- **Out of Scope** — Explicitly excluded features or capabilities, with optional notes on future consideration.
+
+Content rules:
+- No technology choices (package names, frameworks) — those belong in DESIGN.md.
+- No architecture or component structure — those belong in DESIGN.md.
+- No code patterns or conventions — those belong in PATTERNS.md.
+- Requirements must be self-contained — each one should be understandable without reading the others.
+
+### DESIGN.md Content Contract
+
+DESIGN.md is the middle-authority document. It defines *how* the system is built — architecture, technology choices, and interfaces — without specifying code-level patterns. Its expected sections are:
+
+- **Architecture** — High-level component structure, module layout, how components connect and communicate. References which SPEC requirements drive each architectural choice.
+- **Technology Choices** — Table format: Package | Purpose | Serves Requirement | Alternatives Considered. Followed by rationale for each choice.
+- **Interfaces** — API boundaries, data formats, contracts between components. Defines the "what" of each interface, not the "how." Includes all named contracts (Promise Contract, Backend Contract, etc.).
+- **Key Decisions** — Each decision that required research. Format: Decision | Choice | Alternatives | Rationale.
+
+Content rules:
+- No code snippets or implementation details — those belong in PATTERNS.md.
+- No design patterns (e.g., "use factory pattern") — those belong in PATTERNS.md.
+- Every technology choice and architectural decision must trace back to a specific SPEC requirement.
+- Nothing may contradict SPEC.md — SPEC has higher authority.
+
 ### PATTERNS.md Content Contract
 
 PATTERNS.md defines the code patterns, conventions, and testing approaches for a project. Its content is constrained by R25-R26:
@@ -488,3 +518,4 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 | Retry configuration | Project default in `[tool.prothon].max_attempts` + per-task override in promise TOML | CLI flag; env var; promise metadata section | Two-level resolution (project + per-task) follows existing config patterns. Retry count doesn't warrant CLI flag or env var precedence levels. Per-task override lets the planning agent adjust for task complexity. |
 | Retry enforcement | Skill prompt reads `max_attempts` from promise file | Programmatic `attempt_task()` with file locking; hybrid skill + validation | Skill prompt already manages the retry loop. Reading `max_attempts` from the promise file is the minimal change. Programmatic enforcement can be added later if stricter guarantees are needed. |
 | PATTERNS.md content form | Signature-only code, natural language rationale | Allow full code examples; no code at all | Signatures communicate interface contracts without prescribing implementation. Full code examples drift from actual implementations and constrain developer judgment. No code at all loses the precision of typed signatures. |
+| Documentation content contracts | Explicit section structure and content rules for all three doc levels | Implicit via skill instructions only; single combined contract | Each doc level has distinct content rules (SPEC: no tech choices; DESIGN: no code; PATTERNS: no implementation logic). Explicit contracts make the hierarchy self-describing and enable compliance checking. Per-level contracts are clearer than a single combined contract. |

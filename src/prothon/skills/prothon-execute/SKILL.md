@@ -66,7 +66,7 @@ For each task (respecting dependency order):
 3. **Independent tasks can run in parallel** — but never two tasks that touch the same files.
 4. **After each subagent returns:**
    - If succeeded (task marked complete): continue to next task
-   - If failed (3 retries exhausted): report to user, ask skip/retry/abort
+   - If failed (`max_attempts` retries exhausted): report to user, ask skip/retry/abort
 5. **Track progress** — Run `uvx prothon promise status` to see overall progress.
 
 ### Subagent Prompt Template
@@ -86,26 +86,32 @@ You are implementing a single task. Follow this loop:
    - Files to remove: {files_to_remove}
    - Success criteria: {success_criteria}
 
-3. CHECK:
-   a) Run: poe check
-   b) Stage files: git add {all task files}
-   c) Commit: git commit -m "feat: {title}"
-   d) Run: uvx prothon promise check {task_index}
+3. QUALITY GATE:
+   a) Stage task files: git add {all task files}
+   b) Run: pre-commit run --all-files --show-diff-on-failure
+   c) If hooks auto-fixed files, re-stage (git add {all task files}) and re-run pre-commit once
+   d) If hooks still fail, go to step 4
 
-4. IF ANY CHECK FAILS:
+4. COMMIT AND VERIFY:
+   a) Commit: git commit --no-verify -m "feat: {title}"
+   b) Run: uvx prothon promise check {task_index}
+
+5. IF ANY CHECK FAILS:
    - Read the error output
    - Fix the issues
-   - Go to step 3 (max 3 total attempts)
+   - Go to step 3 (max {max_attempts} total attempts)
 
-5. IF ALL PASS:
+6. IF ALL PASS:
    - Run: uvx prothon promise complete {task_index} {attempts}
    - Report success
 ```
 
 **Key details:**
+- Stage files BEFORE running pre-commit — hooks need staged content to check
+- Pre-commit hooks may auto-fix files (trailing whitespace, formatting) — re-stage and re-run once if they do
+- `--no-verify` on commit avoids double-executing hooks that already passed in step 3
 - Subagent commits before promise check — `git diff <base_commit>` sees committed changes
-- `poe check` runs the full quality suite (ruff, ty, bandit, vulture, complexipy, tests)
-- Max 3 retries — after 3 failures, surface the error to the orchestrator
+- `max_attempts` comes from the task's `max_attempts` field in the promise file (default: 3)
 - Keep your own context lean: reference file paths in subagent prompts — do NOT paste file contents
 
 ---

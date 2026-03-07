@@ -82,6 +82,13 @@ You are the Compliance Checker. Your job is to verify that the project's source 
 - Check naming conventions, module structure, error handling
 - Check test structure matches testing patterns
 
+### PATTERNS.md Content Form (R25-R26)
+- Scan every code block in PATTERNS.md
+- Each code block must contain ONLY function/method signatures (name, parameter types, return type)
+- Report FAIL for any code block containing: function bodies, control flow (if/else, for, while), import statements, try/except blocks, class bodies with method implementations, or any implementation logic
+- Report PASS if all code blocks are signature-only (ending with `...` or `: ...`)
+- This is a SPEC compliance check — R25 requires natural language for rationale and logic, R26 requires code examples limited to signatures
+
 ## Output
 
 A compliance report with pass/fail status for every checkable statement, file:line evidence, and a prioritized list of action items for failures.

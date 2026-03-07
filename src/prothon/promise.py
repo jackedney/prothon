@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-import fcntl
+import os
+import sys
+import tempfile
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -20,22 +22,36 @@ PROMISE_PATH = Path("docs/change_promise.toml")
 DEFAULT_TOLERANCE = 30
 
 
-@contextmanager
-def _lock_promise(path: Path) -> Iterator[None]:
-    """Acquire an exclusive file lock on the promise file.
+if sys.platform == "win32":
+    import msvcrt
 
-    Uses a sibling .lock file so the promise TOML can be fully rewritten
-    without interfering with the lock.
-    """
-    lock_path = path.with_suffix(".toml.lock")
-    lock_path.touch(exist_ok=True)
-    fd = lock_path.open("w")
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
-    finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        fd.close()
+    @contextmanager
+    def _lock_promise(path: Path) -> Iterator[None]:
+        """Acquire an exclusive file lock on the promise file (Windows)."""
+        lock_path = path.with_suffix(".toml.lock")
+        if not lock_path.exists() or lock_path.stat().st_size == 0:
+            lock_path.write_bytes(b"\0")
+        with lock_path.open("r+b") as fd:
+            msvcrt.locking(fd.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)
+
+else:
+    import fcntl
+
+    @contextmanager
+    def _lock_promise(path: Path) -> Iterator[None]:
+        """Acquire an exclusive file lock on the promise file (Unix)."""
+        lock_path = path.with_suffix(".toml.lock")
+        lock_path.touch(exist_ok=True)
+        with lock_path.open("w") as fd:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
 
 
 class CheckStatus(Enum):
@@ -229,7 +245,24 @@ def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
         tasks_aot.append(tbl)
     doc.add("tasks", tasks_aot)
 
-    path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    content = tomlkit.dumps(doc)
+    data = content.encode("utf-8")
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        written = 0
+        while written < len(data):
+            written += os.write(fd, data[written:])
+        os.fsync(fd)
+    except BaseException:
+        os.close(fd)
+        os.unlink(tmp)
+        raise
+    os.close(fd)
+    try:
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 
 def _within_tolerance(expected: int, actual: int) -> bool:
@@ -432,6 +465,8 @@ def complete_task(
                 f"(expected task_id {report.task_id!r}, got {promise.tasks[task_index].task_id!r}); "
                 "re-run `promise check` and retry"
             )
+        if promise.tasks[task_index].completed:
+            return
         promise.tasks[task_index].completed = True
         promise.tasks[task_index].attempts = attempts
         save_promise(promise, path)

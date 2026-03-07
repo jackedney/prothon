@@ -113,6 +113,8 @@ Retry enforcement lives in the skill prompt — the subagent reads `max_attempts
 
 Because independent tasks can run in parallel (per requirement 30), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
 
+Because independent tasks can run in parallel (per requirement 28), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
+
 ## Technology Choices
 
 | Package | Purpose | Serves Requirement | Alternatives Considered |

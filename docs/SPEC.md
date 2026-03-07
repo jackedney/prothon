@@ -31,58 +31,60 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 
 ### Documentation Hierarchy
 
-18. The system must enforce a three-level documentation hierarchy: SPEC.md (requirements), DESIGN.md (architecture), and PATTERNS.md (conventions).
+18. The system must enforce a three-level documentation hierarchy: SPEC.md (requirements), DESIGN.md (architecture), and PATTERNS.md (design patterns and conventions).
 19. SPEC.md must have the highest authority. When documents conflict, higher-level documents override lower-level documents.
 20. SPEC.md must exist before DESIGN.md can be written. DESIGN.md must exist before PATTERNS.md can be written.
 21. SPEC.md must only be modifiable through the spec-writer agent. No other agent may alter it.
 22. Each documentation level must have a dedicated interactive agent: spec-writer for SPEC.md, design-writer for DESIGN.md, patterns-writer for PATTERNS.md.
 23. Documentation agents must enforce separation of concerns — the spec-writer must refuse to include technology choices, the design-writer must refuse to include code patterns, and so on.
 24. The doc-harmonizer must detect conflicts between documentation levels and suggest amendments to the lower-authority document, requiring user approval before making changes.
+25. PATTERNS.md must focus on selecting and describing Python design patterns suitable for achieving the architecture defined in DESIGN.md. Pattern rationale and behavioral logic must be expressed in natural language, not code.
+26. Code examples in PATTERNS.md must be limited to function and method signatures (name, parameter types, and return types). Implementation logic must not appear in code form.
 
 ### Code Execution
 
-25. The system must provide an execute workflow that reads all documentation levels and generates a plan of implementation tasks.
-26. Each task in the plan must declare the files to be created, modified, or removed, along with predicted line counts.
-27. The user must approve the plan before any code is written.
-28. Each task must execute in an isolated agent context with only the files and skills relevant to that task.
-29. After each task completes, the system must verify the actual changes against the declared plan, including checking that files exist or were removed as expected and that line counts are within tolerance.
-30. The system must run all toolchain quality checks after each task.
-31. If a task fails verification or quality checks, the system must retry up to a configurable number of attempts before reporting failure.
+27. The system must provide an execute workflow that reads all documentation levels and generates a plan of implementation tasks.
+28. Each task in the plan must declare the files to be created, modified, or removed, along with predicted line counts.
+29. The user must approve the plan before any code is written.
+30. Each task must execute in an isolated agent context with only the files and skills relevant to that task.
+31. After each task completes, the system must verify the actual changes against the declared plan, including checking that files exist or were removed as expected and that line counts are within tolerance.
+32. The system must run all toolchain quality checks after each task.
+33. If a task fails verification or quality checks, the system must retry up to a configurable number of attempts before reporting failure.
 
 ### Compliance Verification
 
-32. The system must provide a compliance checker that verifies source code matches all requirements, design choices, and patterns documented across the three documentation levels.
-33. The compliance checker must produce a report listing each checkable item with a PASS, FAIL, or SKIP status and file-and-line evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category).
-34. Compliance checking must be mandatory before any implementation work is claimed complete.
-35. When compliance failures are found, the system must present them to the user for a decision on whether to update the code or update the documentation.
+34. The system must provide a compliance checker that verifies source code matches all requirements, design choices, and patterns documented across the three documentation levels.
+35. The compliance checker must produce a report listing each checkable item with a PASS, FAIL, or SKIP status and file-and-line evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category).
+36. Compliance checking must be mandatory before any implementation work is claimed complete.
+37. When compliance failures are found, the system must present them to the user for a decision on whether to update the code or update the documentation.
 
 ### Tech Research
 
-36. The system must automatically generate reference skills based on the technology choices made in DESIGN.md.
-37. Generated reference skills must be sourced from live documentation, not solely from the AI's training data.
-38. Reference skills must cover four categories: library usage, language style conventions, performance patterns, and domain knowledge.
-39. Generated reference skills must be stored in the project's local skills directory so they are available to all AI agents working on the project.
+38. The system must automatically generate reference skills based on the technology choices made in DESIGN.md.
+39. Generated reference skills must be sourced from live documentation, not solely from the AI's training data.
+40. Reference skills must cover four categories: library usage, language style conventions, performance patterns, and domain knowledge.
+41. Generated reference skills must be stored in the project's local skills directory so they are available to all AI agents working on the project.
 
 ### Semantic Versioning
 
-40. The system must automatically bump the project version based on which documentation level changed.
-41. Changes to SPEC.md must trigger a major version bump.
-42. Changes to DESIGN.md (without SPEC.md changes) must trigger a minor version bump.
-43. Changes to PATTERNS.md or source code only (without documentation changes) must trigger a patch version bump.
-44. Version bumps must update the version in `pyproject.toml`, `src/<package>/__init__.py`, and create a corresponding git tag.
-45. Version bumping must occur automatically in CI without requiring human approval.
-46. Scaffolded projects (`prothon new`) must include CI workflows that detect change types and perform version bumps.
-47. Adopted projects (`prothon init`) must receive CI workflows that detect change types and perform version bumps.
-48. The version bump CI workflow must be included for both GitHub Actions and GitLab CI/CD.
+42. The system must automatically bump the project version based on which documentation level changed.
+43. Changes to SPEC.md must trigger a major version bump.
+44. Changes to DESIGN.md (without SPEC.md changes) must trigger a minor version bump.
+45. Changes to PATTERNS.md or source code only (without documentation changes) must trigger a patch version bump.
+46. Version bumps must update the version in `pyproject.toml`, `src/<package>/__init__.py`, and create a corresponding git tag.
+47. Version bumping must occur automatically in CI without requiring human approval.
+48. Scaffolded projects (`prothon new`) must include CI workflows that detect change types and perform version bumps.
+49. Adopted projects (`prothon init`) must receive CI workflows that detect change types and perform version bumps.
+50. The version bump CI workflow must be included for both GitHub Actions and GitLab CI/CD.
 
 ### CLI and Agent Integration
 
-49. All documentation and execution workflows must be invocable via CLI commands (`prothon spec`, `prothon design`, `prothon patterns`, `prothon execute`, `prothon compliance`).
-50. The system must support Claude Code and opencode as AI assistants for all agent workflows, with identical behavior and experience across both.
-51. The user must be able to select their preferred AI assistant via CLI flag, environment variable, project-level configuration, and global user-level configuration.
-52. Built-in skills must be bundled with the package and synced to the active assistant's skill directory on every CLI invocation.
-53. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
-54. When opencode is the selected assistant, the user must be able to configure a model and provider via the same configuration hierarchy (CLI flag, environment variable, project-level configuration, global user-level configuration). If neither is configured, prothon must invoke opencode without specifying model or provider, deferring to opencode's own defaults.
+51. All documentation and execution workflows must be invocable via CLI commands (`prothon spec`, `prothon design`, `prothon patterns`, `prothon execute`, `prothon compliance`).
+52. The system must support Claude Code and opencode as AI assistants for all agent workflows, with identical behavior and experience across both.
+53. The user must be able to select their preferred AI assistant via CLI flag, environment variable, project-level configuration, and global user-level configuration.
+54. Built-in skills must be bundled with the package and synced to the active assistant's skill directory on every CLI invocation.
+55. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
+56. When opencode is the selected assistant, the user must be able to configure a model and provider via the same configuration hierarchy (CLI flag, environment variable, project-level configuration, global user-level configuration). If neither is configured, prothon must invoke opencode without specifying model or provider, deferring to opencode's own defaults.
 
 ## Constraints
 

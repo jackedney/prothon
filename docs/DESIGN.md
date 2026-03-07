@@ -79,6 +79,8 @@ The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) t
 
 Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers. This serves requirements 25-31 (execution verification) and 32-35 (compliance verification).
 
+Because independent tasks can run in parallel (per requirement 28), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
+
 ## Technology Choices
 
 | Package | Purpose | Serves Requirement | Alternatives Considered |

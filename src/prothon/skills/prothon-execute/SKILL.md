@@ -62,7 +62,7 @@ attempts = 0
 For each task (respecting dependency order):
 
 1. **Wait for dependencies** — All tasks listed in `dependencies` must be marked complete before starting.
-2. **Launch subagent** — Launch a fresh subagent (Task tool, `subagent_type: general-purpose`) with the task loop prompt below.
+2. **Launch subagent** — Spawn a subagent (type: general-purpose, fresh context) with the task loop prompt below.
 3. **Independent tasks can run in parallel** — but never two tasks that touch the same files.
 4. **After each subagent returns:**
    - If succeeded (task marked complete): continue to next task
@@ -112,7 +112,7 @@ You are implementing a single task. Follow this loop:
 
 ## Phase 3: Verify
 
-1. **Run compliance check** — Launch a subagent (Task tool, `subagent_type: general-purpose`, fresh context) with this prompt:
+1. **Run compliance check** — Spawn a subagent (type: general-purpose, fresh context) with this prompt:
    > Load the prothon-compliance-checker skill and execute it. Read all docs and all source code, then produce a compliance report.
 
 2. **Report results** — Present the compliance report to the user. If there are failures, fix them and re-check until compliance passes or the remaining issues need user input.

@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import os
+import sys
+import tempfile
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Iterator
 
 import tomlkit
 import tomlkit.exceptions
@@ -14,6 +19,39 @@ from prothon.exceptions import PromiseError
 from prothon.git import GitDiffProvider, SubprocessGitDiff
 
 PROMISE_PATH = Path("docs/change_promise.toml")
+DEFAULT_TOLERANCE = 30
+
+
+if sys.platform == "win32":
+    import msvcrt
+
+    @contextmanager
+    def _lock_promise(path: Path) -> Iterator[None]:
+        """Acquire an exclusive file lock on the promise file (Windows)."""
+        lock_path = path.with_suffix(".toml.lock")
+        if not lock_path.exists() or lock_path.stat().st_size == 0:
+            lock_path.write_bytes(b"\0")
+        with lock_path.open("r+b") as fd:
+            msvcrt.locking(fd.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)
+
+else:
+    import fcntl
+
+    @contextmanager
+    def _lock_promise(path: Path) -> Iterator[None]:
+        """Acquire an exclusive file lock on the promise file (Unix)."""
+        lock_path = path.with_suffix(".toml.lock")
+        lock_path.touch(exist_ok=True)
+        with lock_path.open("w") as fd:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
 
 
 class CheckStatus(Enum):
@@ -207,13 +245,30 @@ def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
         tasks_aot.append(tbl)
     doc.add("tasks", tasks_aot)
 
-    path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    content = tomlkit.dumps(doc)
+    data = content.encode("utf-8")
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        written = 0
+        while written < len(data):
+            written += os.write(fd, data[written:])
+        os.fsync(fd)
+    except BaseException:
+        os.close(fd)
+        os.unlink(tmp)
+        raise
+    os.close(fd)
+    try:
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 
 def _within_tolerance(expected: int, actual: int) -> bool:
     """Check if actual is within +/-30% or +/-30 lines of expected (whichever is greater)."""
     pct_tolerance = expected * 0.3
-    abs_tolerance = 30
+    abs_tolerance = DEFAULT_TOLERANCE
     tolerance = int(max(pct_tolerance, abs_tolerance))
     return abs(actual - expected) <= tolerance
 
@@ -396,23 +451,25 @@ def complete_task(
         raise PromiseError(
             f"Task {task_index} cannot be completed: promise checks failed"
         )
-    # Re-load and validate to avoid TOCTOU race if the file changed
-    # between the check_task read and this read.
-    promise = load_promise(path)
-    if task_index < 0 or task_index >= len(promise.tasks):
-        raise PromiseError(
-            f"Task index {task_index} out of range after re-load; "
-            "promise file may have changed — re-run `promise check` and retry"
-        )
-    if promise.tasks[task_index].task_id != report.task_id:
-        raise PromiseError(
-            f"Task {task_index} identity changed between check and completion "
-            f"(expected task_id {report.task_id!r}, got {promise.tasks[task_index].task_id!r}); "
-            "re-run `promise check` and retry"
-        )
-    promise.tasks[task_index].completed = True
-    promise.tasks[task_index].attempts = attempts
-    save_promise(promise, path)
+    # Lock the promise file so parallel completions don't overwrite each other.
+    with _lock_promise(path):
+        promise = load_promise(path)
+        if task_index < 0 or task_index >= len(promise.tasks):
+            raise PromiseError(
+                f"Task index {task_index} out of range after re-load; "
+                "promise file may have changed — re-run `promise check` and retry"
+            )
+        if promise.tasks[task_index].task_id != report.task_id:
+            raise PromiseError(
+                f"Task {task_index} identity changed between check and completion "
+                f"(expected task_id {report.task_id!r}, got {promise.tasks[task_index].task_id!r}); "
+                "re-run `promise check` and retry"
+            )
+        if promise.tasks[task_index].completed:
+            return
+        promise.tasks[task_index].completed = True
+        promise.tasks[task_index].attempts = attempts
+        save_promise(promise, path)
 
 
 def status(path: Path = PROMISE_PATH) -> str:

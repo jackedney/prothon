@@ -48,6 +48,7 @@ Each module exposes a small public API. Internal helpers stay private. The `_` p
 ```python
 # promise.py — public API
 def load_promise(path: Path = PROMISE_PATH) -> Promise: ...
+def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None: ...
 def check_task(task_index: int, ...) -> TaskCheckReport: ...
 def complete_task(task_index: int, ...) -> None: ...
 def status(path: Path = PROMISE_PATH) -> str: ...
@@ -329,6 +330,33 @@ def test_load_missing(tmp_path):
     report = load_promise(path=tmp_path / "nonexistent.toml")
 ```
 
+### File Locking for Concurrent Access
+
+When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates.
+
+```python
+@contextmanager
+def _lock_promise(path: Path) -> Iterator[None]:
+    lock_path = path.with_suffix(".toml.lock")
+    lock_path.touch(exist_ok=True)
+    fd = lock_path.open("w")
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
+
+def complete_task(task_index, ...):
+    report = check_task(...)       # read-only, no lock needed
+    with _lock_promise(path):      # exclusive lock for write
+        promise = load_promise(path)
+        promise.tasks[task_index].completed = True
+        save_promise(promise, path)
+```
+
+The lock uses a sibling `.toml.lock` file (not the TOML itself) so the promise file can be fully rewritten without interfering with the lock. Only `complete_task` needs locking — read-only operations (`status`, `check_task`, `plan`) are safe without it.
+
 ### Guard-Clause Preconditions
 
 Domain functions that require specific environmental conditions validate them upfront and raise domain exceptions. Guards come first, happy path follows. No nested `if/else` trees.
@@ -336,8 +364,10 @@ Domain functions that require specific environmental conditions validate them up
 ```python
 def init_existing(cwd: Path | None = None) -> list[Path]:
     root = Path(cwd) if cwd else Path.cwd()
-    if not (root / ".git").is_dir():
-        raise GitError(f"not a git repository: {root}")
+    try:
+        run_git("rev-parse", "--git-dir", cwd=root)
+    except GitError:
+        raise GitError(f"not a git repository: {root}") from None
     if (root / "docs" / "SPEC.md").exists():
         raise ProjectAlreadyInitError(f"docs/SPEC.md already exists in {root}")
     ...
@@ -404,9 +434,9 @@ Status styling uses a dict mapping enum values to `(label, style)` tuples — av
 
 ```python
 _status_styles = {
-    CheckStatus.PASS: ("PASS", "green"),
-    CheckStatus.FAIL: ("FAIL", "red"),
-    CheckStatus.SKIP: ("SKIP", "yellow"),
+    CheckStatus.PASSED: ("PASS", "green"),
+    CheckStatus.FAILED: ("FAIL", "red"),
+    CheckStatus.SKIPPED: ("SKIP", "yellow"),
 }
 for c in report.checks:
     label, style = _status_styles[c.status]
@@ -594,7 +624,7 @@ def _launch_skill(
     try:
         name = resolve_agent(agent)
         backend = get_backend(name)
-        resolved_model = resolve_model(model, provider)
+        resolved_model = resolve_model(model, provider) if name == "opencode" else None
         rc = launch(backend, skill_name, cwd, model=resolved_model)
         if rc != 0:
             raise typer.Exit(rc)
@@ -746,37 +776,6 @@ version-bump:
 """
 ```
 
-**Workflow selection** — `prothon init` detects which CI platform(s) exist and writes appropriate workflows:
-
-```python
-def _detect_ci_platform(root: Path) -> list[str]:
-    """Returns 'github', 'gitlab', or both."""
-    platforms = []
-    if (root / ".github" / "workflows").is_dir():
-        platforms.append("github")
-    if (root / ".gitlab-ci.yml").exists():
-        platforms.append("gitlab")
-    return platforms or ["github"]  # default to GitHub if none
-```
-
-If neither exists, default to GitHub (most common). User can delete unwanted file.
-
-**pyproject.toml append** — Safe append with idempotency check:
-
-```python
-def _append_prothon_ci_section(root: Path) -> bool:
-    """Append [tool.prothon.ci] if not present. Returns True if appended."""
-    path = root / "pyproject.toml"
-    content = path.read_text()
-    if "[tool.prothon.ci]" in content:
-        return False
-    with path.open("a") as f:
-        f.write("\n[tool.prothon.ci]\nauto_version = true\n")
-    return True
-```
-
-These are internal to `init_existing()` — no new public functions in `scaffold.py`.
-
 ### Pattern Summary
 
 | Pattern | Where | Why |
@@ -802,8 +801,6 @@ These are internal to `init_existing()` — no new public functions in `scaffold
 | Conditional path branching | `init_existing()` Path A/B | Guards first, branch on state, converge on common overlay |
 | Separate input collection | `new` in `cli.py` vs `_collect_project_details()` in `scaffold.py` | `new` uses Typer prompts directly (CLI concern); `_collect_project_details()` is only for `init_existing` Path A. Intentionally not shared — different UX contexts. |
 | Semver pure functions | `versioning.py` bump functions | Zero dependencies, ~30 lines, full control over format |
-| CI platform detection | `_detect_ci_platform()` in `scaffold.py` | Sensible default (GitHub), user can delete unwanted |
-| Idempotent config append | `_append_prothon_ci_section()` in `scaffold.py` | Safe re-runs, no duplicate sections |
 
 ## Skill Authoring Patterns
 

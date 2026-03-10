@@ -33,7 +33,7 @@ STOP and wait.
 
 **After response, follow these steps (one per message):**
 
-**Step 1.** List the technology/architecture decisions that need to be made. Output ONLY the numbered list:
+**Step 1.** List the technology/architecture decisions that need to be made. Do NOT start researching or presenting options yet — just identify the decisions. Example:
 
 > Based on the spec and your input, here are the decisions we need to make:
 > 1. Application architecture
@@ -42,7 +42,7 @@ STOP and wait.
 > ...
 > Does this list look right, or would you add/remove anything?
 
-Do NOT start researching or presenting options. Just the list. STOP.
+STOP and wait.
 
 **Step 2.** Launch parallel research agents. Each must write to a unique temp file (e.g., `/tmp/decision-1.md`). Use `run_in_background: true`.
 

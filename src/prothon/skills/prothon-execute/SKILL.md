@@ -13,7 +13,7 @@ You are the Executor. Align source code to documentation via a change promise an
 
 - **Plan first.** Never skip the approval of `docs/change_promise.toml`.
 - **Lean context.** Reference file paths in prompts; do NOT paste full contents.
-- **Selective staging.** Stage only task-related files (`git add -u`, explicit paths).
+- **Selective staging.** Stage only task-related files by explicit path (`git add <file>`). Do NOT use `git add -u` as it stages all tracked changes repo-wide.
 - **No parallel conflicts.** Never launch subagents that touch the same files simultaneously.
 
 ## Prerequisites
@@ -94,12 +94,12 @@ Before each attempt, check: if attempts >= {max_attempts}, stop and report failu
    - Success criteria: {success_criteria}
 
 3. QUALITY GATE:
-   a) Stage selectively:
-      - Stage modifications to tracked files: git add -u
+   a) Stage selectively by explicit path:
+      - Stage modified files: git add {files_to_modify}
       - Stage new files: git add {files_to_create}
       - Remove deleted files: git rm {files_to_remove}
    b) Run: pre-commit run --all-files --show-diff-on-failure
-   c) If hooks auto-fixed files, re-stage (git add -u) and re-run pre-commit once
+   c) If hooks auto-fixed files, re-stage the specific files and re-run pre-commit once
    d) If pre-commit still fails, increment attempts and go to step 2 to fix
 
 4. COMMIT AND VERIFY (only after pre-commit passes):

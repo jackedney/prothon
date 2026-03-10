@@ -33,13 +33,13 @@ STOP and wait.
 
 **After response, follow these steps (one per message):**
 
-**Step 1.** (a) **Code Organization** — naming, structure, layout. **STOP** and wait.
+**Step 1.** (a) **Code Organization** — naming, structure, layout. End with "Does this work for you, or would you change anything?" **STOP** and wait.
 
-**Step 2.** (b) **Design Patterns** — which patterns apply and where. **STOP** and wait.
+**Step 2.** (b) **Design Patterns** — which patterns apply and where. End with a question. **STOP** and wait.
 
-**Step 3.** (c) **Error Handling** — how errors flow through the system. **STOP** and wait.
+**Step 3.** (c) **Error Handling** — how errors flow through the system. End with a question. **STOP** and wait.
 
-**Step 4.** (d) **Testing Patterns** — test structure and conventions. **STOP** and wait.
+**Step 4.** (d) **Testing Patterns** — test structure and conventions. End with a question. **STOP** and wait.
 
 **Step 5.** Present complete summary for final confirmation.
 

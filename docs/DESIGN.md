@@ -139,7 +139,7 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 
 ### CLI Commands
 
-All commands that launch an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`) accept a per-command `--agent` / `-a` option and the `PROTHON_AGENT` environment variable. When the resolved agent is `opencode`, `--model` / `-m` and `--provider` / `-p` options control which model is used. See the Agent Configuration Contract and Model Configuration Contract below for the full resolution chains.
+All commands that launch an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) accept a per-command `--agent` / `-a` option and the `PROTHON_AGENT` environment variable. When the resolved agent is `opencode`, `--model` / `-m` and `--provider` / `-p` options control which model is used. See the Agent Configuration Contract and Model Configuration Contract below for the full resolution chains.
 
 | Command | Input | Output | Subsystem |
 |---------|-------|--------|-----------|
@@ -237,7 +237,7 @@ The user selects their preferred agent via a 5-level precedence chain. The first
 
 Resolution is implemented as a `resolve_agent(cli_value)` function in `cli.py` (~20 lines). Each subcommand passes its `--agent` value (which Typer resolves from CLI flag or env var) as `cli_value`. Levels 3-4 are resolved by reading TOML files with `tomlkit` (already a dependency).
 
-The `--agent` option is per-command, defined on each command that launches an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`) via a shared `AgentOption` annotated type. This allows natural usage like `prothon patterns --agent opencode`. Commands that don't launch a session (`new`, `init`, `promise *`) don't have the option. The `PROTHON_AGENT` environment variable is handled via Typer's `envvar=` parameter on the shared option definition.
+The `--agent` option is per-command, defined on each command that launches an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) via a shared `AgentOption` annotated type. This allows natural usage like `prothon patterns --agent opencode`. Commands that don't launch a session (`new`, `init`, `promise *`) don't have the option. The `PROTHON_AGENT` environment variable is handled via Typer's `envvar=` parameter on the shared option definition.
 
 Valid backend keys match the registry: `claude-code`, `opencode`. When an invalid key is provided, the error message lists all registered backends. When the resolved backend's binary is missing, the error message includes the backend's `install_hint`.
 
@@ -284,7 +284,7 @@ When the resolved agent is `opencode`, the user can configure which model and pr
 
 **Resolution rules:**
 
-- Both `--model` and `--provider` options are per-command, defined on each session command (`spec`, `design`, `patterns`, `execute`, `compliance`) alongside `--agent`, via shared `ModelOption` and `ProviderOption` annotated types.
+- Both `--model` and `--provider` options are per-command, defined on each session command (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) alongside `--agent`, via shared `ModelOption` and `ProviderOption` annotated types.
 - If both model and provider resolve to values, prothon joins them as `provider/model` and passes `--model provider/model` to opencode's `build_command`.
 - If `--model` already contains a `/` (e.g. `--model z-ai/glm-5`), it is treated as a complete `provider/model` specifier and `--provider` is ignored.
 - If only one of model or provider resolves to a value (and the model value does not contain `/`), prothon exits with an error: `--provider requires --model (and vice versa). Use provider/model format or set both.`
@@ -316,6 +316,7 @@ All other agents (execute, compliance, tech-researcher, and any subagents they s
 | design-writer | `docs/DESIGN.md` |
 | patterns-writer | `docs/PATTERNS.md` |
 | doc-harmonizer | whichever doc(s) it amended |
+| refactor | `docs/DESIGN.md` and/or `docs/PATTERNS.md` |
 
 The commit message follows the format `docs: update <FILENAME> via <agent-name>`. No push is performed — the commit is local only.
 
@@ -329,7 +330,7 @@ The commit message follows the format `docs: update <FILENAME> via <agent-name>`
 
 The tech-researcher generates reference skills in `.agents/skills/` based on the technology choices in DESIGN.md (serves R38-R41). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
 
-**Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
+**Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer, refactor, or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
 
 **Skip condition** — If the modifying agent only added, removed, or modified content outside the Technology Choices and Key Decisions tables, the tech-researcher is skipped entirely. The responsible agent determines this by inspecting the scope of its own changes before deciding whether to launch the tech-researcher subagent.
 

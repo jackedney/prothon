@@ -153,9 +153,9 @@ All commands that launch an assistant session (`spec`, `design`, `patterns`, `ex
 | `prothon refactor` | None (reads docs, plans, launches subagents) | Refactored code and/or docs, committed per-task | cli.py → assistant.py (skill subprocess) |
 | `prothon promise plan` | None (reads `change_promise.toml`) | Pretty-printed task table | promise.py |
 | `prothon promise status` | None (reads `change_promise.toml`) | Task completion progress table | promise.py |
-| `prothon promise check N` | Task index | Verification report (per-file PASS/FAIL) | promise.py |
-| `prothon promise complete N` | Task index | Updated `change_promise.toml` (marks task complete) | promise.py |
-| `prothon promise record-attempt N` | Task index | Updated `change_promise.toml` (increments attempt counter) | promise.py |
+| `prothon promise check N` | Zero-based task index | Verification report (per-file PASS/FAIL) | promise.py |
+| `prothon promise complete N` | Zero-based task index | Updated `change_promise.toml` (marks task complete) | promise.py |
+| `prothon promise record-attempt N` | Zero-based task index | Updated `change_promise.toml` (increments attempt counter) | promise.py |
 | `prothon promise cleanup` | None | Removes `change_promise.toml` | promise.py |
 
 ### Promise Contract Format
@@ -180,7 +180,7 @@ expected_lines_removed = <int>
 context_files = ["<path>", ...]
 doc_sections = ["<doc>:<section>", ...]
 reference_skills = ["<skill-name>", ...]
-dependencies = [<task-index>, ...]
+dependencies = [<zero-based-task-index>, ...]
 completed = <bool>
 attempts = <int>
 max_attempts = <int>
@@ -296,13 +296,13 @@ When the resolved agent is `opencode`, the user can configure which model and pr
 
 Documentation files (`docs/SPEC.md`, `docs/DESIGN.md`, `docs/PATTERNS.md`) are protected by two mechanisms:
 
-**Edit guard** — Only four agents may write to documentation files:
+**Edit guard** — Only five agents may write to documentation files:
 
 | File | Permitted writers |
 |------|-------------------|
 | `docs/SPEC.md` | spec-writer |
-| `docs/DESIGN.md` | design-writer, doc-harmonizer |
-| `docs/PATTERNS.md` | patterns-writer, doc-harmonizer |
+| `docs/DESIGN.md` | design-writer, refactor, doc-harmonizer |
+| `docs/PATTERNS.md` | patterns-writer, refactor, doc-harmonizer |
 
 The doc-harmonizer may only write after presenting proposed amendments to the user and receiving explicit approval. This satisfies the SPEC constraint that no documentation changes may be applied by the doc-harmonizer without user approval.
 

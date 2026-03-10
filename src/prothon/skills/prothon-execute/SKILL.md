@@ -1,18 +1,24 @@
 ---
 name: prothon-execute
-description: Align source code to documentation — generates an enriched change promise, then executes tasks via self-correcting subagent loops.
+description: "[What] Align source code to documentation. [When] Use to implement features or fixes based on the doc hierarchy. [Capabilities] Change promise generation, self-correcting execution loops, and automated verification."
 ---
 
 # Execute
 
 ## Role
 
-You are the Executor. Your job is to make the source code match the documentation. You generate an enriched change promise (the plan), get user approval, then execute each task via a self-correcting subagent loop.
+You are the Executor. Align source code to documentation via a change promise and self-correcting subagent loops.
+
+## Critical
+
+- **Plan first.** Never skip the approval of `docs/change_promise.toml`.
+- **Lean context.** Reference file paths in prompts; do NOT paste full contents.
+- **Selective staging.** Stage only task-related files (`git add -u`, explicit paths).
+- **No parallel conflicts.** Never launch subagents that touch the same files simultaneously.
 
 ## Prerequisites
 
-- `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` must all exist and be populated
-- If any are missing or empty, tell the user which `prothon` command to run first
+- `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` must be populated.
 
 ## Phase 1: Plan
 
@@ -106,32 +112,17 @@ Before each attempt, check: if attempts >= {max_attempts}, stop and report failu
    - Report success
 ```
 
-**Key details:**
-- Stage selectively — `git add -u` for tracked file modifications, explicit `git add` for new files, `git rm` for deletions. Avoids accidentally staging unrelated files
-- Pre-commit hooks may auto-fix files (trailing whitespace, formatting) outside the task file list — re-stage with `git add -u` and re-run once if they do
-- Pre-commit MUST pass before committing — do not use `--no-verify`
-- Subagent commits before promise check — `git diff <base_commit>` sees committed changes
-- One attempt = one full iteration of steps 3–4. Increment `attempts` on any failure (pre-commit or promise check). Stop when `attempts >= max_attempts` (default: 3)
-- Keep your own context lean: reference file paths in subagent prompts — do NOT paste file contents
-
 ---
 
 ## Phase 3: Verify
 
-1. **Run compliance check** — Spawn a subagent (type: general-purpose, fresh context) with this prompt:
-   > Load the prothon-compliance-checker skill and execute it. Read all docs and all source code, then produce a compliance report.
-
-2. **Report results** — Present the compliance report to the user. If there are failures, fix them and re-check until compliance passes or the remaining issues need user input.
-
-3. **Clean up** — Run: `uvx prothon promise cleanup` to remove the promise file. Each execution generates a fresh promise, so stale ones must not persist.
+1. **Compliance check** — Load `prothon-compliance-checker` in a fresh context.
+2. **Report results** — Present report and fix failures until compliant.
+3. **Clean up** — Run `uvx prothon promise cleanup`.
 
 ## Guards
 
-- Do NOT write markdown plan files — no `docs/PLAN.md`, no `plan.md`, no markdown summaries. The plan is ALWAYS `docs/change_promise.toml` in TOML format.
-- Do NOT create your own plan tables, summaries, or wave diagrams — ALWAYS use `uvx prothon promise plan` output and nothing else.
-- Do NOT improvise an alternative plan format — the TOML schema above is the contract. Every field is required.
-- Do NOT modify doc files (SPEC.md, DESIGN.md, PATTERNS.md) — if docs seem wrong, flag it to the user
-- Do NOT skip the planning phase — always generate `docs/change_promise.toml` and get approval first
-- Do NOT launch subagents that modify the same files in parallel — this causes conflicts
-- Do NOT paste file contents into subagent prompts — reference paths and let subagents read
-- Do NOT read full file contents yourself unless absolutely necessary for planning — stay lean
+- **TOML only.** The plan is ALWAYS `docs/change_promise.toml`. No markdown plans.
+- **No manual tables.** Use `uvx prothon promise plan` output only.
+- **Doc integrity.** Do NOT modify SPEC, DESIGN, or PATTERNS.
+- **Fresh context.** Use fresh subagents for implementation tasks.

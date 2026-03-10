@@ -341,6 +341,38 @@ def test_complete_task_defaults_to_one_attempt(tmp_path: Path):
     assert result.tasks[0].attempts == 1
 
 
+def test_record_attempt_increments_counter(tmp_path: Path):
+    promise = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="Test", attempts=1)],
+    )
+    p = tmp_path / "promise.toml"
+    save_promise(promise, p)
+
+    from prothon.promise import record_attempt
+    record_attempt(0, path=p)
+
+    result = load_promise(p)
+    assert result.tasks[0].attempts == 2
+
+    record_attempt(0, path=p)
+    result = load_promise(p)
+    assert result.tasks[0].attempts == 3
+
+
+def test_record_attempt_index_out_of_range(tmp_path: Path):
+    promise = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="Test")],
+    )
+    p = tmp_path / "promise.toml"
+    save_promise(promise, p)
+
+    from prothon.promise import record_attempt
+    with pytest.raises(PromiseError, match="out of range"):
+        record_attempt(99, path=p)
+
+
 def test_complete_task_refuses_when_checks_fail(tmp_path: Path):
     """complete_task raises PromiseError when promise checks fail (SPEC R34)."""
     promise = Promise(

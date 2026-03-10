@@ -472,6 +472,31 @@ def complete_task(
         save_promise(promise, path)
 
 
+def record_attempt(
+    task_index: int,
+    *,
+    path: Path = PROMISE_PATH,
+) -> None:
+    """Increment the attempt counter for a task.
+
+    Args:
+        task_index: Zero-based index of the task.
+        path: Path to the promise TOML file.
+
+    Raises:
+        PromiseError: If task_index is out of range.
+    """
+    with _lock_promise(path):
+        promise = load_promise(path)
+        if task_index < 0 or task_index >= len(promise.tasks):
+            raise PromiseError(
+                f"Task index {task_index} out of range; "
+                "promise file may have changed"
+            )
+        promise.tasks[task_index].attempts += 1
+        save_promise(promise, path)
+
+
 def status(path: Path = PROMISE_PATH) -> str:
     """Return a formatted status of all tasks."""
     promise = load_promise(path)

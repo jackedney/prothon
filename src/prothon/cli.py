@@ -530,6 +530,21 @@ def promise_complete(
     typer.echo(f"Task {task_index} marked as completed ({attempts} attempt{suffix}).")
 
 
+@promise_app.command("record-attempt")
+def promise_record_attempt(
+    task_index: int = typer.Argument(help="Zero-based task index to record attempt for"),
+) -> None:
+    """Increment the attempt counter for a task."""
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
+    try:
+        promise.record_attempt(task_index, path=promise_path)
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}")
+        raise typer.Exit(1)
+    typer.echo(f"Attempt recorded for task {task_index}.")
+
+
 @promise_app.command("cleanup")
 def promise_cleanup() -> None:
     """Remove the promise file after all tasks are complete."""

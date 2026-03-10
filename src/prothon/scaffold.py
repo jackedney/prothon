@@ -63,6 +63,7 @@ permissions:
 
 jobs:
   version-bump:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
 
     steps:
@@ -273,6 +274,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Read version and create tag
         run: |
@@ -303,7 +306,7 @@ jobs:
           TAG="v${VERSION}"
 
           # Check if tag already exists
-          if git tag -l "$TAG" | grep -q "$TAG"; then
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists, skipping"
             exit 0
           fi

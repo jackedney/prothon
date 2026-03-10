@@ -516,18 +516,16 @@ def promise_check(
 @promise_app.command("complete")
 def promise_complete(
     task_index: int = typer.Argument(help="Zero-based task index to mark complete"),
-    attempts: int = typer.Argument(default=1, help="Number of attempts taken"),
 ) -> None:
-    """Mark a task as completed and record attempt count."""
+    """Mark a task as completed (attempt count is read from the promise file)."""
     root = _require_project_root()
     promise_path = _require_promise_file(root)
     try:
-        promise.complete_task(task_index, attempts=attempts, path=promise_path)
+        promise.complete_task(task_index, path=promise_path)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}")
         raise typer.Exit(1)
-    suffix = "s" if attempts != 1 else ""
-    typer.echo(f"Task {task_index} marked as completed ({attempts} attempt{suffix}).")
+    typer.echo(f"Task {task_index} marked as completed.")
 
 
 @promise_app.command("record-attempt")

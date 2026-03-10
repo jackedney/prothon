@@ -58,11 +58,11 @@ attempts = 0
 For each task in the promise (respecting dependency order):
 
 1. **Orchestrate Retries** — While `attempts < max_attempts` and task is not `completed`:
-   a) **Launch Subagent** — Spawn a **fresh** Claude/OpenCode instance (type: general-purpose) with the "Task Implementation Prompt" below.
-   b) **Monitor Result**:
+   a) **Record attempt** — Run: `uvx prothon promise record-attempt {task_index}` (counts every attempt, including the one about to start).
+   b) **Launch Subagent** — Spawn a **fresh** Claude/OpenCode instance (type: general-purpose) with the "Task Implementation Prompt" below.
+   c) **Monitor Result**:
       - If subagent reports **SUCCESS** (task marked complete): Proceed to next task.
       - If subagent reports **FAILURE**:
-        - Run: `uvx prothon promise record-attempt {task_index}`
         - If `attempts >= max_attempts`, report failure to user and ask skip/retry/abort.
         - Otherwise, loop back to step (a) to spawn a **fresh** instance with the same goal + failure context.
 
@@ -70,7 +70,7 @@ For each task in the promise (respecting dependency order):
 
 ### Task Implementation Prompt
 
-```
+```text
 You are implementing a single task with fresh context. You MUST close the session on completion.
 
 1. READ CONTEXT:
@@ -92,7 +92,7 @@ You are implementing a single task with fresh context. You MUST close the sessio
 
 4. EXIT:
    - If `promise check` passed:
-     - Run: `uvx prothon promise complete {task_index} {attempts}`
+     - Run: `uvx prothon promise complete {task_index}`
      - Report SUCCESS and close session.
    - If any step failed:
      - Report FAILURE with context on what went wrong and close session.

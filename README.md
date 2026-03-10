@@ -88,11 +88,13 @@ Three independent verification loops, all automatic.
 → **compliance-checker** — reads every checkable statement from docs and verifies code implements it. Produces PASS/FAIL/PARTIAL tables with `file:line` evidence. Always-on quality gate.
 → **change promises** — `change_promise.toml` declares exactly what files each task will create, modify, or remove with expected line counts. `prothon promise check` diffs against the base commit to verify what actually happened.
 
+Documentation files are protected by **edit guards** — only the designated skill (spec-writer, design-writer, patterns-writer, doc-harmonizer) may modify each doc. Each write is committed immediately to prevent overwrites.
+
 ---
 
 ## 03 — the AI learns your stack
 
-When you make technology choices in DESIGN.md, the **tech-researcher** fires automatically — queries Context7 live docs, falls back to web search, then training knowledge. Generates reference skills for your exact stack:
+When you change the Technology Choices or Key Decisions tables in DESIGN.md, the **tech-researcher** fires automatically — queries Context7 live docs, falls back to web search, then training knowledge. Generates reference skills for your exact stack:
 
 ```text
 .agents/skills/
@@ -106,7 +108,7 @@ Auto-loaded during execution — no manual context switching.
 
 ---
 
-## 04 — execution promises
+## 04 — wave-based execution
 
 Before execution starts, the planner writes `change_promise.toml` — a contract that turns open-ended code generation into a bounded, verifiable process.
 
@@ -115,7 +117,7 @@ Before execution starts, the planner writes `change_promise.toml` — a contract
 → Checked against git with ±30% or ±30 lines tolerance
 → 3 attempts per task, **fresh context** each
 
-**Plan** — read all docs + skills, scan codebase gaps, write promise file. **Execute** — fresh subagent per task, implement → check → commit, verify promise (3 retries). **Verify** — compliance check, full docs vs code, cleanup promise file.
+Execution runs in **phase-based waves**. The executor inspects current code vs docs, determines the next phase, spawns fresh subagents for a batch of independent tasks, runs a compliance check, then loops. Independent tasks within a wave run in parallel with file-locking safety (`fcntl.flock` / `msvcrt.locking`) and atomic writes to prevent partial reads.
 
 Fresh-context subagents are the key design decision — each task gets a clean context loaded with only the files and skills it needs, preventing context pollution between tasks.
 
@@ -134,18 +136,33 @@ prothon spec         spec-writer           extract requirements through probing 
 prothon design       design-writer         research technologies, present trade-offs
 prothon patterns     patterns-writer       define code patterns and testing conventions
 prothon execute      execute               plan, delegate, and implement code from docs
+prothon refactor     refactor              doc-driven refactoring of code and documentation
 prothon compliance   compliance-checker    verify code matches documentation
 ```
 
 Three additional skills run automatically as quality gates — never invoked directly:
 
 → **doc-harmonizer** — cross-references all doc levels after `design` or `patterns`, amends lower docs to resolve conflicts
-→ **tech-researcher** — generates reference skills from Context7 docs with web search fallback
-→ **promise system** — `prothon promise {plan,status,check,complete,cleanup}` tracks and verifies tasks
+→ **tech-researcher** — generates reference skills from Context7 docs with web search fallback when Technology Choices or Key Decisions tables change
+→ **promise system** — `prothon promise {plan,status,check,complete,record-attempt,cleanup}` tracks and verifies tasks
 
 ---
 
-## 06 — tooling
+## 06 — semantic versioning
+
+Version bumps are automatic based on which documentation level changed:
+
+```text
+SPEC.md change       →  major bump  (breaking requirements)
+DESIGN.md change     →  minor bump  (architecture change)
+PATTERNS.md / code   →  patch bump  (conventions or implementation)
+```
+
+A CI workflow generates version bumps on push. Skills use canonical subagent type names (`general-purpose`, `explore`, `plan`) that each backend translates to its own naming scheme, keeping skills portable across assistants.
+
+---
+
+## 07 — tooling
 
 Full quality toolchain enforced on every commit and every push. AI-generated code gets the same scrutiny as human code.
 
@@ -219,7 +236,7 @@ copier copy --trust --vcs-ref HEAD /path/to/prothon /tmp/test-project
 
 → **additional coding agents** — currently supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [opencode](https://opencode.ai). Planned support for [Codex](https://github.com/openai/codex) and other agent backends.
 → **code review integration** — integrate with [CodeRabbit](https://coderabbit.ai) and [Greptile](https://greptile.com) to bring automated, doc-aware code review into the workflow.
-→ **continuous agentic development** — [RALPH loop](https://ghuntley.com/loop/) style autonomous development cycles — agents read docs, plan, implement, verify, and loop until the task is complete, with minimal human intervention.
+→ **continuous agentic development** — autonomous development cycles — agents read docs, plan, implement, verify, and loop until the task is complete, with minimal human intervention.
 
 ---
 

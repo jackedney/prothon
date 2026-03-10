@@ -63,26 +63,69 @@ For the selected items:
    - Use the same schema as `prothon-execute`.
    - Ensure tasks are properly ordered and sized.
    - For doc changes, the task should specify updating the relevant `.md` file in `docs/`.
+   - Pretty-print the plan: `uvx prothon promise plan`.
+   - Get user approval before proceeding.
 
 2. **Apply Documentation Changes** — If doc changes were selected:
    - For minor harmonizations, use the `prothon-doc-harmonizer` patterns.
    - For significant architectural or convention changes, suggest the user run `prothon design` or `prothon patterns` after this refactor session, or perform the edits with explicit approval.
 
-3. **Execute Tasks** — Spawn fresh subagents (type: general-purpose) for each task in the promise.
-   - Use the same Ralph-style loop mechanism as `prothon-execute`:
-     - READ CONTEXT
-     - IMPLEMENT
-     - QUALITY GATE (pre-commit)
-     - COMMIT AND VERIFY (`prothon promise check`)
-     - COMPLETE (`prothon promise complete`)
+3. **Execute Tasks** — For each task (respecting dependency order):
+   a) **Record attempt** — Run: `uvx prothon promise record-attempt {task_index}`.
+   b) **Launch subagent** — Spawn a **fresh** subagent (type: general-purpose) with the prompt template below.
+   c) **Monitor result**:
+      - If succeeded (task marked complete): proceed to next task.
+      - If failed and `attempts >= max_attempts`: report to user, ask skip/retry/abort.
+      - If failed and retries remain: loop back to (a) with a fresh instance.
+   d) **Parallelism** — Independent tasks can run in parallel if they touch different files.
+
+### Subagent Prompt Template
+
+```
+You are implementing a single refactoring task. One "attempt" is a full iteration of steps 3–5.
+Before each attempt, check: if attempts >= {max_attempts}, stop and report failure.
+
+1. READ CONTEXT:
+   - Read these doc sections: {doc_sections}
+   - Read these reference skills: {skill_paths}
+   - Read these context files: {context_files}
+
+2. IMPLEMENT:
+   - Goal: {goal}
+   - Files to create: {files_to_create}
+   - Files to modify: {files_to_modify}
+   - Files to remove: {files_to_remove}
+   - Success criteria: {success_criteria}
+
+3. QUALITY GATE:
+   a) Stage selectively:
+      - Stage modifications to tracked files: git add -u
+      - Stage new files: git add {files_to_create}
+      - Remove deleted files: git rm {files_to_remove}
+   b) Run: pre-commit run --all-files --show-diff-on-failure
+   c) If hooks auto-fixed files, re-stage (git add -u) and re-run pre-commit once
+   d) If pre-commit still fails, increment attempts and go to step 2 to fix
+
+4. COMMIT AND VERIFY (only after pre-commit passes):
+   a) Commit: git commit -m "refactor: {title}"
+   b) Run: uvx prothon promise check {task_index}
+   c) If promise check fails, increment attempts and go to step 2 to fix
+
+5. IF ALL PASS:
+   - Run: uvx prothon promise complete {task_index} {attempts}
+   - Report success
+```
 
 4. **Verify and Clean up** — Once all tasks are complete:
-   - Run `prothon compliance` to ensure everything is now aligned.
-   - Run `prothon promise cleanup`.
+   - Spawn a fresh subagent: "Load prothon-compliance-checker and produce a report."
+   - Show report to user.
+   - Run: `uvx prothon promise cleanup`.
 
 ## Guards
 
 - NEVER modify `docs/SPEC.md`. SPEC is the unchanging authority.
 - ALWAYS get user approval for the specific findings before generating a promise.
-- ALWAYS run `pre-commit` and `prothon promise check` for every task.
+- ALWAYS run `pre-commit` and `uvx prothon promise check {task_index}` for every task.
+- Stage selectively — `git add -u` for tracked modifications, explicit `git add` for new files. Do NOT use `git add -A`.
+- Each attempt gets a **fresh** subagent instance. Never reuse sessions.
 - If doc changes are required, apply them first (or as part of early tasks) so code changes can be verified against the updated docs.

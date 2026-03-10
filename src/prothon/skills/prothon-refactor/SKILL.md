@@ -85,9 +85,9 @@ For the selected items:
 You are implementing a single refactoring task. One "attempt" is a full iteration of steps 3–5.
 Before each attempt, check: if attempts >= {max_attempts}, stop and report failure.
 
-1. READ CONTEXT:
+1. LOAD CONTEXT:
    - Read these doc sections: {doc_sections}
-   - Read these reference skills: {skill_paths}
+   - Activate these reference skills: {skill_names}
    - Read these context files: {context_files}
 
 2. IMPLEMENT:
@@ -117,7 +117,7 @@ Before each attempt, check: if attempts >= {max_attempts}, stop and report failu
 ```
 
 4. **Verify and Clean up** — Once all tasks are complete:
-   - Spawn a fresh subagent: "Load prothon-compliance-checker and produce a report."
+   - Spawn a fresh subagent: "Activate prothon-compliance-checker and produce a report."
    - Show report to user.
    - Run: `uvx prothon promise cleanup`.
 

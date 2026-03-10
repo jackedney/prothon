@@ -107,6 +107,6 @@ A populated `docs/DESIGN.md` with all sections filled in, every choice traced to
 Once DESIGN.md is written to disk and committed, run this quality gate before finishing.
 
 1. **Harmonize docs** — Spawn a subagent (type: general-purpose, fresh context) with this prompt:
-   > Load the prothon-doc-harmonizer skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. For each conflict found, present the proposed amendment to the user and wait for explicit approval before applying the change. Do NOT apply any fixes without user confirmation. The harmonizer will also conditionally trigger the tech-researcher if the Technology Choices or Key Decisions tables changed.
+   > Activate the prothon-doc-harmonizer skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. For each conflict found, present the proposed amendment to the user and wait for explicit approval before applying the change. Do NOT apply any fixes without user confirmation. The harmonizer will also conditionally trigger the tech-researcher if the Technology Choices or Key Decisions tables changed.
 
 2. **Report and finish** — Once the harmonizer completes, summarize its results to the user and tell them to run `prothon patterns` next to define code patterns and conventions. Never mention skill names (like `/prothon-patterns-writer`, `/prothon-tech-researcher`, etc.) to the user — they use CLI commands (`prothon patterns`, `prothon design`, etc.), not skill slash commands.

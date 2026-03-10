@@ -492,9 +492,9 @@ Write the code changes.
 **This is an always-on quality gate.** Before claiming any implementation \
 work is complete, you MUST spawn a dedicated subagent (type: general-purpose, \
 fresh context) to verify code matches documentation. Do not perform this \
-check inline — spawn a fresh subagent with the compliance-checker skill \
-content so it gets a clean context focused solely on compliance verification. \
-Report the subagent's findings to the user.
+check inline — spawn a fresh subagent: "Activate prothon-compliance-checker \
+and produce a report." This ensures it gets a clean context focused solely \
+on compliance verification. Report the subagent's findings to the user.
 
 If the compliance check reports failures, fix the code or update docs and \
 re-check.
@@ -504,8 +504,8 @@ For explicit full compliance scans, the user can run `prothon compliance`.
 ## Skills Directory
 
 Project-specific reference skills live in `.agents/skills/` as directories \
-containing `SKILL.md`. Both Claude Code and opencode discover this directory \
-natively — no symlinks or additional configuration needed.
+containing `SKILL.md`. Claude Code, opencode, and Gemini CLI discover this \
+directory natively — no symlinks or additional configuration needed.
 
 When creating new skills, place them in \
 `.agents/skills/<skill-name>/SKILL.md`.

@@ -81,9 +81,9 @@ For each task in the promise (respecting dependency order):
 ```text
 You are implementing a single task with fresh context. You MUST close the session on completion.
 
-1. READ CONTEXT:
+1. LOAD CONTEXT:
    - Read these doc sections: {doc_sections}
-   - Read these reference skills: {skill_paths}
+   - Activate these reference skills: {skill_names}
    - Read these context files: {context_files}
 
 2. IMPLEMENT:
@@ -113,7 +113,7 @@ You are implementing a single task with fresh context. You MUST close the sessio
 
 ## Phase 3: Verify & Advance
 
-1. **Compliance Check** — Spawn a fresh subagent: "Load prothon-compliance-checker and produce a report."
+1. **Compliance Check** — Spawn a fresh subagent: "Activate prothon-compliance-checker and produce a report."
 2. **Report & Clean up** — Show report to user. Run `uvx prothon promise cleanup`.
 3. **Next Phase** — Tell the user: "Phase complete. Run `prothon execute` again to begin the next phase."
 

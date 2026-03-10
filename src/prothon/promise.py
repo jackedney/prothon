@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
@@ -166,15 +165,9 @@ def _coerce_int(value: object, field: str) -> int:
 
 def _task_from_dict(d: dict) -> Task:
     """Construct a Task from a TOML dict, requiring task_id."""
-    task_id = d.get("task_id")
-    if not task_id:
-        # If loading an old/malformed promise, generate a one-time ID.
-        # Note: This might cause identity mismatches if not saved immediately,
-        # but is better than an empty string.
-        task_id = _generate_id()
     return Task(
         title=d.get("title", ""),
-        task_id=task_id,
+        task_id=d.get("task_id", ""),
         goal=d.get("goal", ""),
         success_criteria=d.get("success_criteria", ""),
         files_to_create=list(d.get("files_to_create", [])),

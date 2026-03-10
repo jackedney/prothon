@@ -29,6 +29,7 @@ from prothon.promise import (
     complete_task,
     load_promise,
     plan,
+    record_attempt,
     save_promise,
     status,
 )
@@ -312,25 +313,10 @@ def test_complete_task_index_out_of_range(promise_file: Path):
         complete_task(99, diff=FakeGitDiff(), path=promise_file)
 
 
-def test_complete_task_records_attempts(tmp_path: Path):
+def test_complete_task_preserves_persisted_attempts(tmp_path: Path):
     promise = Promise(
         metadata=Metadata(base_commit="abc1234"),
-        tasks=[Task(title="Test")],
-    )
-    p = tmp_path / "promise.toml"
-    save_promise(promise, p)
-
-    complete_task(0, attempts=3, diff=FakeGitDiff(), path=p)
-
-    result = load_promise(p)
-    assert result.tasks[0].completed is True
-    assert result.tasks[0].attempts == 3
-
-
-def test_complete_task_defaults_to_one_attempt(tmp_path: Path):
-    promise = Promise(
-        metadata=Metadata(base_commit="abc1234"),
-        tasks=[Task(title="Test")],
+        tasks=[Task(title="Test", attempts=3)],
     )
     p = tmp_path / "promise.toml"
     save_promise(promise, p)
@@ -338,7 +324,96 @@ def test_complete_task_defaults_to_one_attempt(tmp_path: Path):
     complete_task(0, diff=FakeGitDiff(), path=p)
 
     result = load_promise(p)
-    assert result.tasks[0].attempts == 1
+    assert result.tasks[0].completed is True
+    assert result.tasks[0].attempts == 3
+
+
+def test_task_from_dict_coerces_string_attempts():
+    """Malformed attempts (e.g. quoted string) should raise PromiseError."""
+    with pytest.raises(PromiseError, match="must be an integer"):
+        _task_from_dict({"title": "Bad", "attempts": "zero"})
+
+
+def test_record_attempt_preserves_comments(tmp_path: Path):
+    """record_attempt must not destroy TOML comments (DESIGN.md requirement)."""
+    p = tmp_path / "promise.toml"
+    p.write_text(
+        '[metadata]\nbase_commit = "abc"\n\n'
+        "# This is a task comment\n"
+        "[[tasks]]\n"
+        'title = "Test"\n'
+        'task_id = "deadbeef"\n'
+        'goal = ""\n'
+        'success_criteria = ""\n'
+        "files_to_create = []\n"
+        "files_to_modify = []\n"
+        "files_to_remove = []\n"
+        "expected_lines_added = 0\n"
+        "expected_lines_removed = 0\n"
+        "context_files = []\n"
+        "doc_sections = []\n"
+        "reference_skills = []\n"
+        "dependencies = []\n"
+        "completed = false\n"
+        "attempts = 0\n"
+        "max_attempts = 3\n",
+        encoding="utf-8",
+    )
+    record_attempt(0, path=p)
+    content = p.read_text(encoding="utf-8")
+    assert "# This is a task comment" in content
+    assert "attempts = 1" in content
+
+
+def test_record_attempt_increments_counter(tmp_path: Path):
+    promise = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="Test", attempts=1)],
+    )
+    p = tmp_path / "promise.toml"
+    save_promise(promise, p)
+
+    record_attempt(0, path=p)
+
+    result = load_promise(p)
+    assert result.tasks[0].attempts == 2
+
+    record_attempt(0, path=p)
+    result = load_promise(p)
+    assert result.tasks[0].attempts == 3
+
+
+def test_record_attempt_index_out_of_range(tmp_path: Path):
+    promise = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="Test")],
+    )
+    p = tmp_path / "promise.toml"
+    save_promise(promise, p)
+
+    with pytest.raises(PromiseError, match="out of range"):
+        record_attempt(99, path=p)
+
+
+def test_record_attempt_parallel_no_lost_updates(tmp_path: Path):
+    """Concurrent record_attempt calls must not lose increments."""
+    import concurrent.futures
+
+    p_obj = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="Concurrent", attempts=0)],
+    )
+    path = tmp_path / "promise.toml"
+    save_promise(p_obj, path)
+
+    n_threads = 5
+    with concurrent.futures.ThreadPoolExecutor(max_workers=n_threads) as pool:
+        futures = [pool.submit(record_attempt, 0, path=path) for _ in range(n_threads)]
+        for f in futures:
+            f.result()
+
+    result = load_promise(path)
+    assert result.tasks[0].attempts == n_threads
 
 
 def test_complete_task_refuses_when_checks_fail(tmp_path: Path):

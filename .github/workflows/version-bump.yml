@@ -1,24 +1,25 @@
 name: Version Bump
 
 on:
-  push:
+  pull_request:
     branches: [master]
+    types: [opened, synchronize]
 
 concurrency:
-  group: version-bump
-  cancel-in-progress: false
+  group: version-bump-${{ github.head_ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
   version-bump:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -49,28 +50,15 @@ jobs:
       - name: Detect changed files and bump type
         if: steps.config.outputs.auto_version == 'true'
         id: detect
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
-          AFTER_SHA: ${{ github.sha }}
         run: |
+          git fetch origin master
           BUMP_TYPE=$(python3 - <<'PYEOF'
-          import os
           import subprocess
           import sys
 
-          before = os.environ.get("BEFORE_SHA", "").strip()
-          after = os.environ.get("AFTER_SHA", "HEAD").strip()
-
-          # Validate before SHA — the zero SHA means no previous commit (first push)
-          zero_sha = "0000000000000000000000000000000000000000"
-          if not before or before == zero_sha:
-              # No previous commit to diff against; skip bump
-              print("none")
-              sys.exit(0)
-
           try:
               result = subprocess.run(
-                  ["git", "diff", "--name-only", before, after],
+                  ["git", "diff", "--name-only", "origin/master...HEAD"],
                   capture_output=True,
                   text=True,
                   check=True,
@@ -80,6 +68,10 @@ jobs:
               sys.exit(0)
 
           files = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+          # Exclude version bump files from consideration
+          files.discard("pyproject.toml")
+          files = {f for f in files if not f.endswith("__init__.py")}
 
           if "docs/SPEC.md" in files:
               print("major")
@@ -95,6 +87,7 @@ jobs:
 
       - name: Apply version bump
         if: steps.config.outputs.auto_version == 'true' && steps.detect.outputs.bump_type != 'none'
+        id: bump
         env:
           BUMP_TYPE: ${{ steps.detect.outputs.bump_type }}
         run: |
@@ -123,9 +116,8 @@ jobs:
 
           bump_type = os.environ["BUMP_TYPE"]
 
-          # Read current version from pyproject.toml at origin/master tip
+          # Read current version from origin/master
           try:
-              subprocess.run(["git", "fetch", "origin", "master"], capture_output=True)
               res = subprocess.run(
                   ["git", "show", "origin/master:pyproject.toml"],
                   capture_output=True,
@@ -155,6 +147,15 @@ jobs:
           else:
               new_version = f"{major}.{minor}.{patch + 1}"
 
+          # Check if already bumped to this version
+          with open("pyproject.toml", "rb") as f:
+              branch_raw = tomllib.load(f)
+          branch_version = branch_raw.get("project", {}).get("version", "")
+          if branch_version == new_version:
+              print(f"Version already at {new_version}, skipping")
+              open(".bump_skipped", "w").write("true")
+              sys.exit(0)
+
           print(f"Bumping {current} -> {new_version} ({bump_type})")
 
           # Update pyproject.toml using tomlkit to preserve formatting
@@ -175,13 +176,18 @@ jobs:
                   init_path.write_text(updated, encoding="utf-8")
                   print(f"Updated {init_path}")
 
-          # Write new version to file for subsequent steps
           open(".new_version", "w").write(new_version)
           PYEOF
 
-      - name: Commit, tag, and push
+      - name: Commit and push version bump
         if: steps.config.outputs.auto_version == 'true' && steps.detect.outputs.bump_type != 'none'
         run: |
+          if [ -f .bump_skipped ]; then
+            echo "Version already bumped, nothing to do"
+            rm -f .bump_skipped
+            exit 0
+          fi
+
           NEW_VERSION=$(cat .new_version)
           rm -f .new_version
 
@@ -191,7 +197,11 @@ jobs:
           git add pyproject.toml
           git add src/
 
-          git commit -m "chore: bump version to ${NEW_VERSION} [skip ci]"
-          git tag -a "v${NEW_VERSION}" -m "release ${NEW_VERSION}"
-          git push origin master
-          git push origin "v${NEW_VERSION}"
+          # Only commit if there are staged changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore: bump version to ${NEW_VERSION}"
+          git push

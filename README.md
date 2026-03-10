@@ -88,7 +88,7 @@ Three independent verification loops, all automatic.
 → **compliance-checker** — reads every checkable statement from docs and verifies code implements it. Produces PASS/FAIL/PARTIAL tables with `file:line` evidence. Always-on quality gate.
 → **change promises** — `change_promise.toml` declares exactly what files each task will create, modify, or remove with expected line counts. `prothon promise check` diffs against the base commit to verify what actually happened.
 
-Documentation files are protected by **edit guards** — only the designated skill (spec-writer, design-writer, patterns-writer, doc-harmonizer) may modify each doc. Each write is committed immediately to prevent overwrites.
+Documentation files are protected by **edit guards** — only the designated skill (spec-writer, design-writer, patterns-writer, refactor, doc-harmonizer) may modify each doc. Each write is committed immediately to prevent overwrites.
 
 ---
 
@@ -158,7 +158,7 @@ DESIGN.md change     →  minor bump  (architecture change)
 PATTERNS.md / code   →  patch bump  (conventions or implementation)
 ```
 
-A CI workflow generates version bumps on push. Skills use canonical subagent type names (`general-purpose`, `explore`, `plan`) that each backend translates to its own naming scheme, keeping skills portable across assistants.
+A CI workflow generates version bumps on pull requests to master. Skills use canonical subagent type names (`general-purpose`, `explore`, `plan`) that each backend translates to its own naming scheme, keeping skills portable across assistants.
 
 ---
 
@@ -234,7 +234,7 @@ copier copy --trust --vcs-ref HEAD /path/to/prothon /tmp/test-project
 
 ## future
 
-→ **additional coding agents** — currently supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [opencode](https://opencode.ai). Planned support for [Codex](https://github.com/openai/codex) and other agent backends.
+→ **additional coding agents** — currently supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [opencode](https://opencode.ai). Planned support for other agent backends.
 → **code review integration** — integrate with [CodeRabbit](https://coderabbit.ai) and [Greptile](https://greptile.com) to bring automated, doc-aware code review into the workflow.
 → **continuous agentic development** — autonomous development cycles — agents read docs, plan, implement, verify, and loop until the task is complete, with minimal human intervention.
 

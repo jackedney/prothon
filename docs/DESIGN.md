@@ -294,13 +294,13 @@ When the resolved agent is `opencode`, the user can configure which model and pr
 
 Documentation files (`docs/SPEC.md`, `docs/DESIGN.md`, `docs/PATTERNS.md`) are protected by two mechanisms:
 
-**Edit guard** — Only four agents may write to documentation files:
+**Edit guard** — Only five agents may write to documentation files:
 
 | File | Permitted writers |
 |------|-------------------|
 | `docs/SPEC.md` | spec-writer |
-| `docs/DESIGN.md` | design-writer, doc-harmonizer |
-| `docs/PATTERNS.md` | patterns-writer, doc-harmonizer |
+| `docs/DESIGN.md` | design-writer, refactor, doc-harmonizer |
+| `docs/PATTERNS.md` | patterns-writer, refactor, doc-harmonizer |
 
 The doc-harmonizer may only write after presenting proposed amendments to the user and receiving explicit approval. This satisfies the SPEC constraint that no documentation changes may be applied by the doc-harmonizer without user approval.
 

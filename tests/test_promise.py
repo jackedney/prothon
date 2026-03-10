@@ -621,7 +621,9 @@ def test_task_from_dict_empty_dict_defaults():
     """All defaults are correct when dict is empty."""
     task = _task_from_dict({})
     assert task.title == ""
-    assert task.task_id == ""  # No backfill at _task_from_dict level; load_promise handles it
+    assert (
+        task.task_id == ""
+    )  # No backfill at _task_from_dict level; load_promise handles it
     assert task.goal == ""
     assert task.success_criteria == ""
     assert task.files_to_create == []

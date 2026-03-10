@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
@@ -236,7 +237,16 @@ def load_promise(path: Path = PROMISE_PATH) -> Promise:
         raise PromiseError(f"malformed TOML in {path}: {exc}") from exc
     metadata = _metadata_from_dict(dict(doc.get("metadata", {})))
     tasks = [_task_from_dict(dict(t)) for t in doc.get("tasks", [])]
-    return Promise(metadata=metadata, tasks=tasks)
+    promise = Promise(metadata=metadata, tasks=tasks)
+
+    # Backfill missing task_ids and persist them so subsequent loads are stable.
+    needs_backfill = [i for i, t in enumerate(promise.tasks) if not t.task_id]
+    if needs_backfill:
+        for i in needs_backfill:
+            promise.tasks[i].task_id = _generate_id()
+        save_promise(promise, path)
+
+    return promise
 
 
 def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:

@@ -139,6 +139,8 @@ class GeminiCLIBackend:
     ) -> list[str]:
         """Return subprocess argv for a Gemini CLI session with *skill_name*."""
         cmd = [self.cli_command, "-i", f"Use the {skill_name} skill."]
+        if model is not None:
+            cmd.extend(["--model", model])
         return cmd
 
     def sync_skills(self) -> None:

@@ -18,7 +18,7 @@ src/prothon/
     git.py              # Thin typed wrapper around git CLI via subprocess
     assistant.py        # Abstract assistant interface and backend registry
     exceptions.py       # Custom exception hierarchy
-    skills/             # Bundled skill assets (non-Python, 7 directories)
+    skills/             # Bundled skill assets (non-Python, 8 directories)
 
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
@@ -31,7 +31,7 @@ This layout is driven by the number of subsystems in the SPEC (scaffolding, doc 
 cli.py
   ├── scaffold.generate(), init_existing()
   ├── assistant.get_backend(), launch()
-  └── promise.load_promise(), plan(), check_task(), status(), complete_task(), cleanup()
+  └── promise.load_promise(), plan(), check_task(), status(), complete_task(), record_attempt(), cleanup()
 
 assistant.py
   └── skills.sync_skills(target)
@@ -57,7 +57,7 @@ All modules
 
 Two non-Python asset directories are bundled with the project:
 
-- `skills/` — 7 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 54 (skills bundled with package) and 22 (dedicated interactive agents).
+- `skills/` — 8 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 54 (skills bundled with package) and 22 (dedicated interactive agents).
 - `template/` — Copier project template at the repository root (not inside the package), with `copier.yml`, Jinja2-templated files, and post-generation tasks. Serves requirements 1-9 (project scaffolding).
 
 `skills/` is included automatically as part of the `src/prothon` package. `template/` is included via `[tool.hatch.build.targets.wheel.force-include]` since it lives outside the package root.
@@ -111,9 +111,7 @@ Retry enforcement lives in the skill prompt — the subagent reads `max_attempts
 
 ### Concurrency
 
-Because independent tasks can run in parallel (per requirement 30), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
-
-Because independent tasks can run in parallel (per requirement 28), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
+Because independent tasks can run in parallel (per requirements 28 and 30), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
 
 ## Technology Choices
 
@@ -141,7 +139,7 @@ Because independent tasks can run in parallel (per requirement 28), `complete_ta
 
 ### CLI Commands
 
-All commands that launch an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`) accept a per-command `--agent` / `-a` option and the `PROTHON_AGENT` environment variable. When the resolved agent is `opencode`, `--model` / `-m` and `--provider` / `-p` options control which model is used. See the Agent Configuration Contract and Model Configuration Contract below for the full resolution chains.
+All commands that launch an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) accept a per-command `--agent` / `-a` option and the `PROTHON_AGENT` environment variable. When the resolved agent is `opencode`, `--model` / `-m` and `--provider` / `-p` options control which model is used. See the Agent Configuration Contract and Model Configuration Contract below for the full resolution chains.
 
 | Command | Input | Output | Subsystem |
 |---------|-------|--------|-----------|
@@ -152,10 +150,12 @@ All commands that launch an assistant session (`spec`, `design`, `patterns`, `ex
 | `prothon patterns` | None (launches interactive session) | Populated `docs/PATTERNS.md` | cli.py → assistant.py (skill subprocess) |
 | `prothon execute` | None (reads docs, plans, launches subagents) | Implemented code, committed per-task | cli.py → assistant.py (skill subprocess) |
 | `prothon compliance` | None (reads docs and code) | Compliance report table (PASS/FAIL per requirement) | cli.py → assistant.py (skill subprocess) |
+| `prothon refactor` | None (reads docs, plans, launches subagents) | Refactored code and/or docs, committed per-task | cli.py → assistant.py (skill subprocess) |
 | `prothon promise plan` | None (reads `change_promise.toml`) | Pretty-printed task table | promise.py |
 | `prothon promise status` | None (reads `change_promise.toml`) | Task completion progress table | promise.py |
-| `prothon promise check N` | Task index | Verification report (per-file PASS/FAIL) | promise.py |
-| `prothon promise complete N` | Task index, attempt count | Updated `change_promise.toml` | promise.py |
+| `prothon promise check N` | Zero-based task index | Verification report (per-file PASS/FAIL) | promise.py |
+| `prothon promise complete N` | Zero-based task index | Updated `change_promise.toml` (marks task complete) | promise.py |
+| `prothon promise record-attempt N` | Zero-based task index | Updated `change_promise.toml` (increments attempt counter) | promise.py |
 | `prothon promise cleanup` | None | Removes `change_promise.toml` | promise.py |
 
 ### Promise Contract Format
@@ -169,6 +169,7 @@ created_at = "<ISO 8601>"
 
 [[tasks]]
 title = "<task identifier>"
+task_id = "<unique hex identifier>"
 goal = "<what this task accomplishes>"
 success_criteria = "<how to verify completion>"
 files_to_create = ["<path>", ...]
@@ -179,9 +180,10 @@ expected_lines_removed = <int>
 context_files = ["<path>", ...]
 doc_sections = ["<doc>:<section>", ...]
 reference_skills = ["<skill-name>", ...]
-dependencies = [<task-index>, ...]
+dependencies = [<zero-based-task-index>, ...]
 completed = <bool>
 attempts = <int>
+max_attempts = <int>
 ```
 
 ### Promise Verification Contract
@@ -235,7 +237,7 @@ The user selects their preferred agent via a 5-level precedence chain. The first
 
 Resolution is implemented as a `resolve_agent(cli_value)` function in `cli.py` (~20 lines). Each subcommand passes its `--agent` value (which Typer resolves from CLI flag or env var) as `cli_value`. Levels 3-4 are resolved by reading TOML files with `tomlkit` (already a dependency).
 
-The `--agent` option is per-command, defined on each command that launches an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`) via a shared `AgentOption` annotated type. This allows natural usage like `prothon patterns --agent opencode`. Commands that don't launch a session (`new`, `init`, `promise *`) don't have the option. The `PROTHON_AGENT` environment variable is handled via Typer's `envvar=` parameter on the shared option definition.
+The `--agent` option is per-command, defined on each command that launches an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) via a shared `AgentOption` annotated type. This allows natural usage like `prothon patterns --agent opencode`. Commands that don't launch a session (`new`, `init`, `promise *`) don't have the option. The `PROTHON_AGENT` environment variable is handled via Typer's `envvar=` parameter on the shared option definition.
 
 Valid backend keys match the registry: `claude-code`, `opencode`. When an invalid key is provided, the error message lists all registered backends. When the resolved backend's binary is missing, the error message includes the backend's `install_hint`.
 
@@ -282,7 +284,7 @@ When the resolved agent is `opencode`, the user can configure which model and pr
 
 **Resolution rules:**
 
-- Both `--model` and `--provider` options are per-command, defined on each session command (`spec`, `design`, `patterns`, `execute`, `compliance`) alongside `--agent`, via shared `ModelOption` and `ProviderOption` annotated types.
+- Both `--model` and `--provider` options are per-command, defined on each session command (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) alongside `--agent`, via shared `ModelOption` and `ProviderOption` annotated types.
 - If both model and provider resolve to values, prothon joins them as `provider/model` and passes `--model provider/model` to opencode's `build_command`.
 - If `--model` already contains a `/` (e.g. `--model z-ai/glm-5`), it is treated as a complete `provider/model` specifier and `--provider` is ignored.
 - If only one of model or provider resolves to a value (and the model value does not contain `/`), prothon exits with an error: `--provider requires --model (and vice versa). Use provider/model format or set both.`
@@ -314,6 +316,7 @@ All other agents (execute, compliance, tech-researcher, and any subagents they s
 | design-writer | `docs/DESIGN.md` |
 | patterns-writer | `docs/PATTERNS.md` |
 | doc-harmonizer | whichever doc(s) it amended |
+| refactor | `docs/DESIGN.md` and/or `docs/PATTERNS.md` |
 
 The commit message follows the format `docs: update <FILENAME> via <agent-name>`. No push is performed — the commit is local only.
 
@@ -327,7 +330,7 @@ The commit message follows the format `docs: update <FILENAME> via <agent-name>`
 
 The tech-researcher generates reference skills in `.agents/skills/` based on the technology choices in DESIGN.md (serves R38-R41). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
 
-**Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
+**Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer, refactor, or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
 
 **Skip condition** — If the modifying agent only added, removed, or modified content outside the Technology Choices and Key Decisions tables, the tech-researcher is skipped entirely. The responsible agent determines this by inspecting the scope of its own changes before deciding whether to launch the tech-researcher subagent.
 

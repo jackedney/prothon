@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
@@ -116,7 +115,7 @@ class Task:
     """A single promised task within the change promise."""
 
     title: str
-    task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    task_id: str = ""
     goal: str = ""
     success_criteria: str = ""
     files_to_create: list[str] = field(default_factory=list)
@@ -163,7 +162,7 @@ def _task_from_dict(d: dict) -> Task:
     """Construct a Task from a TOML dict, tolerating missing keys."""
     return Task(
         title=d.get("title", ""),
-        task_id=d.get("task_id") or uuid.uuid4().hex,
+        task_id=d.get("task_id", ""),
         goal=d.get("goal", ""),
         success_criteria=d.get("success_criteria", ""),
         files_to_create=list(d.get("files_to_create", [])),
@@ -473,7 +472,7 @@ def complete_task(
                 f"Task index {task_index} out of range after re-load; "
                 "promise file may have changed — re-run `promise check` and retry"
             )
-        if promise.tasks[task_index].task_id != report.task_id:
+        if report.task_id and promise.tasks[task_index].task_id != report.task_id:
             raise PromiseError(
                 f"Task {task_index} identity changed between check and completion "
                 f"(expected task_id {report.task_id!r}, got {promise.tasks[task_index].task_id!r}); "

@@ -622,7 +622,7 @@ def test_task_from_dict_empty_dict_defaults():
     task = _task_from_dict({})
     assert task.title == ""
     assert isinstance(task.task_id, str)
-    assert len(task.task_id) == 32  # auto-generated uuid4 hex
+    assert len(task.task_id) == 0  # empty by default
     assert task.goal == ""
     assert task.success_criteria == ""
     assert task.files_to_create == []
@@ -1036,7 +1036,7 @@ def test_check_task_report_has_correct_title_and_index(tmp_path: Path):
     assert report.title == "My Task"
     assert report.task_index == 0
     assert isinstance(report.task_id, str)
-    assert len(report.task_id) == 32  # auto-generated uuid4 hex
+    assert len(report.task_id) == 0  # empty by default
 
 
 def test_check_task_files_to_create_detail(tmp_path: Path):

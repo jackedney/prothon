@@ -473,10 +473,17 @@ When `auto_version = false`, the CI workflow skips the bump job entirely.
 Both `prothon new` and `prothon init` generate version-bump CI workflows for the project's chosen platform(s).
 
 **GitHub Actions** (`.github/workflows/version-bump.yml`):
-- Triggers on push to default branch
+- Triggers on `pull_request` events (`opened`, `synchronize`) targeting the default branch
 - Reads `[tool.prothon.ci].auto_version` from `pyproject.toml`
-- Detects changed files via `github.event.before` / `GITHUB_SHA`
-- Executes bump, commits updated files, pushes tag
+- Detects changed files via `git diff origin/<default-branch>...HEAD`
+- Computes the next version from the base branch version, commits bump to the PR branch
+- Idempotent: skips if the PR branch already has the correct version
+- Uses `GITHUB_TOKEN` with `contents: write` permission (no PAT required)
+
+**GitHub Actions** (`.github/workflows/version-tag.yml`):
+- Triggers on push to default branch (i.e., after PR merge)
+- Creates an annotated `v<version>` tag from the version in `pyproject.toml`
+- Skips if the tag already exists
 - Uses `GITHUB_TOKEN` with `contents: write` permission
 
 **GitLab CI/CD** (`.gitlab-ci.yml` includes version-bump job):
@@ -487,10 +494,11 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 - Uses `GITLAB_TOKEN` or project access token
 
 **Workflow behavior:**
-- Runs only on the default branch (not feature branches)
+- Version bump runs on PR branches targeting the default branch, not on the default branch itself
 - Skips when `auto_version = false`
 - Skips when no source or documentation files changed (e.g., README-only changes)
-- Creates tag only after successful bump — no tag on failure
+- Parallel PRs may compute the same next version; squash merge will create a pyproject.toml conflict on the second PR, requiring a branch update which re-triggers the bump with the correct base version
+- Tag is created post-merge only after the version lands on the default branch
 
 ## Key Decisions
 

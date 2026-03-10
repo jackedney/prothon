@@ -186,6 +186,7 @@ def test_init_existing_returns_created_paths(tmp_path):
         "AGENT.md",
         "skills",
         "version-bump.yml",
+        "version-tag.yml",
         ".gitlab-ci.yml",
     }
     created_names = {p.name for p in created}

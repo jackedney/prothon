@@ -475,6 +475,20 @@ def compliance(
     _launch_skill("prothon-compliance-checker", root, agent, model, provider)
 
 
+@app.command()
+def refactor(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
+    """Perform documentation-driven full-stack refactoring with the refactor agent."""
+    root = _require_project_root()
+    _require_doc(root, "SPEC.md")
+    _require_doc(root, "DESIGN.md")
+    _require_doc(root, "PATTERNS.md")
+    _launch_skill("prothon-refactor", root, agent, model, provider)
+
+
 # --- Promise subcommands ---
 
 

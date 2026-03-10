@@ -350,6 +350,7 @@ def test_record_attempt_increments_counter(tmp_path: Path):
     save_promise(promise, p)
 
     from prothon.promise import record_attempt
+
     record_attempt(0, path=p)
 
     result = load_promise(p)
@@ -369,6 +370,7 @@ def test_record_attempt_index_out_of_range(tmp_path: Path):
     save_promise(promise, p)
 
     from prothon.promise import record_attempt
+
     with pytest.raises(PromiseError, match="out of range"):
         record_attempt(99, path=p)
 

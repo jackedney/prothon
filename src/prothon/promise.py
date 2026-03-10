@@ -490,8 +490,7 @@ def record_attempt(
         promise = load_promise(path)
         if task_index < 0 or task_index >= len(promise.tasks):
             raise PromiseError(
-                f"Task index {task_index} out of range; "
-                "promise file may have changed"
+                f"Task index {task_index} out of range; promise file may have changed"
             )
         promise.tasks[task_index].attempts += 1
         save_promise(promise, path)

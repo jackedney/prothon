@@ -532,7 +532,9 @@ def promise_complete(
 
 @promise_app.command("record-attempt")
 def promise_record_attempt(
-    task_index: int = typer.Argument(help="Zero-based task index to record attempt for"),
+    task_index: int = typer.Argument(
+        help="Zero-based task index to record attempt for"
+    ),
 ) -> None:
     """Increment the attempt counter for a task."""
     root = _require_project_root()

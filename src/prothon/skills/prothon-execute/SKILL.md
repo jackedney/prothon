@@ -1,31 +1,34 @@
 ---
 name: prothon-execute
-description: Align source code to documentation — generates an enriched change promise, then executes tasks via self-correcting subagent loops.
+description: Align source code to documentation — determines the next logical phase of work, then executes tasks via fresh-context Ralph-style loops.
 ---
 
 # Execute
 
 ## Role
 
-You are the Executor. Your job is to make the source code match the documentation. You generate an enriched change promise (the plan), get user approval, then execute each task via a self-correcting subagent loop.
+You are the Executor. Your job is to make the source code match the documentation. You work in **phases** — each execution determines the next logical "wave" of work, generates a phase-scoped change promise, and implements it using fresh-context subagent loops.
 
 ## Prerequisites
 
 - `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` must all exist and be populated
 - If any are missing or empty, tell the user which `prothon` command to run first
 
-## Phase 1: Plan
+## Phase 1: Plan (Wave Determination)
 
-1. **Read all docs** — Read `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` in full.
-2. **Inventory reference skills** — List all skill directories in `.agents/skills/` matching `tech-*`, `style-*`, `optim-*`, and `domain-*`. Read each one. These contain guidance on technologies, code style, optimisation, and domain concepts.
-3. **Scan code structure** — List all files in `src/` and `tests/`. Read module-level docstrings, class/function signatures, and imports — do NOT read full function bodies yet. If no code exists, note that.
-4. **Identify gaps** — Determine what needs to be built, changed, or removed to align code with docs.
-5. **Get HEAD SHA** — Run: `git rev-parse HEAD` and save the output.
-6. **Write `docs/change_promise.toml`** — Use the Write tool to create this file. It MUST be valid TOML using the exact schema below. Every `[[tasks]]` entry MUST include all fields. Set `base_commit` to the SHA from step 5 and `created_at` to the current ISO 8601 timestamp.
+You are stateless between invocations. Determine "what to do next" by inspecting reality:
+
+1. **Read all docs** — Read `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` in full to understand the target state.
+2. **Scan existing code** — List all files in `src/` and `tests/`. Read signatures and imports to understand what's already built. Scan git history to see recent changes.
+3. **Identify gaps** — Diff the docs against the code to find implementation gaps.
+4. **Select next phase** — Pick a small, testable chunk of work (3–7 tasks) that moves the project toward alignment. Prioritize foundational dependencies (e.g., data models before CLI).
+5. **Inventory reference skills** — List all skill directories in `.agents/skills/` matching `tech-*`, `style-*`, `optim-*`, and `domain-*`.
+6. **Get HEAD SHA** — Run: `git rev-parse HEAD`.
+7. **Write `docs/change_promise.toml`** — Create this file covering ONLY the selected phase. Every `[[tasks]]` entry MUST include all fields.
 
 ```toml
 [metadata]
-base_commit = "<SHA from step 5>"
+base_commit = "<SHA from step 6>"
 created_at = "<ISO 8601 timestamp>"
 
 [[tasks]]
@@ -45,35 +48,30 @@ completed = false
 attempts = 0
 ```
 
-7. **Pretty-print the plan** — Run: `uvx prothon promise plan` and show its output to the user. This is the ONLY way to present the plan — do NOT create your own tables, summaries, or descriptions.
-8. **Get approval** — Wait for the user to approve. Do not proceed until approved.
-
-**Task sizing rules:**
-- Each task must be **small enough** for a single subagent to complete independently
-- Each task must be **well-scoped** with clear file boundaries — no two independent tasks should modify the same file
-- Tasks must be **ordered** so dependencies come before dependents
-- Every task MUST list the specific reference skills relevant to it
-- Estimate line counts — these are checked with ±30% or ±30 lines tolerance (whichever is greater)
+8. **Pretty-print the plan** — Run: `uvx prothon promise plan` and show its output.
+9. **Get approval** — Wait for user approval before proceeding.
 
 ---
 
-## Phase 2: Execute
+## Phase 2: Execute (Ralph-Style Loops)
 
-For each task (respecting dependency order):
+For each task in the promise (respecting dependency order):
 
-1. **Wait for dependencies** — All tasks listed in `dependencies` must be marked complete before starting.
-2. **Launch subagent** — Spawn a subagent (type: general-purpose, fresh context) with the task loop prompt below.
-3. **Independent tasks can run in parallel** — but never two tasks that touch the same files.
-4. **After each subagent returns:**
-   - If succeeded (task marked complete): continue to next task
-   - If failed (`max_attempts` retries exhausted): report to user, ask skip/retry/abort
-5. **Track progress** — Run `uvx prothon promise status` to see overall progress.
+1. **Orchestrate Retries** — While `attempts < max_attempts` and task is not `completed`:
+   a) **Record attempt** — Run: `uvx prothon promise record-attempt {task_index}` (counts every attempt, including the one about to start).
+   b) **Launch Subagent** — Spawn a **fresh** Claude/OpenCode instance (type: general-purpose) with the "Task Implementation Prompt" below.
+   c) **Monitor Result**:
+      - If subagent reports **SUCCESS** (task marked complete): Proceed to next task.
+      - If subagent reports **FAILURE**:
+        - If `attempts >= max_attempts`, report failure to user and ask skip/retry/abort.
+        - Otherwise, loop back to step (a) to spawn a **fresh** instance with the same goal + failure context.
 
-### Subagent Prompt Template
+2. **Parallelism** — Independent tasks can run in parallel if they touch different files.
 
-```
-You are implementing a single task. One "attempt" is a full iteration of steps 3–5.
-Before each attempt, check: if attempts >= {max_attempts}, stop and report failure.
+### Task Implementation Prompt
+
+```text
+You are implementing a single task with fresh context. You MUST close the session on completion.
 
 1. READ CONTEXT:
    - Read these doc sections: {doc_sections}
@@ -82,56 +80,36 @@ Before each attempt, check: if attempts >= {max_attempts}, stop and report failu
 
 2. IMPLEMENT:
    - Goal: {goal}
-   - Files to create: {files_to_create}
-   - Files to modify: {files_to_modify}
-   - Files to remove: {files_to_remove}
+   - Files: Create {files_to_create}, Modify {files_to_modify}, Remove {files_to_remove}
    - Success criteria: {success_criteria}
 
-3. QUALITY GATE:
-   a) Stage selectively:
-      - Stage modifications to tracked files: git add -u
-      - Stage new files: git add {files_to_create}
-      - Remove deleted files: git rm {files_to_remove}
-   b) Run: pre-commit run --all-files --show-diff-on-failure
-   c) If hooks auto-fixed files, re-stage (git add -u) and re-run pre-commit once
-   d) If pre-commit still fails, increment attempts and go to step 2 to fix
+3. VERIFY:
+   a) Stage changes: git add -A (or selective adds)
+   b) Quality gate: Run `pre-commit run --all-files`
+   c) If pre-commit fails, fix code and re-run once. If still failing, EXIT with FAILURE.
+   d) Commit: git commit -m "feat: {title}"
+   e) Final check: Run `uvx prothon promise check {task_index}`
 
-4. COMMIT AND VERIFY (only after pre-commit passes):
-   a) Commit: git commit -m "feat: {title}"
-   b) Run: uvx prothon promise check {task_index}
-   c) If promise check fails, increment attempts and go to step 2 to fix
-
-5. IF ALL PASS:
-   - Run: uvx prothon promise complete {task_index} {attempts}
-   - Report success
+4. EXIT:
+   - If `promise check` passed:
+     - Run: `uvx prothon promise complete {task_index}`
+     - Report SUCCESS and close session.
+   - If any step failed:
+     - Report FAILURE with context on what went wrong and close session.
 ```
-
-**Key details:**
-- Stage selectively — `git add -u` for tracked file modifications, explicit `git add` for new files, `git rm` for deletions. Avoids accidentally staging unrelated files
-- Pre-commit hooks may auto-fix files (trailing whitespace, formatting) outside the task file list — re-stage with `git add -u` and re-run once if they do
-- Pre-commit MUST pass before committing — do not use `--no-verify`
-- Subagent commits before promise check — `git diff <base_commit>` sees committed changes
-- One attempt = one full iteration of steps 3–4. Increment `attempts` on any failure (pre-commit or promise check). Stop when `attempts >= max_attempts` (default: 3)
-- Keep your own context lean: reference file paths in subagent prompts — do NOT paste file contents
 
 ---
 
-## Phase 3: Verify
+## Phase 3: Verify & Advance
 
-1. **Run compliance check** — Spawn a subagent (type: general-purpose, fresh context) with this prompt:
-   > Load the prothon-compliance-checker skill and execute it. Read all docs and all source code, then produce a compliance report.
-
-2. **Report results** — Present the compliance report to the user. If there are failures, fix them and re-check until compliance passes or the remaining issues need user input.
-
-3. **Clean up** — Run: `uvx prothon promise cleanup` to remove the promise file. Each execution generates a fresh promise, so stale ones must not persist.
+1. **Compliance Check** — Spawn a fresh subagent: "Load prothon-compliance-checker and produce a report."
+2. **Report & Clean up** — Show report to user. Run `uvx prothon promise cleanup`.
+3. **Next Phase** — Tell the user: "Phase complete. Run `prothon execute` again to begin the next phase."
 
 ## Guards
 
-- Do NOT write markdown plan files — no `docs/PLAN.md`, no `plan.md`, no markdown summaries. The plan is ALWAYS `docs/change_promise.toml` in TOML format.
-- Do NOT create your own plan tables, summaries, or wave diagrams — ALWAYS use `uvx prothon promise plan` output and nothing else.
-- Do NOT improvise an alternative plan format — the TOML schema above is the contract. Every field is required.
-- Do NOT modify doc files (SPEC.md, DESIGN.md, PATTERNS.md) — if docs seem wrong, flag it to the user
-- Do NOT skip the planning phase — always generate `docs/change_promise.toml` and get approval first
-- Do NOT launch subagents that modify the same files in parallel — this causes conflicts
-- Do NOT paste file contents into subagent prompts — reference paths and let subagents read
-- Do NOT read full file contents yourself unless absolutely necessary for planning — stay lean
+- Do NOT plan the entire project at once — focus on a single testable phase.
+- Do NOT reuse subagent sessions for multiple tasks or multiple attempts. Each attempt gets a fresh instance.
+- Do NOT modify `docs/change_promise.toml` directly during execution (except via `prothon promise` commands).
+- Do NOT ignore `pre-commit` or `promise check` failures — they MUST trigger a retry or abort.
+- Estimate line counts — checked with ±30% or ±30 lines tolerance.

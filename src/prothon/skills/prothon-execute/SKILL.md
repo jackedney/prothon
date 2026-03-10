@@ -1,18 +1,26 @@
 ---
 name: prothon-execute
-description: Align source code to documentation — determines the next logical phase of work, then executes tasks via fresh-context Ralph-style loops.
+description: "[What] Align source code to documentation. [When] Use to implement features or fixes based on the doc hierarchy. [Capabilities] Wave-based phase planning, self-correcting Ralph-style execution loops, and automated verification."
 ---
 
 # Execute
 
 ## Role
 
-You are the Executor. Your job is to make the source code match the documentation. You work in **phases** — each execution determines the next logical "wave" of work, generates a phase-scoped change promise, and implements it using fresh-context subagent loops.
+You are the Executor. Align source code to documentation by determining the next logical phase of work, generating a phase-scoped change promise, and implementing it via fresh-context subagent loops.
+
+## Critical
+
+- **Plan first.** Never skip the approval of `docs/change_promise.toml`.
+- **Phase-scoped.** Plan one small testable phase (3-7 tasks), not the entire project.
+- **Lean context.** Reference file paths in prompts; do NOT paste full contents.
+- **Selective staging.** Stage only task-related files by explicit path (`git add <file>`). Do NOT use `git add -u` or `git add -A` as they stage all tracked changes repo-wide.
+- **Fresh instances.** Never reuse subagent sessions for multiple tasks or attempts.
+- **No parallel conflicts.** Never launch subagents that touch the same files simultaneously.
 
 ## Prerequisites
 
-- `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` must all exist and be populated
-- If any are missing or empty, tell the user which `prothon` command to run first
+- `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` must be populated.
 
 ## Phase 1: Plan (Wave Determination)
 
@@ -84,9 +92,12 @@ You are implementing a single task with fresh context. You MUST close the sessio
    - Success criteria: {success_criteria}
 
 3. VERIFY:
-   a) Stage changes: git add -A (or selective adds)
-   b) Quality gate: Run `pre-commit run --all-files`
-   c) If pre-commit fails, fix code and re-run once. If still failing, EXIT with FAILURE.
+   a) Stage selectively by explicit path:
+      - Stage modified files: git add {files_to_modify}
+      - Stage new files: git add {files_to_create}
+      - Remove deleted files: git rm {files_to_remove}
+   b) Quality gate: Run `pre-commit run --all-files --show-diff-on-failure`
+   c) If hooks auto-fixed files, re-stage the specific files and re-run pre-commit once. If still failing, EXIT with FAILURE.
    d) Commit: git commit -m "feat: {title}"
    e) Final check: Run `uvx prothon promise check {task_index}`
 
@@ -108,8 +119,10 @@ You are implementing a single task with fresh context. You MUST close the sessio
 
 ## Guards
 
-- Do NOT plan the entire project at once — focus on a single testable phase.
-- Do NOT reuse subagent sessions for multiple tasks or multiple attempts. Each attempt gets a fresh instance.
-- Do NOT modify `docs/change_promise.toml` directly during execution (except via `prothon promise` commands).
-- Do NOT ignore `pre-commit` or `promise check` failures — they MUST trigger a retry or abort.
-- Estimate line counts — checked with ±30% or ±30 lines tolerance.
+- **TOML only.** The plan is ALWAYS `docs/change_promise.toml`. No markdown plans.
+- **No manual tables.** Use `uvx prothon promise plan` output only.
+- **Doc integrity.** Do NOT modify SPEC, DESIGN, or PATTERNS.
+- **Fresh context.** Each attempt gets a fresh subagent instance.
+- **Phase-scoped.** Focus on a single testable phase, not the entire project.
+- **No bypassing.** Do NOT ignore `pre-commit` or `promise check` failures — they MUST trigger a retry or abort.
+- **Line estimates.** Checked with ±30% or ±30 lines tolerance.

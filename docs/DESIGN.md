@@ -18,7 +18,7 @@ src/prothon/
     git.py              # Thin typed wrapper around git CLI via subprocess
     assistant.py        # Abstract assistant interface and backend registry
     exceptions.py       # Custom exception hierarchy
-    skills/             # Bundled skill assets (non-Python, 7 directories)
+    skills/             # Bundled skill assets (non-Python, 8 directories)
 
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
@@ -31,7 +31,7 @@ This layout is driven by the number of subsystems in the SPEC (scaffolding, doc 
 cli.py
   ├── scaffold.generate(), init_existing()
   ├── assistant.get_backend(), launch()
-  └── promise.load_promise(), plan(), check_task(), status(), complete_task(), cleanup()
+  └── promise.load_promise(), plan(), check_task(), status(), complete_task(), record_attempt(), cleanup()
 
 assistant.py
   └── skills.sync_skills(target)
@@ -57,7 +57,7 @@ All modules
 
 Two non-Python asset directories are bundled with the project:
 
-- `skills/` — 7 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 54 (skills bundled with package) and 22 (dedicated interactive agents).
+- `skills/` — 8 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 54 (skills bundled with package) and 22 (dedicated interactive agents).
 - `template/` — Copier project template at the repository root (not inside the package), with `copier.yml`, Jinja2-templated files, and post-generation tasks. Serves requirements 1-9 (project scaffolding).
 
 `skills/` is included automatically as part of the `src/prothon` package. `template/` is included via `[tool.hatch.build.targets.wheel.force-include]` since it lives outside the package root.
@@ -111,9 +111,7 @@ Retry enforcement lives in the skill prompt — the subagent reads `max_attempts
 
 ### Concurrency
 
-Because independent tasks can run in parallel (per requirement 30), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
-
-Because independent tasks can run in parallel (per requirement 28), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
+Because independent tasks can run in parallel (per requirements 28 and 30), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
 
 ## Technology Choices
 
@@ -152,10 +150,12 @@ All commands that launch an assistant session (`spec`, `design`, `patterns`, `ex
 | `prothon patterns` | None (launches interactive session) | Populated `docs/PATTERNS.md` | cli.py → assistant.py (skill subprocess) |
 | `prothon execute` | None (reads docs, plans, launches subagents) | Implemented code, committed per-task | cli.py → assistant.py (skill subprocess) |
 | `prothon compliance` | None (reads docs and code) | Compliance report table (PASS/FAIL per requirement) | cli.py → assistant.py (skill subprocess) |
+| `prothon refactor` | None (reads docs, plans, launches subagents) | Refactored code and/or docs, committed per-task | cli.py → assistant.py (skill subprocess) |
 | `prothon promise plan` | None (reads `change_promise.toml`) | Pretty-printed task table | promise.py |
 | `prothon promise status` | None (reads `change_promise.toml`) | Task completion progress table | promise.py |
 | `prothon promise check N` | Task index | Verification report (per-file PASS/FAIL) | promise.py |
-| `prothon promise complete N` | Task index, attempt count | Updated `change_promise.toml` | promise.py |
+| `prothon promise complete N` | Task index | Updated `change_promise.toml` (marks task complete) | promise.py |
+| `prothon promise record-attempt N` | Task index | Updated `change_promise.toml` (increments attempt counter) | promise.py |
 | `prothon promise cleanup` | None | Removes `change_promise.toml` | promise.py |
 
 ### Promise Contract Format
@@ -169,6 +169,7 @@ created_at = "<ISO 8601>"
 
 [[tasks]]
 title = "<task identifier>"
+task_id = "<unique hex identifier>"
 goal = "<what this task accomplishes>"
 success_criteria = "<how to verify completion>"
 files_to_create = ["<path>", ...]
@@ -182,6 +183,7 @@ reference_skills = ["<skill-name>", ...]
 dependencies = [<task-index>, ...]
 completed = <bool>
 attempts = <int>
+max_attempts = <int>
 ```
 
 ### Promise Verification Contract

@@ -242,9 +242,11 @@ def load_promise(path: Path = PROMISE_PATH) -> Promise:
     # Backfill missing task_ids and persist them so subsequent loads are stable.
     needs_backfill = [i for i, t in enumerate(promise.tasks) if not t.task_id]
     if needs_backfill:
-        for i in needs_backfill:
-            promise.tasks[i].task_id = _generate_id()
-        save_promise(promise, path)
+        with _lock_promise(path):
+            for i in needs_backfill:
+                new_id = _generate_id()
+                promise.tasks[i].task_id = new_id
+                _update_task_fields(path, i, {"task_id": new_id})
 
     return promise
 

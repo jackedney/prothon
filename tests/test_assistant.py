@@ -11,6 +11,7 @@ import pytest
 from prothon.assistant import (
     AssistantBackend,
     ClaudeCodeBackend,
+    GeminiCLIBackend,
     OpenCodeBackend,
     _BACKENDS,
     get_backend,
@@ -215,6 +216,68 @@ def test_opencode_backend_build_model_parameter_optional() -> None:
     result = backend.build_command("prothon-spec-writer", Path("/tmp"))
     assert result == ["opencode", "--prompt", "/prothon-spec-writer"]
     assert "--model" not in result
+
+
+def test_get_backend_returns_gemini_cli() -> None:
+    """get_backend('gemini-cli') returns a GeminiCLIBackend instance."""
+    backend = get_backend("gemini-cli")
+    assert isinstance(backend, GeminiCLIBackend)
+
+
+# --- GeminiCLIBackend ---
+
+
+def test_gemini_cli_backend_properties() -> None:
+    """GeminiCLIBackend exposes correct name, cli_command, and install_hint."""
+    from prothon.assistant import GeminiCLIBackend
+
+    backend = GeminiCLIBackend()
+    assert backend.name == "Gemini CLI"
+    assert backend.cli_command == "gemini"
+    assert backend.install_hint == "https://github.com/google/gemini-cli"
+
+
+def test_gemini_cli_backend_build_command() -> None:
+    """build_command constructs the expected argv."""
+    from prothon.assistant import GeminiCLIBackend
+
+    backend = GeminiCLIBackend()
+    result = backend.build_command("prothon-spec-writer", Path("/tmp"))
+    assert result == ["gemini", "-i", "Use the prothon-spec-writer skill."]
+
+
+def test_gemini_cli_backend_env_overrides() -> None:
+    """GeminiCLIBackend returns empty env_overrides."""
+    from prothon.assistant import GeminiCLIBackend
+
+    backend = GeminiCLIBackend()
+    assert backend.env_overrides() == {}
+
+
+def test_gemini_cli_backend_subagent_type_map() -> None:
+    """GeminiCLIBackend returns Gemini CLI subagent type mappings."""
+    from prothon.assistant import GeminiCLIBackend
+
+    backend = GeminiCLIBackend()
+    expected = {
+        "general-purpose": "generalist",
+        "explore": "codebase_investigator",
+        "plan": "generalist",
+    }
+    assert backend.subagent_type_map() == expected
+
+
+@patch("prothon.skills.sync_skills")
+def test_gemini_cli_sync_skills_calls_with_home_gemini_skills(
+    mock_sync: MagicMock,
+) -> None:
+    """GeminiCLIBackend.sync_skills() targets ~/.gemini/skills/."""
+    from prothon.assistant import GeminiCLIBackend
+
+    backend = GeminiCLIBackend()
+    backend.sync_skills()
+
+    mock_sync.assert_called_once_with(target=Path.home() / ".gemini" / "skills")
 
 
 # --- launch lifecycle ---

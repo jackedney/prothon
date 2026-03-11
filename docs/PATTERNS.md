@@ -387,7 +387,7 @@ Skills that need to spawn subagents use canonical agent type names from the DESI
 
 ```
 Spawn a subagent (type: general-purpose, fresh context) with this prompt:
-"Load the prothon-<skill-name> skill and execute it. ..."
+"Activate the prothon-<skill-name> skill and execute it. ..."
 ```
 
 Skills must NOT reference tool-specific APIs (e.g., `Task tool, subagent_type: general-purpose` for Claude Code, or `task` tool for opencode). Each assistant's LLM translates the canonical instruction into its native tool call. The canonical names are:

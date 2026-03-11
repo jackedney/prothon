@@ -16,7 +16,7 @@ from rich.table import Table
 from rich.text import Text
 
 from prothon import promise
-from prothon.assistant import get_backend, launch
+from prothon.assistant import _BACKENDS, get_backend, launch
 from prothon.exceptions import ProthonError
 from prothon.promise import CheckStatus, TaskCheckReport
 from prothon.project import find_project_root
@@ -24,13 +24,15 @@ from prothon.scaffold import generate, init_existing
 
 console = Console()
 
+_agent_choices = ", ".join(sorted(_BACKENDS.keys()))
+
 AgentOption = Annotated[
     str | None,
     typer.Option(
         "--agent",
         "-a",
         envvar="PROTHON_AGENT",
-        help="AI agent backend (claude-code, opencode)",
+        help=f"AI agent backend ({_agent_choices})",
     ),
 ]
 
@@ -40,7 +42,7 @@ ModelOption = Annotated[
         "--model",
         "-m",
         envvar="PROTHON_MODEL",
-        help="Model name (opencode only)",
+        help="Model name passed to the agent backend",
     ),
 ]
 

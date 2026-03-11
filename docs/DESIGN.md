@@ -68,10 +68,10 @@ Each assistant backend encapsulates its binary name, invocation flags, skill syn
 
 AI coding CLIs fall into two structural categories based on how they receive skill instructions:
 
-- **Category A (native skill directories)** — Claude Code and opencode have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name via slash commands.
-- **Category B (prompt injection)** — Tools like Codex CLI, Gemini CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. These are out of scope per the SPEC but the abstraction accommodates them for future expansion.
+- **Category A (native skill directories)** — Claude Code, opencode, and Gemini CLI have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
+- **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. These are out of scope per the SPEC but the abstraction accommodates them for future expansion.
 
-A registry maps assistant names to backend classes. Claude Code and opencode are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 52-53 (Claude Code and opencode support, assistant selection).
+A registry maps assistant names to backend classes. Claude Code, opencode, and Gemini CLI are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 52-53 (Claude Code and opencode support, assistant selection).
 
 ### Promise Verification
 
@@ -111,7 +111,7 @@ Retry enforcement lives in the skill prompt — the subagent reads `max_attempts
 
 ### Concurrency
 
-Because independent tasks can run in parallel (per requirements 28 and 30), `complete_task()` uses exclusive file locking (`fcntl.flock`) on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
+Because independent tasks can run in parallel (per requirements 28 and 30), `complete_task()` uses platform-specific exclusive file locking on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle so no completion is overwritten.
 
 ## Technology Choices
 
@@ -210,14 +210,15 @@ Registered backends:
 |-----|---------|--------|-------------------|----------|
 | `claude-code` | Claude Code | `claude` | `~/.claude/skills/` | A (native skills) |
 | `opencode` | opencode | `opencode` | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) | A (native skills) |
+| `gemini-cli` | Gemini CLI | `gemini` | `~/.gemini/skills/` | A (native skills) |
 
 Canonical-to-backend subagent type mapping:
 
-| Canonical name | Claude Code | opencode |
-|---------------|-------------|----------|
-| `general-purpose` | `general-purpose` | `general` |
-| `explore` | `Explore` | `explore` |
-| `plan` | `Plan` | `plan` |
+| Canonical name | Claude Code | opencode | Gemini CLI |
+|---------------|-------------|----------|------------|
+| `general-purpose` | `general-purpose` | `general` | `generalist` |
+| `explore` | `Explore` | `explore` | `codebase_investigator` |
+| `plan` | `Plan` | `plan` | `generalist` |
 
 A shared launch lifecycle handles: binary existence check (via `shutil.which()`), skill syncing, environment merging (`os.environ` + `env_overrides()`), subprocess execution, and return code reporting. When the binary is missing, the error message includes the backend's `install_hint`.
 
@@ -239,7 +240,7 @@ Resolution is implemented as a `resolve_agent(cli_value)` function in `cli.py` (
 
 The `--agent` option is per-command, defined on each command that launches an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) via a shared `AgentOption` annotated type. This allows natural usage like `prothon patterns --agent opencode`. Commands that don't launch a session (`new`, `init`, `promise *`) don't have the option. The `PROTHON_AGENT` environment variable is handled via Typer's `envvar=` parameter on the shared option definition.
 
-Valid backend keys match the registry: `claude-code`, `opencode`. When an invalid key is provided, the error message lists all registered backends. When the resolved backend's binary is missing, the error message includes the backend's `install_hint`.
+Valid backend keys match the registry: `claude-code`, `opencode`, `gemini-cli`. When an invalid key is provided, the error message lists all registered backends. When the resolved backend's binary is missing, the error message includes the backend's `install_hint`.
 
 Config file format examples:
 
@@ -415,10 +416,11 @@ Bundled skills live in `src/prothon/skills/` as directories containing `SKILL.md
 |---------|-------------------|
 | Claude Code | `~/.claude/skills/` |
 | opencode | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) |
+| Gemini CLI | `~/.gemini/skills/` |
 
 Symlinks point directly from the backend's skill directory to the bundled package directory. Each backend maintains its own set of symlinks (no shared central location). The duplication cost is zero since symlinks have no disk footprint.
 
-Project-specific reference skills generated by the tech-researcher live in each project's `.agents/skills/` directory. Both Claude Code and opencode discover `.agents/skills/` natively, so no backend-specific handling is needed for project skills.
+Project-specific reference skills generated by the tech-researcher live in each project's `.agents/skills/` directory. Claude Code, opencode, and Gemini CLI discover `.agents/skills/` natively, so no backend-specific handling is needed for project skills.
 
 ### Skill Authoring Contract
 

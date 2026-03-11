@@ -166,15 +166,9 @@ def _coerce_int(value: object, field: str) -> int:
 
 def _task_from_dict(d: dict) -> Task:
     """Construct a Task from a TOML dict, requiring task_id."""
-    task_id = d.get("task_id")
-    if not task_id:
-        # If loading an old/malformed promise, generate a one-time ID.
-        # Note: This might cause identity mismatches if not saved immediately,
-        # but is better than an empty string.
-        task_id = _generate_id()
     return Task(
         title=d.get("title", ""),
-        task_id=task_id,
+        task_id=d.get("task_id", ""),
         goal=d.get("goal", ""),
         success_criteria=d.get("success_criteria", ""),
         files_to_create=list(d.get("files_to_create", [])),
@@ -243,7 +237,18 @@ def load_promise(path: Path = PROMISE_PATH) -> Promise:
         raise PromiseError(f"malformed TOML in {path}: {exc}") from exc
     metadata = _metadata_from_dict(dict(doc.get("metadata", {})))
     tasks = [_task_from_dict(dict(t)) for t in doc.get("tasks", [])]
-    return Promise(metadata=metadata, tasks=tasks)
+    promise = Promise(metadata=metadata, tasks=tasks)
+
+    # Backfill missing task_ids and persist them so subsequent loads are stable.
+    needs_backfill = [i for i, t in enumerate(promise.tasks) if not t.task_id]
+    if needs_backfill:
+        with _lock_promise(path):
+            for i in needs_backfill:
+                new_id = _generate_id()
+                promise.tasks[i].task_id = new_id
+                _update_task_fields(path, i, {"task_id": new_id})
+
+    return promise
 
 
 def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:

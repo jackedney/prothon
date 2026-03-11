@@ -119,9 +119,53 @@ class OpenCodeBackend:
         return {"general-purpose": "general", "explore": "explore", "plan": "plan"}
 
 
+class GeminiCLIBackend:
+    """Gemini CLI assistant backend — invokes the ``gemini`` CLI."""
+
+    @property
+    def name(self) -> str:
+        return "Gemini CLI"
+
+    @property
+    def cli_command(self) -> str:
+        return "gemini"
+
+    @property
+    def install_hint(self) -> str:
+        return "https://github.com/google/gemini-cli"
+
+    def build_command(
+        self, skill_name: str, cwd: Path, model: str | None = None
+    ) -> list[str]:
+        """Return subprocess argv for a Gemini CLI session with *skill_name*."""
+        cmd = [self.cli_command, "-i", f"Use the {skill_name} skill."]
+        if model is not None:
+            cmd.extend(["--model", model])
+        return cmd
+
+    def sync_skills(self) -> None:
+        """Symlink bundled skills into Gemini CLI's discovery directory."""
+        from prothon.skills import sync_skills
+
+        sync_skills(target=Path.home() / ".gemini" / "skills")
+
+    def env_overrides(self) -> dict[str, str]:
+        """Return extra environment variables for Gemini CLI sessions."""
+        return {}
+
+    def subagent_type_map(self) -> dict[str, str]:
+        """Return mapping from canonical subagent types to Gemini CLI names."""
+        return {
+            "general-purpose": "generalist",
+            "explore": "codebase_investigator",
+            "plan": "generalist",
+        }
+
+
 _BACKENDS: dict[str, type[AssistantBackend]] = {
     "claude-code": ClaudeCodeBackend,
     "opencode": OpenCodeBackend,
+    "gemini-cli": GeminiCLIBackend,
 }
 
 

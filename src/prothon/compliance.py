@@ -18,6 +18,13 @@ class CheckStatus(Enum):
     SKIP = "SKIP"
 
 
+class CheckType(Enum):
+    """The method used to verify a requirement."""
+
+    STATIC = "STATIC"
+    SEMANTIC = "SEMANTIC"
+
+
 @dataclass
 class Requirement:
     """A checkable requirement extracted from project documentation.
@@ -46,12 +53,14 @@ class CheckResult:
     Attributes:
         requirement: The requirement being checked.
         status: The outcome of the check (PASS, FAIL, or SKIP).
+        check_type: The method used for verification (STATIC or SEMANTIC).
         evidence: File and line number where compliance (or violation) is found.
         rationale: Brief explanation of the finding.
     """
 
     requirement: Requirement
     status: CheckStatus
+    check_type: CheckType = CheckType.STATIC
     evidence: str = ""
     rationale: str = ""
 
@@ -64,8 +73,42 @@ class CheckResult:
         )
         source = self.requirement.source
         statement = self.requirement.statement[:50]
-        summary = f"{self.status.value:4s} | {source}{id_str}: {statement}..."
+        summary = (
+            f"{self.status.value:4s} | {self.check_type.value:8s} | "
+            f"{source}{id_str}: {statement}..."
+        )
         return f"{summary} ({self.evidence})"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert the result to a dictionary for subagent aggregation."""
+        return {
+            "requirement": {
+                "source": self.requirement.source,
+                "statement": self.requirement.statement,
+                "requirement_id": self.requirement.requirement_id,
+            },
+            "status": self.status.value,
+            "check_type": self.check_type.value,
+            "evidence": self.evidence,
+            "rationale": self.rationale,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CheckResult":
+        """Create a CheckResult from a dictionary (e.g., from subagent JSON)."""
+        req_data = data["requirement"]
+        req = Requirement(
+            source=req_data["source"],
+            statement=req_data["statement"],
+            requirement_id=req_data.get("requirement_id"),
+        )
+        return cls(
+            requirement=req,
+            status=CheckStatus(data["status"]),
+            check_type=CheckType(data.get("check_type", "STATIC")),
+            evidence=data.get("evidence", ""),
+            rationale=data.get("rationale", ""),
+        )
 
 
 @dataclass
@@ -107,6 +150,29 @@ class ComplianceReport:
     def results_by_source(self, source: str) -> list[CheckResult]:
         """Filter results by source documentation level (e.g., 'SPEC')."""
         return [r for r in self.results if r.requirement.source == source]
+
+    def results_by_type(self, check_type: CheckType) -> list[CheckResult]:
+        """Filter results by check type (e.g., STATIC or SEMANTIC)."""
+        return [r for r in self.results if r.check_type == check_type]
+
+    @property
+    def static_results(self) -> list[CheckResult]:
+        """Return results from static checks."""
+        return self.results_by_type(CheckType.STATIC)
+
+    @property
+    def semantic_results(self) -> list[CheckResult]:
+        """Return results from semantic checks."""
+        return self.results_by_type(CheckType.SEMANTIC)
+
+    def merge(self, other: "ComplianceReport") -> None:
+        """Merge results from another compliance report."""
+        self.results.extend(other.results)
+
+    def add_from_dicts(self, findings: list[dict[str, Any]]) -> None:
+        """Aggregate results from a list of finding dictionaries."""
+        for finding in findings:
+            self.results.append(CheckResult.from_dict(finding))
 
     def format_summary(self) -> str:
         """Return a pretty-printed summary of the compliance status.

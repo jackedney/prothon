@@ -997,3 +997,302 @@ def test_ci_bump_fails_on_missing_project_root(tmp_path, monkeypatch):
     result = runner.invoke(app, ["ci", "bump", "--before-sha", "HEAD"])
     assert result.exit_code != 0
     assert "no prothon project found" in result.output.lower()
+
+
+def test_ci_bump_minor(tmp_path, monkeypatch, context):
+    """ci bump applies minor changes when DESIGN.md is changed."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    # Change DESIGN.md to trigger minor bump (from 0.1.0 to 0.2.0)
+    (dest / "docs" / "DESIGN.md").write_text("# Updated design\n")
+    run_git("add", "docs/DESIGN.md")
+    run_git("commit", "-m", "docs: update design")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
+    assert result.exit_code == 0
+    assert "Detected minor bump: 0.1.0 -> 0.2.0" in result.output
+
+    pyproject = dest / "pyproject.toml"
+    assert 'version = "0.2.0"' in pyproject.read_text()
+
+
+def test_ci_bump_patch(tmp_path, monkeypatch, context):
+    """ci bump applies patch changes when PATTERNS.md is changed."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    # Change PATTERNS.md to trigger patch bump (from 0.1.0 to 0.1.1)
+    (dest / "docs" / "PATTERNS.md").write_text("# Updated patterns\n")
+    run_git("add", "docs/PATTERNS.md")
+    run_git("commit", "-m", "docs: update patterns")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
+    assert result.exit_code == 0
+    assert "Detected patch bump: 0.1.0 -> 0.1.1" in result.output
+
+    pyproject = dest / "pyproject.toml"
+    assert 'version = "0.1.1"' in pyproject.read_text()
+
+
+def test_ci_detect_major(tmp_path, monkeypatch, context):
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    result = runner.invoke(app, ["ci", "detect", "--before-sha", before])
+    assert result.exit_code == 0
+    assert result.output.strip() == "major"
+
+
+def test_ci_detect_minor(tmp_path, monkeypatch, context):
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "DESIGN.md").write_text("# Updated design\n")
+    run_git("add", "docs/DESIGN.md")
+    run_git("commit", "-m", "docs: update design")
+
+    result = runner.invoke(app, ["ci", "detect", "--before-sha", before])
+    assert result.exit_code == 0
+    assert result.output.strip() == "minor"
+
+
+def test_ci_detect_patch(tmp_path, monkeypatch, context):
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "PATTERNS.md").write_text("# Updated patterns\n")
+    run_git("add", "docs/PATTERNS.md")
+    run_git("commit", "-m", "docs: update patterns")
+
+    result = runner.invoke(app, ["ci", "detect", "--before-sha", before])
+    assert result.exit_code == 0
+    assert result.output.strip() == "patch"
+
+
+def test_ci_detect_none(tmp_path, monkeypatch, context):
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    # Change unrelated file
+    (dest / "README.md").write_text("# Updated README\n")
+    run_git("add", "README.md")
+    run_git("commit", "-m", "docs: update readme")
+
+    result = runner.invoke(app, ["ci", "detect", "--before-sha", before])
+    assert result.exit_code == 0
+    assert result.output.strip() == "none"
+
+
+def test_ci_bump_disabled(tmp_path, monkeypatch, context):
+    """ci bump respects auto_version = "False" in pyproject.toml."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    pyproject = dest / "pyproject.toml"
+    content = pyproject.read_text()
+    pyproject.write_text(
+        content.replace("auto_version = true", 'auto_version = "False"')
+    )
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", "HEAD"])
+    assert result.exit_code == 0
+    assert "Automatic versioning is disabled" in result.output
+
+
+def test_ci_bump_no_type(tmp_path, monkeypatch, context):
+    """ci bump exits if no bump type is detected."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    # Change unrelated file
+    (dest / "README.md").write_text("# Updated\n")
+    run_git("add", "README.md")
+    run_git("commit", "-m", "docs: update readme")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
+    assert result.exit_code == 0
+    assert "No version bump needed" in result.output
+
+
+def test_ci_bump_empty_pyproject(tmp_path, monkeypatch, context):
+    """ci bump fails if pyproject.toml is unreadable or empty."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    (dest / "pyproject.toml").write_text("")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", "HEAD"])
+    assert result.exit_code != 0
+    assert "Could not read pyproject.toml" in result.output
+
+
+def test_ci_bump_missing_version(tmp_path, monkeypatch, context):
+    """ci bump fails if version is missing from pyproject.toml."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    pyproject = dest / "pyproject.toml"
+    # Keep [project] but remove version
+    pyproject.write_text('[project]\nname = "test-project"\n')
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
+    assert result.exit_code != 0
+    assert "version not found" in result.output
+
+
+def test_ci_bump_dry_run(tmp_path, monkeypatch, context):
+    """ci bump with --dry-run doesn't modify files."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--dry-run"])
+    assert result.exit_code == 0
+    assert "Dry run: Skipping" in result.output
+
+    pyproject = dest / "pyproject.toml"
+    assert 'version = "0.1.0"' in pyproject.read_text()
+
+
+def test_ci_bump_missing_name(tmp_path, monkeypatch, context):
+    """ci bump fails if name is missing from pyproject.toml."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    pyproject = dest / "pyproject.toml"
+    # Keep [project] and version but remove name
+    pyproject.write_text('[project]\nversion = "0.1.0"\n')
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
+    assert result.exit_code != 0
+    assert "name not found" in result.output
+
+
+def test_ci_bump_missing_init(tmp_path, monkeypatch, context):
+    """ci bump warns if __init__.py is missing."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    # Remove src directory
+    import shutil
+
+    shutil.rmtree(dest / "src")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
+    assert result.exit_code == 0
+    assert "Could not find __init__.py" in result.output
+
+
+def test_ci_bump_tag_failure(tmp_path, monkeypatch, context):
+    """ci bump warns if tag creation fails."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    with patch("prothon.versioning.create_tag", side_effect=ProthonError("tag error")):
+        result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
+    assert result.exit_code == 0
+    assert "Tag creation failed: tag error" in result.output
+
+
+def test_ci_bump_base_version_fallback(tmp_path, monkeypatch, context):
+    """ci bump falls back to branch version if base_version cannot be read."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+
+    # Change something to ensure a bump is detected
+    before = rev_parse_head()
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    import prothon.git
+
+    original_run_git = prothon.git.run_git
+
+    def fake_run_git(*args, **kwargs):
+        if len(args) > 1 and args[0] == "show" and "pyproject.toml" in args[1]:
+            raise Exception("git show failed")
+        return original_run_git(*args, **kwargs)
+
+    with patch("prothon.git.run_git", side_effect=fake_run_git):
+        result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
+
+    assert result.exit_code == 0
+    assert "Falling back to branch version" in result.output

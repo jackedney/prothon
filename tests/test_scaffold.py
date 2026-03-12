@@ -409,16 +409,19 @@ def test_init_existing_path_a_calls_copier(tmp_path):
     run_git("init", cwd=tmp_path)
 
     mock_run_copy = MagicMock()
-    with patch("copier.run_copy", mock_run_copy), patch(
-        "prothon.scaffold._collect_project_details",
-        return_value={
-            "module_name": "testmod",
-            "description": "test desc",
-            "author_name": "Test Author",
-            "author_email": "test@example.com",
-            "python_version": "3.12",
-            "license": "MIT",
-        },
+    with (
+        patch("copier.run_copy", mock_run_copy),
+        patch(
+            "prothon.scaffold._collect_project_details",
+            return_value={
+                "module_name": "testmod",
+                "description": "test desc",
+                "author_name": "Test Author",
+                "author_email": "test@example.com",
+                "python_version": "3.12",
+                "license": "MIT",
+            },
+        ),
     ):
         init_existing(cwd=tmp_path)
 
@@ -442,16 +445,19 @@ def test_init_existing_path_a_creates_common_overlay(tmp_path):
 
     run_git("init", cwd=tmp_path)
 
-    with patch("copier.run_copy"), patch(
-        "prothon.scaffold._collect_project_details",
-        return_value={
-            "module_name": "testmod",
-            "description": "test",
-            "author_name": "Test",
-            "author_email": "test@example.com",
-            "python_version": "3.12",
-            "license": "MIT",
-        },
+    with (
+        patch("copier.run_copy"),
+        patch(
+            "prothon.scaffold._collect_project_details",
+            return_value={
+                "module_name": "testmod",
+                "description": "test",
+                "author_name": "Test",
+                "author_email": "test@example.com",
+                "python_version": "3.12",
+                "license": "MIT",
+            },
+        ),
     ):
         init_existing(cwd=tmp_path)
 
@@ -624,16 +630,19 @@ def test_init_existing_creates_workflow_without_pyproject(tmp_path):
 
     run_git("init", cwd=tmp_path)
 
-    with patch("copier.run_copy"), patch(
-        "prothon.scaffold._collect_project_details",
-        return_value={
-            "module_name": "testmod",
-            "description": "test",
-            "author_name": "Test",
-            "author_email": "test@example.com",
-            "python_version": "3.12",
-            "license": "MIT",
-        },
+    with (
+        patch("copier.run_copy"),
+        patch(
+            "prothon.scaffold._collect_project_details",
+            return_value={
+                "module_name": "testmod",
+                "description": "test",
+                "author_name": "Test",
+                "author_email": "test@example.com",
+                "python_version": "3.12",
+                "license": "MIT",
+            },
+        ),
     ):
         init_existing(cwd=tmp_path)
 

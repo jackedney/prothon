@@ -210,7 +210,7 @@ Registered backends:
 |-----|---------|--------|-------------------|----------|
 | `claude-code` | Claude Code | `claude` | `~/.claude/skills/` | A (native skills) |
 | `opencode` | opencode | `opencode` | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) | A (native skills) |
-| `gemini-cli` | Gemini CLI | `gemini` | `~/.gemini/skills/` | A (native skills) |
+| `gemini` | Gemini CLI | `gemini` | `~/.gemini/skills/` | A (native skills) |
 
 Canonical-to-backend subagent type mapping:
 
@@ -240,7 +240,7 @@ Resolution is implemented as a `resolve_agent(cli_value)` function in `cli.py` (
 
 The `--agent` option is per-command, defined on each command that launches an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) via a shared `AgentOption` annotated type. This allows natural usage like `prothon patterns --agent opencode`. Commands that don't launch a session (`new`, `init`, `promise *`) don't have the option. The `PROTHON_AGENT` environment variable is handled via Typer's `envvar=` parameter on the shared option definition.
 
-Valid backend keys match the registry: `claude-code`, `opencode`, `gemini-cli`. When an invalid key is provided, the error message lists all registered backends. When the resolved backend's binary is missing, the error message includes the backend's `install_hint`.
+Valid backend keys match the registry: `claude-code`, `opencode`, `gemini`. When an invalid key is provided, the error message lists all registered backends. When the resolved backend's binary is missing, the error message includes the backend's `install_hint`.
 
 Config file format examples:
 

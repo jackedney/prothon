@@ -7,13 +7,12 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from prothon.assistant import (
+    _BACKENDS,
     AssistantBackend,
     ClaudeCodeBackend,
     GeminiCLIBackend,
     OpenCodeBackend,
-    _BACKENDS,
     get_backend,
     launch,
     register_backend,
@@ -218,9 +217,9 @@ def test_opencode_backend_build_model_parameter_optional() -> None:
     assert "--model" not in result
 
 
-def test_get_backend_returns_gemini_cli() -> None:
-    """get_backend('gemini-cli') returns a GeminiCLIBackend instance."""
-    backend = get_backend("gemini-cli")
+def test_get_backend_returns_gemini() -> None:
+    """get_backend('gemini') returns a GeminiCLIBackend instance."""
+    backend = get_backend("gemini")
     assert isinstance(backend, GeminiCLIBackend)
 
 

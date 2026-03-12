@@ -165,7 +165,7 @@ class GeminiCLIBackend:
 _BACKENDS: dict[str, type[AssistantBackend]] = {
     "claude-code": ClaudeCodeBackend,
     "opencode": OpenCodeBackend,
-    "gemini-cli": GeminiCLIBackend,
+    "gemini": GeminiCLIBackend,
 }
 
 
@@ -196,7 +196,7 @@ def launch(
         )
     try:
         backend.sync_skills()
-    except (IOError, OSError) as exc:
+    except OSError as exc:
         raise ProthonError(f"failed to sync skills for {backend.name}: {exc}") from exc
     env = {**os.environ, **backend.env_overrides()}
     try:

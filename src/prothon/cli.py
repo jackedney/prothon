@@ -17,6 +17,7 @@ from rich.text import Text
 
 from prothon import promise
 from prothon.assistant import _BACKENDS, get_backend, launch
+from prothon.compliance import ComplianceReport, check_patterns_doc
 from prothon.exceptions import ProthonError
 from prothon.project import find_project_root
 from prothon.promise import CheckStatus, TaskCheckReport
@@ -429,6 +430,47 @@ def _render_check_report(report: TaskCheckReport) -> Table:
     return table
 
 
+def _render_compliance_report(report: ComplianceReport) -> Table:
+    """Build a Rich table for a compliance report."""
+    table = Table(title="STATIC COMPLIANCE CHECKS", show_lines=True)
+    table.add_column("Source", style="bold", width=10)
+    table.add_column("ID", width=5)
+    table.add_column("Requirement")
+    table.add_column("Status", width=6)
+    table.add_column("Evidence", no_wrap=False)
+
+    from prothon.compliance import CheckStatus as ComplianceStatus
+
+    _status_styles = {
+        ComplianceStatus.PASS: ("PASS", "green"),
+        ComplianceStatus.FAIL: ("FAIL", "red"),
+        ComplianceStatus.SKIP: ("SKIP", "yellow"),
+    }
+
+    for res in report.results:
+        label, style = _status_styles[res.status]
+        table.add_row(
+            res.requirement.source,
+            res.requirement.requirement_id or "-",
+            escape(res.requirement.statement),
+            Text(label, style=style),
+            escape(res.evidence) if res.evidence else "-",
+        )
+
+    return table
+
+
+def _run_static_checks(root: Path) -> ComplianceReport:
+    """Run all deterministic static compliance checks."""
+    report = ComplianceReport()
+
+    # R25, R26: PATTERNS.md code blocks
+    patterns_path = root / "docs" / "PATTERNS.md"
+    report.results.extend(check_patterns_doc(patterns_path))
+
+    return report
+
+
 @app.callback(invoke_without_command=True)
 def callback(ctx: typer.Context) -> None:
     """Python project generator with docs-first AI workflow."""
@@ -555,6 +597,14 @@ def compliance(
 ) -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
+
+    # Step 1: Deterministic Static Analysis
+    typer.echo("Running static compliance checks...")
+    static_report = _run_static_checks(root)
+    console.print(_render_compliance_report(static_report))
+
+    # Step 2: Semantic Analysis (LLM)
+    typer.echo("\nLaunching semantic compliance checks (LLM)...")
     _launch_skill("prothon-compliance-checker", root, agent, model, provider)
 
 

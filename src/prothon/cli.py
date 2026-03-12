@@ -15,7 +15,7 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from prothon import promise
+from prothon import promise, versioning
 from prothon.assistant import _BACKENDS, get_backend, launch
 from prothon.compliance import ComplianceReport, check_patterns_doc
 from prothon.exceptions import ProthonError
@@ -65,6 +65,9 @@ app = typer.Typer(
 
 promise_app = typer.Typer(help="Manage change promises (plan, check, execute).")
 app.add_typer(promise_app, name="promise")
+
+ci_app = typer.Typer(help="CI automation (version bumping, detection).")
+app.add_typer(ci_app, name="ci")
 
 
 def _require_project_root() -> Path:
@@ -468,7 +471,106 @@ def _run_static_checks(root: Path) -> ComplianceReport:
     patterns_path = root / "docs" / "PATTERNS.md"
     report.results.extend(check_patterns_doc(patterns_path))
 
+    _check_doc_existence(root, report)
+    _check_inheritance(root, report)
+    _check_agent_files(root, report)
+
     return report
+
+
+def _check_doc_existence(root: Path, report: ComplianceReport) -> None:
+    """Verify SPEC.md and DESIGN.md exist."""
+    from prothon.compliance import Requirement, CheckResult, CheckStatus
+
+    for doc in ["SPEC.md", "DESIGN.md"]:
+        req = Requirement(
+            source="DESIGN",
+            requirement_id="R34",
+            statement=f"Prerequisite document {doc} must exist.",
+        )
+        doc_path = root / "docs" / doc
+        if doc_path.is_file():
+            report.results.append(
+                CheckResult(req, CheckStatus.PASS, evidence=str(doc_path))
+            )
+        else:
+            report.results.append(
+                CheckResult(
+                    req,
+                    CheckStatus.FAIL,
+                    evidence=f"docs/{doc}",
+                    rationale="Required document is missing.",
+                )
+            )
+
+
+def _check_inheritance(root: Path, report: ComplianceReport) -> None:
+    """Verify all custom exceptions inherit from ProthonError."""
+    from prothon.compliance import (
+        Requirement,
+        CheckResult,
+        CheckStatus,
+        analyze_python_file,
+    )
+
+    exc_path = root / "src" / "prothon" / "exceptions.py"
+    if not exc_path.is_file():
+        return
+
+    req = Requirement(
+        source="DESIGN",
+        statement="All domain exceptions must inherit from ProthonError.",
+    )
+    analysis = analyze_python_file(exc_path)
+    violations = [
+        name
+        for name, bases in analysis.get("base_classes", {}).items()
+        if name != "ProthonError" and "ProthonError" not in bases
+    ]
+
+    if not violations:
+        report.results.append(
+            CheckResult(req, CheckStatus.PASS, evidence=str(exc_path))
+        )
+    else:
+        report.results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence=f"{exc_path}:1",
+                rationale=f"Exceptions not inheriting from ProthonError: {', '.join(violations)}",
+            )
+        )
+
+
+def _check_agent_files(root: Path, report: ComplianceReport) -> None:
+    """Verify AGENTS.md and its expected symlinks."""
+    from prothon.compliance import Requirement, CheckResult, CheckStatus
+
+    for filename in ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "AGENT.md"]:
+        req = Requirement(
+            source="DESIGN",
+            requirement_id="R4",
+            statement=f"Project must have {filename}.",
+        )
+        file_path = root / filename
+        if not file_path.exists():
+            report.results.append(CheckResult(req, CheckStatus.FAIL, evidence=filename))
+            continue
+
+        if filename != "AGENTS.md" and not file_path.is_symlink():
+            report.results.append(
+                CheckResult(
+                    req,
+                    CheckStatus.FAIL,
+                    evidence=filename,
+                    rationale=f"{filename} must be a symlink to AGENTS.md.",
+                )
+            )
+        else:
+            report.results.append(
+                CheckResult(req, CheckStatus.PASS, evidence=str(file_path))
+            )
 
 
 @app.callback(invoke_without_command=True)
@@ -699,3 +801,112 @@ def promise_cleanup() -> None:
     promise_path = _require_promise_file(root)
     promise.cleanup(promise_path)
     typer.echo("Promise file removed.")
+
+
+# --- CI subcommands ---
+
+
+@ci_app.command("bump")
+def ci_bump(
+    before_sha: Annotated[
+        str, typer.Option("--before-sha", help="Git SHA to diff from")
+    ],
+    after_sha: Annotated[
+        str, typer.Option("--after-sha", help="Git SHA to diff to")
+    ] = "HEAD",
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Don't actually write changes")
+    ] = False,
+) -> None:
+    """Bump the project version based on changed files since before_sha."""
+    root = _require_project_root()
+    pyproject_path = root / "pyproject.toml"
+
+    # Read pyproject.toml
+    doc = _read_toml(pyproject_path)
+    if not doc:
+        typer.echo("Error: Could not read pyproject.toml", err=True)
+        raise typer.Exit(1)
+
+    # Check auto_version
+    auto_version = _nested_get(doc, "tool", "prothon", "ci", "auto_version")
+    if auto_version == "False":
+        typer.echo("Automatic versioning is disabled in pyproject.toml")
+        return
+
+    # Detect bump type
+    bump_type = versioning.detect_bump_type(before_sha, after_sha, cwd=root)
+    if not bump_type:
+        typer.echo("No version bump needed (no relevant files changed).")
+        return
+
+    # Get current version
+    current_version = _nested_get(doc, "project", "version")
+    if not current_version:
+        typer.echo("Error: [project] version not found in pyproject.toml", err=True)
+        raise typer.Exit(1)
+
+    # Compute new version
+    bump_fn = getattr(versioning, f"bump_{bump_type}")
+    new_version = bump_fn(current_version)
+
+    typer.echo(f"Detected {bump_type} bump: {current_version} -> {new_version}")
+
+    if dry_run:
+        typer.echo("Dry run: Skipping file updates and tagging.")
+        return
+
+    # Update files
+    versioning.update_pyproject_version(pyproject_path, new_version)
+
+    # Find __init__.py
+    project_name = _nested_get(doc, "project", "name")
+    if not project_name:
+        typer.echo("Error: [project] name not found in pyproject.toml", err=True)
+        raise typer.Exit(1)
+
+    # Standard prothon/hatch layout: src/<module_name>/__init__.py
+    module_name = project_name.replace("-", "_")
+    init_path = root / "src" / module_name / "__init__.py"
+
+    if not init_path.exists():
+        # Fallback: maybe it's src/<name>/__init__.py (no hyphen replacement)
+        init_path = root / "src" / project_name / "__init__.py"
+
+    if init_path.exists():
+        versioning.update_init_version(init_path, new_version)
+        typer.echo(f"Updated {init_path.relative_to(root)}")
+    else:
+        typer.echo(
+            f"Warning: Could not find __init__.py in src/{module_name} "
+            f"or src/{project_name}"
+        )
+
+    # Create tag
+    try:
+        versioning.create_tag(new_version, cwd=root)
+        typer.echo(f"Created tag v{new_version}")
+    except ProthonError as exc:
+        typer.echo(f"Warning: Tag creation failed: {exc}", err=True)
+
+
+@ci_app.command("detect")
+def ci_detect(
+    before_sha: Annotated[
+        str, typer.Option("--before-sha", help="Git SHA to diff from")
+    ],
+    after_sha: Annotated[
+        str, typer.Option("--after-sha", help="Git SHA to diff to")
+    ] = "HEAD",
+) -> None:
+    """Detect the version bump type based on changed files since before_sha."""
+    root = _require_project_root()
+    bump_type = versioning.detect_bump_type(before_sha, after_sha, cwd=root)
+    if bump_type:
+        typer.echo(bump_type)
+    else:
+        typer.echo("none")
+
+
+if __name__ == "__main__":
+    app()

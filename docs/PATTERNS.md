@@ -192,12 +192,8 @@ def spec(
     agent: AgentOption = None,
     model: ModelOption = None,
     provider: ProviderOption = None,
-) -> None:
-    root = _require_project_root()
-    _launch_skill("prothon-spec-writer", root, agent, model=model, provider=provider)
+) -> None: ...
 ```
-
-This allows natural usage like `prothon spec --agent opencode --model glm-5 --provider z-ai`. Typer's `envvar=` parameter handles env var resolution on each command automatically.
 
 ### Fallthrough Precedence Chain
 
@@ -209,112 +205,50 @@ This allows natural usage like `prothon spec --agent opencode --model glm-5 --pr
 
 ### CLI Guard and Launch Helpers
 
-Repeated "find-or-exit" and "resolve-launch-or-exit" logic is extracted into private helpers that catch domain exceptions and raise `typer.Exit`. Keeps command bodies clean.
+Repeated "find-or-exit" and "resolve-launch-or-exit" logic is extracted into private helpers that catch domain exceptions and raise `typer.Exit`. `_launch_skill` also handles doc commitment and follow-up triggers.
 
 ```python
-def _require_project_root() -> Path:
-    try:
-        return find_project_root()
-    except ProthonError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1)
-
-def _require_promise_file(root: Path) -> Path:
-    promise_path = root / promise.PROMISE_PATH
-    if not promise_path.exists():
-        typer.echo(f"No promise file found at {promise_path}")
-        raise typer.Exit(1)
-    return promise_path
-
 def _launch_skill(
-    skill_name: str, cwd: Path, agent: str | None = None,
-    model: str | None = None, provider: str | None = None,
-) -> None:
-    """Resolve backend, launch skill, handle errors."""
-    try:
-        name = resolve_agent(agent)
-        backend = get_backend(name)
-        resolved_model = resolve_model(model, provider) if name == "opencode" else None
-        rc = launch(backend, skill_name, cwd, model=resolved_model)
-        if rc != 0:
-            raise typer.Exit(rc)
-    except ProthonError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1)
+    skill_name: str,
+    cwd: Path,
+    agent: str | None = None,
+    model: str | None = None,
+    provider: str | None = None,
+    run_follow_ups: bool = True,
+) -> None: ...
 ```
-
-`_launch_skill()` is the single call site for the resolve → get → launch chain. All five assistant commands (`spec`, `design`, `patterns`, `execute`, `compliance`) delegate to it.
 
 ### Interactive Prompt with Validation Loop
 
-`prothon new` collects inputs via `typer.prompt()` with while-loop validation for constrained fields. No validation library — just re-prompt until acceptable.
+`prothon new` collects inputs via `typer.prompt()` with while-loop validation for constrained fields. This pattern ensures user input is re-requested until it meets project requirements without needing external validation libraries.
 
 ```python
-python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
-while python_version not in ("3.11", "3.12", "3.13"):
-    typer.echo("Must be 3.11, 3.12, or 3.13")
-    python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
+def _collect_project_details() -> dict: ...
 ```
 
 ### Conditional Path Branching in Domain Functions
 
-`init_existing()` branches on whether `pyproject.toml` exists — Path A (absent) scaffolds via Copier, Path B (present) skips it. Both paths converge on the common overlay. Guards come first, branching after.
+`init_existing()` branches on whether `pyproject.toml` exists to decide whether to scaffold via Copier or skip it. Convergence on a common overlay follows the guard-first, branch-after pattern for clean control flow.
 
 ```python
-def init_existing(cwd: Path | None = None) -> list[Path]:
-    root = Path(cwd) if cwd else Path.cwd()
-    # Guards first
-    ...
-    # Branch on project state
-    if not (root / "pyproject.toml").exists():
-        answers = _collect_project_details()
-        _run_copier_init(root, answers)
-    # Common overlay (both paths)
-    ...
+def init_existing(cwd: Path | None = None) -> list[Path]: ...
 ```
 
 ### Lazy Imports for Heavy Dependencies
 
-Copier is imported inside the function body, not at module level, to avoid loading it and its transitive dependencies when the module is imported for lightweight operations. This is an intentional exception to the standard import order — use it only for genuinely heavy packages.
+Heavy packages like Copier are imported inside the function body to minimize import-time overhead for lightweight CLI operations. This pattern is an intentional exception to standard import order for performance.
 
 ### Versioning as Pure Functions
 
-Semver arithmetic uses pure functions with no external library — parse, bump major/minor/patch, return new string. File update functions are split: one for `pyproject.toml` (tomlkit preserves formatting) and one for `__init__.py` (regex replacement). Change detection takes before/after SHAs and returns the bump type based on which doc files changed. Priority: `docs/SPEC.md` → major, `docs/DESIGN.md` → minor, `docs/PATTERNS.md` or `src/` → patch, otherwise `None`.
+Semver arithmetic is implemented using pure functions that handle parsing, bumping, and returning new version strings. File updates are handled by specific functions that preserve formatting (tomlkit) or perform regex replacement, maintaining a stateless and testable versioning core.
 
 ### SPEC.md Tamper Detection
 
-`_launch_skill()` computes a SHA-256 hash of `docs/SPEC.md` before launching any non-spec-writer skill and compares it after the session completes. If the hash differs, a warning is emitted. This is a soft guard complementing the skill-level edit restrictions — it detects accidental SPEC modification by agents that shouldn't be writing to it.
+`_launch_skill()` implements a SHA-256 hash comparison of `docs/SPEC.md` before and after sessions to warn of unauthorized modifications. This soft guard complements skill-level edit restrictions.
 
 ### CI Workflow Patterns
 
-CI workflow templates (GitHub Actions version-bump and version-tag, GitLab CI version-bump) are inlined as `_UPPER_SNAKE` module-level constants in `scaffold.py`, following the same pattern as doc scaffolds. This keeps the `template/` directory focused on Copier template files and decouples `init` from Copier's layout.
-
-### Pattern Summary
-
-| Pattern | Where | Why |
-|---------|-------|-----|
-| Plain functions | Default for all modules | Simplest unit, easiest to test |
-| Dataclasses | Data carriers (`Promise`, `CheckResult`, `Task`) | Typed, immutable-friendly, no boilerplate |
-| Protocols | DI boundaries (`GitDiffProvider`, `AssistantBackend`) | Structural typing, swappable for testing |
-| Standalone function | Shared lifecycle (`launch()`) | Keeps protocols as pure interfaces |
-| Registry dict | Backend lookup by name | Explicit, debuggable, extensible |
-| Default args | Production vs test paths | Avoids monkeypatching |
-| Guard clauses | Domain precondition validation (`init_existing()`) | Fail fast, domain exceptions, no nested conditionals |
-| Inline constants | Doc scaffolds, CI workflows in `scaffold.py` | Decouples init from Copier template layout |
-| Idempotent symlinks | `scaffold.py`, `skills.py` | Safe re-runs, stale link cleanup |
-| Lazy imports | Copier in `scaffold.generate()` | Avoid heavy import for lightweight code paths |
-| Rich table helpers | `_render_*` in `cli.py` | Separate rendering from I/O, enum-to-style dicts avoid branching |
-| CLI guard/launch helpers | `_require_project_root()`, `_require_promise_file()`, `_launch_skill()` | Extract repeated find-or-exit and resolve-launch-or-exit into reusable helpers |
-| Per-command option + `Annotated` type | `--agent`/`-a` on each session command via shared `AgentOption` | Explicit data flow, no module-level state, natural CLI usage |
-| Per-command model/provider options | `--model`/`-m`, `--provider`/`-p` on each session command via shared `ModelOption`, `ProviderOption` | Explicit data flow, opencode-specific, silently ignored by Claude Code |
-| Fallthrough precedence | `resolve_agent(cli_value)` 5-level chain | First non-empty value wins; each level is a guard with fallthrough |
-| Model/provider join rule | `resolve_model(cli_model, cli_provider)` | opencode requires `provider/model` format; supports both separate flags and combined format |
-| XDG_CONFIG_HOME resolution | `OpenCodeBackend.sync_skills()`, `resolve_agent()` | Respect user's XDG override with `~/.config` fallback |
-| Prompt validation loops | `prothon new` constrained inputs | Simple while-loop re-prompt, no validation library |
-| Conditional path branching | `init_existing()` Path A/B | Guards first, branch on state, converge on common overlay |
-| Separate input collection | `new` in `cli.py` vs `_collect_project_details()` in `scaffold.py` | `new` uses Typer prompts directly (CLI concern); `_collect_project_details()` is only for `init_existing` Path A. Intentionally not shared — different UX contexts. |
-| Semver pure functions | `versioning.py` bump functions | Zero dependencies, ~30 lines, full control over format |
-| SPEC tamper detection | `_launch_skill()` | Soft guard against accidental SPEC writes |
+CI workflow templates are inlined as private module-level constants in `scaffold.py`, decoupling project initialization from the Copier template layout and maintaining a self-contained adoption logic.
 
 ## Skill Authoring Patterns
 
@@ -329,223 +263,62 @@ All bundled skills live in `src/prothon/skills/` as directories containing a `SK
 | `model` | Omitted — user's assistant selection applies | `sonnet` — cost-effective for automated analysis |
 | `context` | Omitted — runs in user's session | `fork` — isolates subagent context |
 
-**User-facing session skills** (spec-writer, design-writer, patterns-writer, execute): launched by the user via `prothon <command>`, run interactively. No `model` or `context` frontmatter — the user controls which assistant and model they use.
-
-**Subagent-mode skills** (compliance-checker, doc-harmonizer, tech-researcher): spawned programmatically by other skills, run autonomously. Set `model: sonnet` and `context: fork` to control cost and isolation.
-
-```yaml
----
-name: prothon-doc-harmonizer
-description: Cross-reference SPEC, DESIGN, and PATTERNS for conflicts
-model: sonnet
-context: fork
----
-```
-
-Note: `model` and `context` are Claude Code extensions — opencode silently ignores them. Skills must not depend on these fields for correct behavior. Any skill that needs subagent isolation must use the explicit "Spawn a subagent" instruction pattern instead.
-
 ### Skill Structure
 
-Standard sections in order. Not all skills need every section, but those present follow this sequence:
-
-1. **`## Role`** — One-sentence identity statement. What the skill is and does.
-2. **`## Prerequisites`** — Guard conditions checked before proceeding (e.g., which docs must exist). Directs the user to the correct CLI command if preconditions fail.
-3. **`## Focus`** — Optional. Priorities and principles that guide the skill's decisions.
-4. **`## Process`** — The bulk of the skill. Numbered steps, possibly with Path A / Path B branching (e.g., new vs update workflows for doc-writers).
-5. **`## Guards`** — Explicit prohibitions — what the skill must refuse to do. Enforces separation of concerns and doc authority.
-6. **`## Output`** — What the skill produces when complete.
-7. **`## After Writing`** — Quality gates that run post-write: commit the file, launch harmonizer subagent, etc.
-
-```markdown
-## Role
-You are the Design Writer. ...
-
-## Prerequisites
-- `docs/SPEC.md` must exist and be populated
-- If missing, refuse and direct the user to run `prothon spec`
-
-## Process
-### Path A: New Design (DESIGN.md is empty)
-...
-### Path B: Updating Existing Design (DESIGN.md has content)
-...
-
-## Guards
-You MUST refuse to include anything that contradicts SPEC.md.
-
-## Output
-A populated `docs/DESIGN.md` with all sections filled in.
-
-## After Writing
-1. Commit: `git add docs/DESIGN.md && git commit -m "docs: update DESIGN.md via design-writer"`
-2. Launch doc-harmonizer subagent.
-```
+Standard sections follow a mandatory sequence: `## Role`, `## Prerequisites`, `## Focus` (optional), `## Process`, `## Guards`, `## Output`, and `## After Writing`. This ensures consistent behavior and authority enforcement across all prothon agents.
 
 ### Subagent Spawning
 
-Skills that need to spawn subagents use canonical agent type names from the DESIGN's subagent type mapping table. The instruction format is:
-
-```
-Spawn a subagent (type: general-purpose, fresh context) with this prompt:
-"Activate the prothon-<skill-name> skill and execute it. ..."
-```
-
-Skills must NOT reference tool-specific APIs (e.g., `Task tool, subagent_type: general-purpose` for Claude Code, or `task` tool for opencode). Each assistant's LLM translates the canonical instruction into its native tool call. The canonical names are:
-
-| Canonical name | Use case |
-|---------------|----------|
-| `general-purpose` | Quality gate subagents (harmonizer, compliance, tech-researcher) |
-| `explore` | Codebase exploration |
-| `plan` | Implementation planning |
-
-Subagent prompts should be self-contained — include enough context for the subagent to operate without reading the parent skill's conversation history. Always specify "fresh context" to ensure a clean slate.
+Skills spawning subagents must use canonical agent type names (`general-purpose`, `explore`, `plan`) and a standardized instruction format. This enables cross-assistant compatibility by letting each backend translate the canonical request into its native tool call.
 
 ### Conversational Cadence
 
-User-facing doc-writer skills (spec-writer, design-writer, patterns-writer) enforce strict one-message-then-wait cadence:
-
-- Send ONE section or question per message, then STOP and wait for the user's response
-- Use plain text output — do NOT use the `AskUserQuestion` tool
-- Every message should end with an implicit or explicit "what do you think?"
-- Never dump all decisions or sections at once
-
-This ensures the user stays in control of design decisions and can steer direction incrementally.
+User-facing doc-writer skills enforce a one-message-then-wait cadence. This prevents context dumping and ensures incremental user control over design and requirements decisions.
 
 ### Documentation Safety in Skills
 
-**Read-only guards** — Non-doc agents (execute, compliance-checker, tech-researcher) explicitly declare in their Guards section that `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` are read-only and must not be written to.
-
-**Commit-after-write** — Every skill that writes to a documentation file commits immediately after writing:
-
-```bash
-git add docs/<FILE>.md
-git commit -m "docs: update <FILE>.md via <skill-name>"
-# Do NOT push — local commit only
-```
-
-This prevents subsequent agent sessions from accidentally overwriting uncommitted changes.
-
-**Permitted writers per file:**
-
-| File | Permitted writers |
-|------|-------------------|
-| `docs/SPEC.md` | spec-writer only |
-| `docs/DESIGN.md` | design-writer, doc-harmonizer (with user approval) |
-| `docs/PATTERNS.md` | patterns-writer, doc-harmonizer (with user approval) |
+Non-doc agents explicitly declare `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` as read-only. Skills that are authorized to write to documentation files must perform a local git commit immediately after writing to prevent accidental state loss.
 
 ### CLI References in Skills
 
-Skills tell users to run CLI commands, never skill slash commands. Users should not need to know about the skill layer.
-
-```
-# Good — user runs this
-Next step: run `prothon design`
-
-# Bad — leaks implementation detail
-Next step: run `/prothon-design-writer`
-```
+Skills must only refer to CLI commands (e.g., `prothon design`), never backend-specific skill names or slash commands, keeping implementation details hidden from the user.
 
 ### Generated Reference Skills
 
-The tech-researcher generates project-specific reference skills in `.agents/skills/`. These follow a simpler structure than bundled skills:
-
-```yaml
----
-name: tech-<library>
-description: Reference guide for <library> — <one-line purpose>
-user-invocable: false
----
-```
-
-Generated skills are reference material (not interactive agents), so they set `user-invocable: false` and contain documentation content rather than process instructions.
+The tech-researcher generates project-specific reference guides in `.agents/skills/`. These use a simplified structure and are marked as non-interactive to provide context-efficient domain knowledge to other agents.
 
 ## Error Handling
 
 ### Custom Exception Hierarchy
 
-Flat hierarchy under a single base in `exceptions.py`. No deep inheritance trees. Each exception maps to one failure domain.
-
-`ProthonError` is the base exception. Subclasses — `ProjectNotFoundError`, `ProjectAlreadyInitError`, `PromiseError`, `AssistantNotFoundError`, `UnknownBackendError`, `ComplianceError`, `GitError`, `VersionError` — each map to one failure domain. `ProthonError` is the catch-all at the CLI boundary. Specific subclasses allow callers to handle individual failure modes when needed, but the CLI only needs to catch the base.
+A flat hierarchy under `ProthonError` in `exceptions.py` provides domain-specific failure modes. Callers catch specific subclasses to handle expected failures gracefully.
 
 ### Raise at Source, Catch at Boundary
 
-Domain modules raise specific exceptions at the point of failure. `cli.py` is the only place that catches `ProthonError` and converts it to a user-facing message with a non-zero exit code. Domain modules never call `sys.exit()` or print errors — they raise and let the boundary handle presentation.
-
-### No Bare Exceptions, No Silent Swallowing
-
-Always catch the specific failure type. Re-raise as a domain exception with context about what went wrong. Never catch `Exception` and return `None` — this hides bugs.
+Domain modules raise exceptions at the point of failure without printing or exiting. `cli.py` serves as the single boundary for catching `ProthonError` and presenting formatted error messages to the user.
 
 ### Subprocess Error Wrapping
 
-All git interaction goes through `run_git()` which converts `subprocess` failures into `GitError` immediately. Callers never see raw `subprocess.CalledProcessError`. The environment includes `GIT_TERMINAL_PROMPT=0` to prevent interactive auth prompts from hanging the process.
-
-When the original traceback adds noise rather than clarity, use `from None` to suppress exception chaining — for example, when re-raising a `GitError` with a more descriptive message like "not a git repository."
-
-### Error Message Convention
-
-Lowercase, specific, include the value that caused the problem. Examples: `"task index 5 out of range (0-3)"`, `"no backend registered for 'foo' (available: claude-code, opencode)"`, `"invalid version format: 'abc'"`. This makes messages greppable and self-diagnosing.
+The `run_git()` helper converts raw `subprocess` failures into `GitError`, providing a typed and consistent interface for git operations across the project.
 
 ## Testing Patterns
 
 ### Test Layout
 
-Mirror the source tree under `tests/`, one test file per module.
-
-```
-tests/
-    conftest.py          # shared fixtures, fakes, factories
-    test_project.py      # project root detection
-    test_git.py          # git wrapper, SubprocessGitDiff
-    test_skills.py       # skill discovery and symlink sync
-    test_scaffold.py     # init_existing, generate, Copier integration
-    test_promise.py      # promise model, verification
-    test_assistant.py    # backend protocol, registry, launch
-    test_versioning.py   # semver, file updates, change detection
-    test_cli.py          # integration tests via Typer CliRunner
-```
-
-### Naming
-
-- **Files:** `test_{module}.py`
-- **Functions:** `test_{function}_{scenario}` — descriptive enough to diagnose failures from the name alone
-- **No test classes** unless shared setup can't be handled by fixtures
+The `tests/` directory mirrors the `src/prothon/` layout, with one test file per module. Shared fixtures, fakes, and factories are centralized in `conftest.py`.
 
 ### Protocol Fakes Over Mocks
 
-Write simple fake implementations that satisfy protocols. Fakes are real code — they break when the protocol changes. Mocks don't. A `FakeGitDiff` in `conftest.py` accepts canned `names` and `stats` data, satisfying `GitDiffProvider` structurally. Reserve `unittest.mock` for cases where you genuinely can't control the dependency (e.g., patching `shutil.which`). Prefer restructuring to make fakes possible.
+Test dependencies are managed using simple fake implementations that satisfy protocols like `GitDiffProvider`. This ensures tests break when interfaces change, providing better safety than standard mocks.
 
 ### Fixture Conventions
 
-- `tmp_path` (built-in) for any test that touches the filesystem
-- Shared fakes and factories in `conftest.py`
-- **Factories over static fixtures** — functions with sensible defaults and keyword overrides for constructing test data like tasks and promises. Override only what the test cares about.
-
-### Guard Clause Tests
-
-Each precondition in a domain function gets a dedicated test. Use `tmp_path` to create the exact failing condition, assert the specific exception type and message. One test per guard, name encodes the failing condition (`_raises_when_{condition}`).
-
-### Filesystem Assertion Helpers
-
-Adoption creates files, directories, and symlinks. Keep happy-path tests readable with simple helpers in `conftest.py` — for example, an `assert_symlink_to` helper that checks both that a path is a symlink and that it points to the expected target.
-
-### Idempotency and Non-Destructiveness Tests
-
-Since R17 requires `init` must not modify existing files, test that pre-existing content survives. Write content to a file before calling `init_existing()`, then assert the original content is still present afterward.
-
-### Hypothesis for Boundary Logic
-
-Use Hypothesis for functions with numeric or string boundaries — tolerance checks, version parsing, TOML roundtrips. Don't use Hypothesis for everything — plain `parametrize` is clearer for known edge cases.
+Tests utilize `tmp_path` for filesystem isolation and factory functions in `conftest.py` for flexible test data construction, ensuring tests only specify the data relevant to the scenario being verified.
 
 ### CLI Integration Tests
 
-Test CLI commands via Typer's `CliRunner`, not subprocess. Fast and in-process. Use `monkeypatch.chdir(tmp_path)` to isolate the working directory. Assert on exit codes and output content.
+Typer's `CliRunner` is used for in-process command testing, providing fast and isolated verification of CLI behavior and output without the overhead of external subprocesses.
 
 ### Versioning Tests
 
-Three levels: (1) unit tests for semver arithmetic as direct function calls with no filesystem, (2) file update tests using `tmp_path` to verify tomlkit preserves comments and regex replacement works, (3) change detection tests using `run_git` with temp repos to verify the correct bump type for different file changes.
-
-### What Not to Test
-
-- Third-party library behavior (Typer routing, tomlkit parsing)
-- Trivial dataclass construction
-- Private helpers — unless they contain non-obvious logic (like `_within_tolerance`)
+Versioning is verified across three levels: unit tests for semver arithmetic, filesystem tests for formatting preservation, and repository-based tests for correct bump type detection.

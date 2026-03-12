@@ -5,10 +5,10 @@ from __future__ import annotations
 import os
 
 import pytest
-
 from prothon.exceptions import GitError, ProjectAlreadyInitError
 from prothon.git import run_git
 from prothon.scaffold import _template_dir, generate, init_existing
+
 from tests.conftest import assert_symlink_to
 
 
@@ -341,6 +341,7 @@ def test_generate_copier_defaults_false_when_no_data(tmp_path):
 def test_post_generate_agents_skills_exist_ok(tmp_path, scaffold_data):
     """Calling generate on a dest where .agents/skills already exists must not crash."""
     from unittest.mock import patch
+
     from prothon.scaffold import _post_generate
 
     dest = tmp_path / "test-project"
@@ -408,19 +409,18 @@ def test_init_existing_path_a_calls_copier(tmp_path):
     run_git("init", cwd=tmp_path)
 
     mock_run_copy = MagicMock()
-    with patch("copier.run_copy", mock_run_copy):
-        with patch(
-            "prothon.scaffold._collect_project_details",
-            return_value={
-                "module_name": "testmod",
-                "description": "test desc",
-                "author_name": "Test Author",
-                "author_email": "test@example.com",
-                "python_version": "3.12",
-                "license": "MIT",
-            },
-        ):
-            init_existing(cwd=tmp_path)
+    with patch("copier.run_copy", mock_run_copy), patch(
+        "prothon.scaffold._collect_project_details",
+        return_value={
+            "module_name": "testmod",
+            "description": "test desc",
+            "author_name": "Test Author",
+            "author_email": "test@example.com",
+            "python_version": "3.12",
+            "license": "MIT",
+        },
+    ):
+        init_existing(cwd=tmp_path)
 
     mock_run_copy.assert_called_once()
     args = mock_run_copy.call_args.args
@@ -442,19 +442,18 @@ def test_init_existing_path_a_creates_common_overlay(tmp_path):
 
     run_git("init", cwd=tmp_path)
 
-    with patch("copier.run_copy"):
-        with patch(
-            "prothon.scaffold._collect_project_details",
-            return_value={
-                "module_name": "testmod",
-                "description": "test",
-                "author_name": "Test",
-                "author_email": "test@example.com",
-                "python_version": "3.12",
-                "license": "MIT",
-            },
-        ):
-            init_existing(cwd=tmp_path)
+    with patch("copier.run_copy"), patch(
+        "prothon.scaffold._collect_project_details",
+        return_value={
+            "module_name": "testmod",
+            "description": "test",
+            "author_name": "Test",
+            "author_email": "test@example.com",
+            "python_version": "3.12",
+            "license": "MIT",
+        },
+    ):
+        init_existing(cwd=tmp_path)
 
     assert (tmp_path / "docs" / "SPEC.md").exists()
     assert (tmp_path / "AGENTS.md").exists()
@@ -625,19 +624,18 @@ def test_init_existing_creates_workflow_without_pyproject(tmp_path):
 
     run_git("init", cwd=tmp_path)
 
-    with patch("copier.run_copy"):
-        with patch(
-            "prothon.scaffold._collect_project_details",
-            return_value={
-                "module_name": "testmod",
-                "description": "test",
-                "author_name": "Test",
-                "author_email": "test@example.com",
-                "python_version": "3.12",
-                "license": "MIT",
-            },
-        ):
-            init_existing(cwd=tmp_path)
+    with patch("copier.run_copy"), patch(
+        "prothon.scaffold._collect_project_details",
+        return_value={
+            "module_name": "testmod",
+            "description": "test",
+            "author_name": "Test",
+            "author_email": "test@example.com",
+            "python_version": "3.12",
+            "license": "MIT",
+        },
+    ):
+        init_existing(cwd=tmp_path)
 
     workflow = tmp_path / ".github" / "workflows" / "version-bump.yml"
     assert workflow.exists()

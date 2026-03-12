@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-
 import pytest
-
 from prothon.exceptions import VersionError
 from prothon.git import rev_parse_head, run_git
 from prothon.versioning import (

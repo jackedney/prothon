@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-
 from prothon.exceptions import PromiseError
 from prothon.git import DiffStat
 from prothon.promise import (
@@ -1485,7 +1484,8 @@ def test_check_line_count_fail_detail_no_xx():
 
 def test_check_task_default_diff_is_subprocess(tmp_path: Path):
     """check_task without explicit diff= arg instantiates SubprocessGitDiff (kills diff=None)."""
-    from unittest.mock import MagicMock, patch as mock_patch
+    from unittest.mock import MagicMock
+    from unittest.mock import patch as mock_patch
 
     p = Promise(metadata=Metadata(base_commit="abc"), tasks=[Task(title="T")])
     path = tmp_path / "p.toml"

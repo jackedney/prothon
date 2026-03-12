@@ -6,10 +6,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from prothon.exceptions import GitError
 from prothon.git import SubprocessGitDiff, rev_parse_head, run_git
-
 
 # --- run_git ---
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from prothon.skills import bundled_skills_dir, sync_skills
 
 

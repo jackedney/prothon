@@ -181,7 +181,10 @@ class OB1Backend:
         self, skill_name: str, cwd: Path, model: str | None = None
     ) -> list[str]:
         """Return subprocess argv for an OB1 session with *skill_name*."""
-        return [self.cli_command, f"/{skill_name}"]
+        cmd = [self.cli_command, f"Use the {skill_name} skill."]
+        if model is not None:
+            cmd.extend(["--model", model])
+        return cmd
 
     def sync_skills(self) -> None:
         """Symlink bundled skills into OB1's discovery directory."""

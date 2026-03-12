@@ -299,7 +299,16 @@ def test_ob1_backend_build_command() -> None:
 
     backend = OB1Backend()
     result = backend.build_command("prothon-spec-writer", Path("/tmp"))
-    assert result == ["ob1", "/prothon-spec-writer"]
+    assert result == ["ob1", "Use the prothon-spec-writer skill."]
+
+
+def test_ob1_backend_build_command_with_model() -> None:
+    """build_command constructs the expected argv with a model specified."""
+    from prothon.assistant import OB1Backend
+
+    backend = OB1Backend()
+    result = backend.build_command("prothon-spec-writer", Path("/tmp"), model="gpt-4o")
+    assert result == ["ob1", "Use the prothon-spec-writer skill.", "--model", "gpt-4o"]
 
 
 def test_ob1_backend_env_overrides() -> None:

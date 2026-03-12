@@ -13,6 +13,7 @@ from prothon.assistant import (
     ClaudeCodeBackend,
     GeminiCLIBackend,
     OpenCodeBackend,
+    OB1Backend,
     get_backend,
     launch,
     register_backend,
@@ -277,6 +278,68 @@ def test_gemini_cli_sync_skills_calls_with_home_gemini_skills(
     backend.sync_skills()
 
     mock_sync.assert_called_once_with(target=Path.home() / ".gemini" / "skills")
+
+
+# --- OB1Backend ---
+
+
+def test_ob1_backend_properties() -> None:
+    """OB1Backend exposes correct name, cli_command, and install_hint."""
+    from prothon.assistant import OB1Backend
+
+    backend = OB1Backend()
+    assert backend.name == "OB1"
+    assert backend.cli_command == "ob1"
+    assert backend.install_hint == "https://www.openblocklabs.com/manual"
+
+
+def test_ob1_backend_build_command() -> None:
+    """build_command constructs the expected argv."""
+    from prothon.assistant import OB1Backend
+
+    backend = OB1Backend()
+    result = backend.build_command("prothon-spec-writer", Path("/tmp"))
+    assert result == ["ob1", "/prothon-spec-writer"]
+
+
+def test_ob1_backend_env_overrides() -> None:
+    """OB1Backend returns empty env_overrides."""
+    from prothon.assistant import OB1Backend
+
+    backend = OB1Backend()
+    assert backend.env_overrides() == {}
+
+
+def test_ob1_backend_subagent_type_map() -> None:
+    """OB1Backend returns OB1 subagent type mappings."""
+    from prothon.assistant import OB1Backend
+
+    backend = OB1Backend()
+    expected = {
+        "general-purpose": "general",
+        "explore": "explore",
+        "plan": "plan",
+    }
+    assert backend.subagent_type_map() == expected
+
+
+@patch("prothon.skills.sync_skills")
+def test_ob1_sync_skills_calls_with_home_ob1_skills(
+    mock_sync: MagicMock,
+) -> None:
+    """OB1Backend.sync_skills() targets ~/.ob1/skills/."""
+    from prothon.assistant import OB1Backend
+
+    backend = OB1Backend()
+    backend.sync_skills()
+
+    mock_sync.assert_called_once_with(target=Path.home() / ".ob1" / "skills")
+
+
+def test_get_backend_returns_ob1() -> None:
+    """get_backend('ob1') returns an OB1Backend instance."""
+    backend = get_backend("ob1")
+    assert isinstance(backend, OB1Backend)
 
 
 # --- launch lifecycle ---

@@ -299,7 +299,7 @@ def test_ob1_backend_build_command() -> None:
 
     backend = OB1Backend()
     result = backend.build_command("prothon-spec-writer", Path("/tmp"))
-    assert result == ["ob1", "Use the prothon-spec-writer skill."]
+    assert result == ["ob1", "--yolo", "Use the prothon-spec-writer skill."]
 
 
 def test_ob1_backend_build_command_with_model() -> None:
@@ -308,7 +308,13 @@ def test_ob1_backend_build_command_with_model() -> None:
 
     backend = OB1Backend()
     result = backend.build_command("prothon-spec-writer", Path("/tmp"), model="gpt-4o")
-    assert result == ["ob1", "Use the prothon-spec-writer skill.", "--model", "gpt-4o"]
+    assert result == [
+        "ob1",
+        "--yolo",
+        "Use the prothon-spec-writer skill.",
+        "--model",
+        "gpt-4o",
+    ]
 
 
 def test_ob1_backend_env_overrides() -> None:

@@ -181,7 +181,7 @@ class OB1Backend:
         self, skill_name: str, cwd: Path, model: str | None = None
     ) -> list[str]:
         """Return subprocess argv for an OB1 session with *skill_name*."""
-        cmd = [self.cli_command, f"Use the {skill_name} skill."]
+        cmd = [self.cli_command, "--yolo", f"Use the {skill_name} skill."]
         if model is not None:
             cmd.extend(["--model", model])
         return cmd

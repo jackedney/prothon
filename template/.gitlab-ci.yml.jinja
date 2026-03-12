@@ -124,7 +124,8 @@ version-bump:
       subprocess.run(["git", "tag", "-a", f"v{new_version}", "-m", f"release {new_version}"], check=True)
 
       # Push changes and tag
-      remote_url = f"https://gitlab-ci-token:{os.environ['GITLAB_TOKEN']}@{os.environ['CI_SERVER_HOST']}/{os.environ['CI_PROJECT_PATH']}.git"
+      subprocess.run(["git", "config", "credential.helper", "!f() { echo username=gitlab-ci-token; echo \"password=$GITLAB_TOKEN\"; }; f"], check=True)
+      remote_url = f"https://{os.environ['CI_SERVER_HOST']}/{os.environ['CI_PROJECT_PATH']}.git"
       subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
       subprocess.run(["git", "push", "origin", f"HEAD:{os.environ['CI_COMMIT_BRANCH']}"], check=True)
       subprocess.run(["git", "push", "origin", f"v{new_version}"], check=True)

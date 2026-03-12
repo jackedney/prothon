@@ -454,7 +454,9 @@ def test_opencode_sync_skills_ignores_relative_xdg_config_home(
     mock_sync: MagicMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """OpenCodeBackend.sync_skills() falls back to ~/.config when XDG_CONFIG_HOME is relative."""
+    """OpenCodeBackend.sync_skills() falls back to ~/.config
+    when XDG_CONFIG_HOME is relative.
+    """
     monkeypatch.setenv("XDG_CONFIG_HOME", "relative/path")
     backend = OpenCodeBackend()
     backend.sync_skills()
@@ -469,7 +471,9 @@ def test_opencode_sync_skills_ignores_empty_xdg_config_home(
     mock_sync: MagicMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """OpenCodeBackend.sync_skills() falls back to ~/.config when XDG_CONFIG_HOME is empty."""
+    """OpenCodeBackend.sync_skills() falls back to ~/.config
+    when XDG_CONFIG_HOME is empty.
+    """
     monkeypatch.setenv("XDG_CONFIG_HOME", "")
     backend = OpenCodeBackend()
     backend.sync_skills()
@@ -581,7 +585,9 @@ def test_launch_with_legacy_backend_when_model_is_none(
     mock_run: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """launch() works with a backend that doesn't accept model parameter when model is None."""
+    """launch() works with a backend that doesn't accept model parameter
+    when model is None.
+    """
     mock_run.return_value = MagicMock(returncode=0)
     backend = LegacyBackend()
 
@@ -621,7 +627,9 @@ def test_launch_calls_build_command_with_model_when_provided(
     mock_run: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """launch() calls build_command(skill_name, cwd, model=model) when model is not None."""
+    """launch() calls build_command(skill_name, cwd, model=model)
+    when model is not None.
+    """
     mock_run.return_value = MagicMock(returncode=0)
     backend = FakeBackend()
 

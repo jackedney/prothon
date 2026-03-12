@@ -817,12 +817,19 @@ def ci_bump(
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Don't actually write changes")
     ] = False,
+    no_tag: Annotated[
+        bool, typer.Option("--no-tag", help="Don't create a git tag")
+    ] = False,
 ) -> None:
-    """Bump the project version based on changed files since before_sha."""
+    """Bump the project version based on changed files since before_sha.
+
+    Idempotent: if the current version already matches the expected bump,
+    the command exits successfully without making changes.
+    """
     root = _require_project_root()
     pyproject_path = root / "pyproject.toml"
 
-    # Read pyproject.toml
+    # Read current pyproject.toml (CWD)
     doc = _read_toml(pyproject_path)
     if not doc:
         typer.echo("Error: Could not read pyproject.toml", err=True)
@@ -840,24 +847,43 @@ def ci_bump(
         typer.echo("No version bump needed (no relevant files changed).")
         return
 
-    # Get current version
-    current_version = _nested_get(doc, "project", "version")
-    if not current_version:
+    # Get current version in the branch
+    branch_version = _nested_get(doc, "project", "version")
+    if not branch_version:
         typer.echo("Error: [project] version not found in pyproject.toml", err=True)
         raise typer.Exit(1)
 
-    # Compute new version
-    bump_fn = getattr(versioning, f"bump_{bump_type}")
-    new_version = bump_fn(current_version)
+    # Read base version from before_sha
+    from prothon.git import run_git
 
-    typer.echo(f"Detected {bump_type} bump: {current_version} -> {new_version}")
+    try:
+        base_toml_content = run_git("show", f"{before_sha}:pyproject.toml", cwd=root)
+        base_doc = tomlkit.parse(base_toml_content)
+        base_version = _nested_get(base_doc, "project", "version")
+    except Exception as exc:
+        typer.echo(f"Warning: Could not read pyproject.toml from {before_sha}: {exc}")
+        base_version = None
+
+    if not base_version:
+        typer.echo(f"Falling back to branch version {branch_version} as base")
+        base_version = branch_version
+
+    # Compute expected new version
+    bump_fn = getattr(versioning, f"bump_{bump_type}")
+    expected_version = bump_fn(base_version)
+
+    if branch_version == expected_version:
+        typer.echo(f"Version already at {expected_version}, skipping.")
+        return
+
+    typer.echo(f"Detected {bump_type} bump: {base_version} -> {expected_version}")
 
     if dry_run:
         typer.echo("Dry run: Skipping file updates and tagging.")
         return
 
     # Update files
-    versioning.update_pyproject_version(pyproject_path, new_version)
+    versioning.update_pyproject_version(pyproject_path, expected_version)
 
     # Find __init__.py
     project_name = _nested_get(doc, "project", "name")
@@ -874,7 +900,7 @@ def ci_bump(
         init_path = root / "src" / project_name / "__init__.py"
 
     if init_path.exists():
-        versioning.update_init_version(init_path, new_version)
+        versioning.update_init_version(init_path, expected_version)
         typer.echo(f"Updated {init_path.relative_to(root)}")
     else:
         typer.echo(
@@ -883,11 +909,12 @@ def ci_bump(
         )
 
     # Create tag
-    try:
-        versioning.create_tag(new_version, cwd=root)
-        typer.echo(f"Created tag v{new_version}")
-    except ProthonError as exc:
-        typer.echo(f"Warning: Tag creation failed: {exc}", err=True)
+    if not no_tag:
+        try:
+            versioning.create_tag(expected_version, cwd=root)
+            typer.echo(f"Created tag v{expected_version}")
+        except ProthonError as exc:
+            typer.echo(f"Warning: Tag creation failed: {exc}", err=True)
 
 
 @ci_app.command("detect")

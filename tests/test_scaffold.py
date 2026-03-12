@@ -290,7 +290,7 @@ def test_template_dir_returns_dir_with_copier_yml():
 
 
 def test_template_dir_raises_when_not_found(tmp_path, monkeypatch):
-    """_template_dir raises FileNotFoundError with correct message when template missing."""
+    """_template_dir raises FileNotFoundError when template missing."""
     import prothon.scaffold
 
     monkeypatch.setattr(prothon.scaffold, "__file__", str(tmp_path / "scaffold.py"))
@@ -309,9 +309,11 @@ def test_generate_copier_kwargs_exact(tmp_path):
     data = {"module_name": "m"}
 
     mock_run_copy = MagicMock()
-    with patch("copier.run_copy", mock_run_copy):
-        with patch("prothon.scaffold._post_generate"):
-            generate(dest, data)
+    with (
+        patch("copier.run_copy", mock_run_copy),
+        patch("prothon.scaffold._post_generate"),
+    ):
+        generate(dest, data)
 
     mock_run_copy.assert_called_once()
     kw = mock_run_copy.call_args.kwargs
@@ -327,9 +329,11 @@ def test_generate_copier_defaults_false_when_no_data(tmp_path):
 
     dest = tmp_path / "project"
     mock_run_copy = MagicMock()
-    with patch("copier.run_copy", mock_run_copy):
-        with patch("prothon.scaffold._post_generate"):
-            generate(dest, None)
+    with (
+        patch("copier.run_copy", mock_run_copy),
+        patch("prothon.scaffold._post_generate"),
+    ):
+        generate(dest, None)
 
     kw = mock_run_copy.call_args.kwargs
     assert kw["defaults"] is False  # bool(None) = False
@@ -376,7 +380,7 @@ def test_post_generate_commit_message(generated_project):
 
 
 def test_init_existing_with_preexisting_docs_dir(tmp_path):
-    """init_existing succeeds when docs/ already exists (exist_ok=True needed) (Path B)."""
+    """init_existing succeeds when docs/ already exists (Path B)."""
     run_git("init", cwd=tmp_path)
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     (tmp_path / "docs").mkdir()  # docs/ exists but no SPEC.md
@@ -388,7 +392,7 @@ def test_init_existing_with_preexisting_docs_dir(tmp_path):
 
 
 def test_init_existing_with_preexisting_agents_skills_dir(tmp_path):
-    """init_existing succeeds when .agents/skills/ already exists (exist_ok=True needed) (Path B)."""
+    """init_existing succeeds when .agents/skills/ already exists (Path B)."""
     run_git("init", cwd=tmp_path)
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
     (tmp_path / ".agents" / "skills").mkdir(parents=True)
@@ -403,7 +407,7 @@ def test_init_existing_with_preexisting_agents_skills_dir(tmp_path):
 
 
 def test_init_existing_path_a_calls_copier(tmp_path):
-    """Path A: when pyproject.toml absent, copier.run_copy is called with correct args."""
+    """Path A: when pyproject.toml absent, copier.run_copy is called."""
     from unittest.mock import MagicMock, patch
 
     run_git("init", cwd=tmp_path)
@@ -625,7 +629,7 @@ def test_init_existing_does_not_overwrite_existing_prothon_ci(tmp_path):
 
 
 def test_init_existing_creates_workflow_without_pyproject(tmp_path):
-    """init_existing creates version-bump.yml even when pyproject.toml absent (Path A)."""
+    """init_existing creates workflow even when pyproject.toml absent (Path A)."""
     from unittest.mock import patch
 
     run_git("init", cwd=tmp_path)

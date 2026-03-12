@@ -435,7 +435,8 @@ def _render_check_report(report: TaskCheckReport) -> Table:
 
 def _render_compliance_report(report: ComplianceReport) -> Table:
     """Build a Rich table for a compliance report."""
-    table = Table(title="STATIC COMPLIANCE CHECKS", show_lines=True)
+    table = Table(title="COMPLIANCE REPORT", show_lines=True)
+    table.add_column("Type", width=10)
     table.add_column("Source", style="bold", width=10)
     table.add_column("ID", width=5)
     table.add_column("Requirement")
@@ -453,6 +454,7 @@ def _render_compliance_report(report: ComplianceReport) -> Table:
     for res in report.results:
         label, style = _status_styles[res.status]
         table.add_row(
+            res.check_type.value,
             res.requirement.source,
             res.requirement.requirement_id or "-",
             escape(res.requirement.statement),
@@ -475,12 +477,17 @@ def _run_static_checks(root: Path) -> ComplianceReport:
     _check_inheritance(root, report)
     _check_agent_files(root, report)
 
+    from prothon.compliance import CheckType
+
+    for res in report.results:
+        res.check_type = CheckType.STATIC
+
     return report
 
 
 def _check_doc_existence(root: Path, report: ComplianceReport) -> None:
     """Verify SPEC.md and DESIGN.md exist."""
-    from prothon.compliance import Requirement, CheckResult, CheckStatus
+    from prothon.compliance import CheckResult, CheckStatus, Requirement
 
     for doc in ["SPEC.md", "DESIGN.md"]:
         req = Requirement(
@@ -507,9 +514,9 @@ def _check_doc_existence(root: Path, report: ComplianceReport) -> None:
 def _check_inheritance(root: Path, report: ComplianceReport) -> None:
     """Verify all custom exceptions inherit from ProthonError."""
     from prothon.compliance import (
-        Requirement,
         CheckResult,
         CheckStatus,
+        Requirement,
         analyze_python_file,
     )
 
@@ -545,7 +552,7 @@ def _check_inheritance(root: Path, report: ComplianceReport) -> None:
 
 def _check_agent_files(root: Path, report: ComplianceReport) -> None:
     """Verify AGENTS.md and its expected symlinks."""
-    from prothon.compliance import Requirement, CheckResult, CheckStatus
+    from prothon.compliance import CheckResult, CheckStatus, Requirement
 
     for filename in ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "AGENT.md"]:
         req = Requirement(
@@ -701,13 +708,32 @@ def compliance(
     root = _require_project_root()
 
     # Step 1: Deterministic Static Analysis
-    typer.echo("Running static compliance checks...")
-    static_report = _run_static_checks(root)
-    console.print(_render_compliance_report(static_report))
+    report = _run_static_checks(root)
 
     # Step 2: Semantic Analysis (LLM)
-    typer.echo("\nLaunching semantic compliance checks (LLM)...")
+    # Ensure any previous semantic results are cleared
+    results_path = root / ".prothon" / "compliance_semantic.json"
+    if results_path.exists():
+        results_path.unlink()
+    else:
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+
+    typer.echo("Launching semantic compliance checks (LLM)...")
     _launch_skill("prothon-compliance-checker", root, agent, model, provider)
+
+    # Step 3: Merge and display unified report
+    if results_path.exists():
+        import json
+
+        try:
+            with open(results_path, encoding="utf-8") as f:
+                findings = json.load(f)
+            report.add_from_dicts(findings)
+        except (OSError, json.JSONDecodeError):
+            typer.echo("Warning: Failed to load semantic compliance results.")
+
+    console.print("\n", _render_compliance_report(report))
+    typer.echo("\n" + report.format_summary())
 
 
 @app.command()

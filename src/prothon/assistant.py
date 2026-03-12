@@ -162,10 +162,50 @@ class GeminiCLIBackend:
         }
 
 
+class OB1Backend:
+    """OB1 assistant backend — invokes the ``ob1`` CLI."""
+
+    @property
+    def name(self) -> str:
+        return "OB1"
+
+    @property
+    def cli_command(self) -> str:
+        return "ob1"
+
+    @property
+    def install_hint(self) -> str:
+        return "https://www.openblocklabs.com/manual"
+
+    def build_command(
+        self, skill_name: str, cwd: Path, model: str | None = None
+    ) -> list[str]:
+        """Return subprocess argv for an OB1 session with *skill_name*."""
+        cmd = [self.cli_command, f"Use the {skill_name} skill."]
+        if model is not None:
+            cmd.extend(["--model", model])
+        return cmd
+
+    def sync_skills(self) -> None:
+        """Symlink bundled skills into OB1's discovery directory."""
+        from prothon.skills import sync_skills
+
+        sync_skills(target=Path.home() / ".ob1" / "skills")
+
+    def env_overrides(self) -> dict[str, str]:
+        """Return extra environment variables for OB1 sessions."""
+        return {}
+
+    def subagent_type_map(self) -> dict[str, str]:
+        """Return mapping from canonical subagent types to OB1 names."""
+        return {"general-purpose": "general", "explore": "explore", "plan": "plan"}
+
+
 _BACKENDS: dict[str, type[AssistantBackend]] = {
     "claude-code": ClaudeCodeBackend,
     "opencode": OpenCodeBackend,
     "gemini": GeminiCLIBackend,
+    "ob1": OB1Backend,
 }
 
 

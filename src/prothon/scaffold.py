@@ -89,7 +89,10 @@ jobs:
           try:
               with open("pyproject.toml", "rb") as f:
                   data = tomllib.load(f)
-              val = data.get("tool", {}).get("prothon", {}).get("ci", {}).get("auto_version", True)
+              tool = data.get("tool", {})
+              prothon = tool.get("prothon", {})
+              ci = prothon.get("ci", {})
+              val = ci.get("auto_version", True)
               print("true" if val else "false")
           except Exception:
               print("true")
@@ -136,7 +139,9 @@ jobs:
           echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
 
       - name: Apply version bump
-        if: steps.config.outputs.auto_version == 'true' && steps.detect.outputs.bump_type != 'none'
+        if: |
+          steps.config.outputs.auto_version == 'true' &&
+          steps.detect.outputs.bump_type != 'none'
         id: bump
         env:
           BUMP_TYPE: ${{ steps.detect.outputs.bump_type }}
@@ -155,7 +160,11 @@ jobs:
               try:
                   import tomli as tomllib
               except ImportError:
-                  print("ERROR: tomllib not available (Python < 3.11 and tomli not installed)", file=sys.stderr)
+                  msg = (
+                      "ERROR: tomllib not available "
+                      "(Python < 3.11 and tomli not installed)"
+                  )
+                  print(msg, file=sys.stderr)
                   sys.exit(1)
 
           try:
@@ -175,12 +184,14 @@ jobs:
               )
               raw = tomllib.load(io.BytesIO(res.stdout))
           except Exception as e:
-              print(f"ERROR: failed to read pyproject.toml from origin/main: {e}", file=sys.stderr)
+              msg = f"ERROR: failed to read pyproject.toml from origin/main: {e}"
+              print(msg, file=sys.stderr)
               sys.exit(1)
 
           current = raw.get("project", {}).get("version", "")
           if not current:
-              print("ERROR: no version found in pyproject.toml [project]", file=sys.stderr)
+              msg = "ERROR: no version found in pyproject.toml [project]"
+              print(msg, file=sys.stderr)
               sys.exit(1)
 
           # Parse semver
@@ -230,7 +241,10 @@ jobs:
           PYEOF
 
       - name: Commit and push version bump
-        if: steps.config.outputs.auto_version == 'true' && steps.detect.outputs.bump_type != 'none'
+        if: |
+          steps.config.outputs.auto_version == 'true' &&
+          steps.detect.outputs.bump_type != 'none'
+
         run: |
           if [ -f .bump_skipped ]; then
             echo "Version already bumped, nothing to do"
@@ -341,7 +355,10 @@ version-bump:
       try:
           import tomlkit
           doc = tomlkit.parse(Path("pyproject.toml").read_text())
-          auto_version = doc.get("tool", {}).get("prothon", {}).get("ci", {}).get("auto_version", True)
+          tool = doc.get("tool", {})
+          prothon = tool.get("prothon", {})
+          ci = prothon.get("ci", {})
+          auto_version = ci.get("auto_version", True)
       except Exception:
           auto_version = True
 
@@ -392,9 +409,12 @@ version-bump:
       # Semver arithmetic
       match = re.fullmatch(r"v?(\\d+)\\.(\\d+)\\.(\\d+)", current_version)
       if not match:
-          print(f"Invalid version format: {current_version}", file=sys.stderr)
+          msg = f"Invalid version format: {current_version}"
+          print(msg, file=sys.stderr)
           sys.exit(1)
-      major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
+      major = int(match.group(1))
+      minor = int(match.group(2))
+      patch = int(match.group(3))
 
       if bump_type == "major":
           new_version = f"{major + 1}.0.0"
@@ -420,17 +440,28 @@ version-bump:
               print(f"Updated {init_path}")
 
       # Commit and tag
-      subprocess.run(["git", "add", "pyproject.toml"] + [str(p) for p in init_files], check=True)
-      subprocess.run(["git", "commit", "-m", f"chore: bump version to {new_version} [skip ci]"], check=True)
-      subprocess.run(["git", "tag", "-a", f"v{new_version}", "-m", f"release {new_version}"], check=True)
+      git_add = ["git", "add", "pyproject.toml"] + [str(p) for p in init_files]
+      subprocess.run(git_add, check=True)
+      commit_msg = f"chore: bump version to {new_version} [skip ci]"
+      subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+      tag_msg = f"release {new_version}"
+      subprocess.run(["git", "tag", "-a", f"v{new_version}", "-m", tag_msg], check=True)
 
       # Push changes and tag
-      remote_url = f"https://gitlab-ci-token:{os.environ['GITLAB_TOKEN']}@{os.environ['CI_SERVER_HOST']}/{os.environ['CI_PROJECT_PATH']}.git"
+      server = os.environ['CI_SERVER_HOST']
+      project = os.environ['CI_PROJECT_PATH']
+      token = os.environ['GITLAB_TOKEN']
+      remote_url = f"https://gitlab-ci-token:{token}@{server}/{project}.git"
       subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
-      subprocess.run(["git", "push", "origin", f"HEAD:{os.environ['CI_COMMIT_BRANCH']}"], check=True)
+      push_branch = f"HEAD:{os.environ['CI_COMMIT_BRANCH']}"
+      subprocess.run(["git", "push", "origin", push_branch], check=True)
       subprocess.run(["git", "push", "origin", f"v{new_version}"], check=True)
 
-      print(f"Successfully bumped version to {new_version} and pushed tag v{new_version}")
+      msg = (
+          f"Successfully bumped version to {new_version} "
+          f"and pushed tag v{new_version}"
+      )
+      print(msg)
       PYEOF
 """
 

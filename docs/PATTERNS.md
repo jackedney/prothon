@@ -53,6 +53,8 @@ def find_project_root(start: Path | None = None) -> Path: ...
 ```python
 def run_git(*args: str, cwd: Path | None = None) -> str: ...
 def rev_parse_head(cwd: Path | None = None) -> str: ...
+def is_dirty(path: Path, cwd: Path | None = None) -> bool: ...
+def commit_file(path: Path, message: str, cwd: Path | None = None) -> None: ...
 ```
 
 **skills.py:**
@@ -88,17 +90,11 @@ Most modules are plain functions with typed signatures. Reserve classes for two 
 
 ### Dataclasses for Structured Data
 
-Use `@dataclass` with `field(default_factory=...)` for mutable defaults. Dataclasses carry data and may expose computed properties, but should not contain complex business logic. The promise system uses this for `Task`, `Metadata`, `Promise`, `CheckResult`, `FileCheckDetail`, and `TaskCheckReport`. The `TaskCheckReport.passed` property is an example of a lightweight computed property on a data carrier.
+Use `@dataclass` with `field(default_factory=...)` for mutable defaults. Dataclasses carry data and may expose computed properties, but should not contain complex business logic. The promise system uses this for `Task`, `Metadata`, `Promise`, `CheckResult`, `FileCheckDetail`, and `TaskCheckReport`.
 
 ### Protocols for Dependency Injection
 
 Use `typing.Protocol` where a module needs a swappable capability — primarily for testing. Protocols provide structural typing without inheritance. Implementations satisfy the contract structurally without inheriting from the protocol.
-
-Two protocols exist in the codebase:
-
-`GitDiffProvider` declares `diff_names(base_commit: str) -> set[str]` and `diff_numstat(base_commit: str) -> DiffStat`. It enables subprocess-free testing of promise verification.
-
-`AssistantBackend` declares read-only properties `name -> str`, `cli_command -> str`, and `install_hint -> str`, plus methods `build_command(skill_name: str, cwd: Path, model: str | None = None) -> list[str]`, `sync_skills() -> None`, `env_overrides() -> dict[str, str]`, and `subagent_type_map() -> dict[str, str]`. It enables pluggable assistant backends with a shared launch lifecycle.
 
 ### Registry for Backend Lookup
 
@@ -106,170 +102,67 @@ A module-level dict maps string names to backend classes. A `register_backend()`
 
 ### Shared Lifecycle as Standalone Function
 
-The `launch()` function accepts anything satisfying `AssistantBackend` and runs the shared lifecycle: binary existence check via `shutil.which()`, skill syncing, environment merging, subprocess execution, and return code reporting. Shared behavior lives in a function, not a base class — this follows the functions-first default and keeps protocols as pure interfaces.
-
-### Default Arguments for Production, Parameters for Testing
-
-Functions use production defaults (e.g., `path: Path = PROMISE_PATH`) but accept overrides so tests never touch real state and never need monkeypatching. This applies to all promise functions, git functions, and skill sync.
+The `launch()` function accepts anything satisfying `AssistantBackend` and runs the shared lifecycle: binary existence check, skill syncing, environment merging, subprocess execution, and return code reporting.
 
 ### File Locking and Atomic Persistence
 
-When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates. `save_promise()` writes atomically via `tempfile.mkstemp` + `os.fsync` + `os.replace`, so readers never see partially-written content — read-only operations (`status`, `check_task`, `plan`) are safe without locking.
+When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates. `save_promise()` writes atomically via temporary files and `os.replace`.
 
-The lock implementation is cross-platform: `fcntl.flock` on Unix, `msvcrt.locking` on Windows. The lock uses a sibling `.toml.lock` file (not the TOML itself) so the promise file can be fully rewritten without interfering with the lock. `complete_task()` runs verification (read-only, no lock needed due to atomic writes) before acquiring the exclusive lock for the read-modify-write cycle.
-
-```python
-@contextmanager
-def _lock_promise(path: Path) -> Iterator[None]: ...
-```
+The lock implementation is cross-platform: `fcntl.flock` on Unix, `msvcrt.locking` on Windows. The lock uses a sibling `.toml.lock` file.
 
 ### Guard-Clause Preconditions
 
-Domain functions that require specific environmental conditions validate them upfront and raise domain exceptions. Guards come first, happy path follows. No nested `if/else` trees. For example, `init_existing()` checks for a git repository and the absence of `docs/SPEC.md` before proceeding. This keeps validation in the domain layer (not the CLI) and follows the "raise at source" error handling pattern.
+Domain functions that require specific environmental conditions validate them upfront and raise domain exceptions. Guards come first, happy path follows. No nested `if/else` trees.
 
-### Inline Content Constants
+### Hybrid Verification Pattern
 
-Doc scaffolds, CI workflow templates, and agent instruction content are inlined as `_UPPER_SNAKE` module-level constants in `scaffold.py` rather than read from the Copier template at runtime. This decouples `init` from Copier's file layout — template restructuring cannot break init.
+Used by the compliance checker. It combines deterministic static analysis (regex or AST) for structural requirements and documentation form rules with semantic LLM-based analysis for high-level functional requirements.
 
-### Idempotent Symlink Creation
+### Evidence-Based Verification
 
-Both `scaffold.py` and `skills.py` create symlinks. The pattern is: remove stale target (symlink or real directory), then create. This ensures re-running is safe. `scaffold.py` uses relative symlinks for portability within a repo. `skills.py` uses absolute symlinks because the source is outside the project tree.
+All verification and compliance reports must map findings to source code evidence. Every PASS/FAIL status must include a `file:line` citation and a brief rationale explaining how the implementation satisfies or fails the documented intent.
+
+### Advisory-First Refactoring
+
+The refactoring workflow is split into two distinct phases. The **Discovery Phase** is purely advisory and read-only; it scans for drift and presents findings to the user. The **Execution Phase** only begins after the user selects specific improvements, triggering the generation of a change promise and subsequent implementation tasks.
+
+### Refactor Wave Pattern
+
+Changes flow top-down through the documentation hierarchy: **DESIGN -> PATTERNS -> CODE**. Architectural shifts or convention changes must be documented and approved before any source code is modified. Implementation tasks must reference the specific documentation heading they are aligning with.
+
+### Hierarchical Conflict Resolution
+
+When the `doc-harmonizer` detects contradictions, it presents them as "Before/After" diffs based on the authority hierarchy (SPEC > DESIGN > PATTERNS). Higher-level documents are never amended by the harmonizer; only lower-authority documents are updated after explicit user approval.
+
+### Self-Correcting Subagent Loop
+
+Orchestrated tasks follow an iterative **Plan -> Act -> Validate** cycle. Each task executes in a fresh subagent context, followed by a quality gate (pre-commit hooks) and a verification check (promise check). If either fails, the task is retried up to `max_attempts`.
+
+### Default Arguments for Production, Parameters for Testing
+
+Functions use production defaults but accept overrides so tests never touch real state and never need monkeypatching.
 
 ### XDG_CONFIG_HOME Resolution
 
-Backends and configuration readers that access user-level directories respect `$XDG_CONFIG_HOME` with a `~/.config` fallback. Empty or relative values fall back to `~/.config` to avoid syncing into repo-relative paths. This applies to `OpenCodeBackend.sync_skills()` and the config resolution functions in `cli.py`.
-
-### Rich Table Rendering as Private Helpers
-
-`cli.py` builds tables via private `_render_*` functions that return `Table` objects. Commands print them. This separates rendering logic from I/O. Status styling uses a dict mapping `CheckStatus` enum values to `(label, style)` tuples to avoid branching.
-
-```python
-def _render_plan(p: Promise) -> Table: ...
-def _render_status(p: Promise) -> Table: ...
-def _render_check_report(report: TaskCheckReport) -> Table: ...
-```
-
-### Per-Command Agent Option with Annotated Type
-
-The `--agent`/`-a` flag is per-command, defined once as a shared `Annotated` type and added to each command that launches an assistant session. The value flows explicitly through `_launch_skill` → `resolve_agent` as a function parameter — no module-level mutable state.
-
-```python
-AgentOption = Annotated[
-    str | None,
-    typer.Option(
-        "--agent", "-a",
-        envvar="PROTHON_AGENT",
-        help="AI agent backend (claude-code, opencode)",
-    ),
-]
-```
-
-### Per-Command Model/Provider Options with Annotated Types
-
-The `--model`/`-m` and `--provider`/`-p` flags follow the same pattern — shared `Annotated` types added to each session command. These are opencode-specific (Claude Code silently ignores them).
-
-```python
-ModelOption = Annotated[
-    str | None,
-    typer.Option(
-        "--model", "-m",
-        envvar="PROTHON_MODEL",
-        help="Model name (opencode only)",
-    ),
-]
-
-ProviderOption = Annotated[
-    str | None,
-    typer.Option(
-        "--provider", "-p",
-        envvar="PROTHON_PROVIDER",
-        help="Provider name (opencode only)",
-    ),
-]
-
-@app.command()
-def spec(
-    agent: AgentOption = None,
-    model: ModelOption = None,
-    provider: ProviderOption = None,
-) -> None: ...
-```
+Backends and configuration readers respect `$XDG_CONFIG_HOME` with a `~/.config` fallback. Empty or relative values fall back to `~/.config`.
 
 ### Fallthrough Precedence Chain
 
-`resolve_agent()` and `_resolve_config_value()` implement multi-level precedence chains where the first non-empty value wins. Each level is a simple guard with fallthrough to the next. The chain lives in `cli.py` because levels 3-4 read config files — these are CLI concerns, not backend concerns.
-
-### Model/Provider Join Rule
-
-`resolve_model()` resolves model and provider independently via the same precedence chain, then joins them into opencode's required `provider/model` format. If `--model` already contains `/`, it's treated as a complete specifier. If only one resolves, the function raises an error. If neither resolves, it returns `None` to defer to opencode's defaults.
-
-### CLI Guard and Launch Helpers
-
-Repeated "find-or-exit" and "resolve-launch-or-exit" logic is extracted into private helpers that catch domain exceptions and raise `typer.Exit`. `_launch_skill` also handles doc commitment and follow-up triggers.
-
-```python
-def _launch_skill(
-    skill_name: str,
-    cwd: Path,
-    agent: str | None = None,
-    model: str | None = None,
-    provider: str | None = None,
-    run_follow_ups: bool = True,
-) -> None: ...
-```
-
-### Interactive Prompt with Validation Loop
-
-`prothon new` collects inputs via `typer.prompt()` with while-loop validation for constrained fields. This pattern ensures user input is re-requested until it meets project requirements without needing external validation libraries.
-
-```python
-def _collect_project_details() -> dict: ...
-```
-
-### Conditional Path Branching in Domain Functions
-
-`init_existing()` branches on whether `pyproject.toml` exists to decide whether to scaffold via Copier or skip it. Convergence on a common overlay follows the guard-first, branch-after pattern for clean control flow.
-
-```python
-def init_existing(cwd: Path | None = None) -> list[Path]: ...
-```
-
-### Lazy Imports for Heavy Dependencies
-
-Heavy packages like Copier are imported inside the function body to minimize import-time overhead for lightweight CLI operations. This pattern is an intentional exception to standard import order for performance.
-
-### Versioning as Pure Functions
-
-Semver arithmetic is implemented using pure functions that handle parsing, bumping, and returning new version strings. File updates are handled by specific functions that preserve formatting (tomlkit) or perform regex replacement, maintaining a stateless and testable versioning core.
-
-### SPEC.md Tamper Detection
-
-`_launch_skill()` implements a SHA-256 hash comparison of `docs/SPEC.md` before and after sessions to warn of unauthorized modifications. This soft guard complements skill-level edit restrictions.
-
-### CI Workflow Patterns
-
-CI workflow templates are inlined as private module-level constants in `scaffold.py`, decoupling project initialization from the Copier template layout and maintaining a self-contained adoption logic.
+Configuration resolution (agent, model, provider) implements a multi-level precedence chain: CLI flag > env var > pyproject.toml > global config > default. The first non-empty value wins.
 
 ## Skill Authoring Patterns
 
 ### Frontmatter Conventions
 
-All bundled skills live in `src/prothon/skills/` as directories containing a `SKILL.md`. Frontmatter fields vary by skill type:
+All bundled skills live in `src/prothon/skills/` as directories containing a `SKILL.md`. Frontmatter fields include `name`, `description`, and optional assistant-specific fields like `model` or `context`.
 
-| Field | User-facing session skills | Subagent-mode skills |
-|-------|---------------------------|---------------------|
-| `name` | Required | Required |
-| `description` | Required | Required |
-| `model` | Omitted — user's assistant selection applies | `sonnet` — cost-effective for automated analysis |
-| `context` | Omitted — runs in user's session | `fork` — isolates subagent context |
+### Multi-File Skill Layout (Progressive Disclosure)
 
-### Skill Structure
+Generated reference skills follow a hierarchical structure to maintain context efficiency. `SKILL.md` contains the core instructions and concise usage patterns (< 500 words). Detailed API specifications, heavy documentation, or large examples (> 100 lines) are moved to a `references/` subdirectory.
 
-Standard sections follow a mandatory sequence: `## Role`, `## Prerequisites`, `## Focus` (optional), `## Process`, `## Guards`, `## Output`, and `## After Writing`. This ensures consistent behavior and authority enforcement across all prothon agents.
+### Canonical Subagent Portability
 
-### Subagent Spawning
-
-Skills spawning subagents must use canonical agent type names (`general-purpose`, `explore`, `plan`) and a standardized instruction format. This enables cross-assistant compatibility by letting each backend translate the canonical request into its native tool call.
+Skills must use **canonical agent type names** (`general-purpose`, `explore`, `plan`) when requesting subagent spawns. Each assistant backend's `subagent_type_map` translates these canonical names into tool-specific invocations, ensuring skills are portable across different AI assistants.
 
 ### Conversational Cadence
 
@@ -277,48 +170,44 @@ User-facing doc-writer skills enforce a one-message-then-wait cadence. This prev
 
 ### Documentation Safety in Skills
 
-Non-doc agents explicitly declare `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` as read-only. Skills that are authorized to write to documentation files must perform a local git commit immediately after writing to prevent accidental state loss.
-
-### CLI References in Skills
-
-Skills must only refer to CLI commands (e.g., `prothon design`), never backend-specific skill names or slash commands, keeping implementation details hidden from the user.
-
-### Generated Reference Skills
-
-The tech-researcher generates project-specific reference guides in `.agents/skills/`. These use a simplified structure and are marked as non-interactive to provide context-efficient domain knowledge to other agents.
+Non-doc agents explicitly declare `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` as read-only. Skills authorized to write to docs must perform a local git commit immediately after writing to prevent state loss.
 
 ## Error Handling
 
 ### Custom Exception Hierarchy
 
-A flat hierarchy under `ProthonError` in `exceptions.py` provides domain-specific failure modes. Callers catch specific subclasses to handle expected failures gracefully.
+A flat hierarchy under `ProthonError` in `exceptions.py` provides domain-specific failure modes. `cli.py` serves as the single boundary for catching these and presenting formatted messages.
 
-### Raise at Source, Catch at Boundary
+### Terminal Failure Pattern
 
-Domain modules raise exceptions at the point of failure without printing or exiting. `cli.py` serves as the single boundary for catching `ProthonError` and presenting formatted error messages to the user.
+When a subagent reaches `max_attempts` for a task without passing verification and quality gates, it reports a terminal failure. The orchestrator records the failure and the full attempt log, then asks the user for a decision (skip, retry, or abort).
 
-### Subprocess Error Wrapping
+### Doc Consistency Failures
 
-The `run_git()` helper converts raw `subprocess` failures into `GitError`, providing a typed and consistent interface for git operations across the project.
+Contradictions found by the `doc-harmonizer` are treated as data rather than exceptions. They are presented as a structured report of `Conflict` objects, enabling interactive resolution and approval before any documents are amended.
+
+### Compliance Failure Pattern
+
+Compliance checking produces a report of `CheckResult` objects with `CheckStatus.FAILED` for unmet requirements. These are not treated as flow-control exceptions unless specifically running in a CI environment where a non-zero exit code is required for failure.
 
 ## Testing Patterns
 
 ### Test Layout
 
-The `tests/` directory mirrors the `src/prothon/` layout, with one test file per module. Shared fixtures, fakes, and factories are centralized in `conftest.py`.
+The `tests/` directory mirrors the `src/prothon/` layout. Shared fixtures and factories are centralized in `conftest.py`.
 
 ### Protocol Fakes Over Mocks
 
-Test dependencies are managed using simple fake implementations that satisfy protocols like `GitDiffProvider`. This ensures tests break when interfaces change, providing better safety than standard mocks.
+Test dependencies are managed using simple fake implementations that satisfy protocols. This ensures tests break when interfaces change, providing better safety than standard mocks.
 
-### Fixture Conventions
+### Subagent Mocking Pattern
 
-Tests utilize `tmp_path` for filesystem isolation and factory functions in `conftest.py` for flexible test data construction, ensuring tests only specify the data relevant to the scenario being verified.
+Use a `FakeAssistantBackend` that simulates subagent responses, return codes, and file modifications. This enables testing complex orchestration logic (like the Refactor Wave or Task Lifecycle) without invoking real AI models.
 
-### CLI Integration Tests
+### Conflict Injection Pattern
 
-Typer's `CliRunner` is used for in-process command testing, providing fast and isolated verification of CLI behavior and output without the overhead of external subprocesses.
+Verify the `doc-harmonizer` by injecting known contradictions between SPEC, DESIGN, and PATTERNS. Tests confirm that the harmonizer detects the conflict, identifies the correct higher-authority document, and proposes the appropriate resolution text.
 
-### Versioning Tests
+### Concurrency Stress Testing
 
-Versioning is verified across three levels: unit tests for semver arithmetic, filesystem tests for formatting preservation, and repository-based tests for correct bump type detection.
+Verify the `.toml.lock` exclusive locking mechanism by using multiprocessing to simulate concurrent subagents attempting to mark tasks complete simultaneously. Tests ensure that all updates are serialized and no data is lost.

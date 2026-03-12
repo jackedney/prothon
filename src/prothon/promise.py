@@ -6,11 +6,11 @@ import os
 import sys
 import tempfile
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Iterator
 
 import tomlkit
 import tomlkit.exceptions
@@ -161,7 +161,7 @@ def _coerce_int(value: object, field: str) -> int:
     except (TypeError, ValueError):
         raise PromiseError(
             f"field '{field}' must be an integer, got {type(value).__name__}: {value!r}"
-        )
+        ) from None
 
 
 def _task_from_dict(d: dict) -> Task:
@@ -296,7 +296,10 @@ def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
 
 
 def _within_tolerance(expected: int, actual: int) -> bool:
-    """Check if actual is within +/-30% or +/-30 lines of expected (whichever is greater)."""
+    """Check if actual is within +/-30% or +/-30 lines of expected.
+
+    The greater of 30% or 30 lines is used as the tolerance.
+    """
     pct_tolerance = expected * 0.3
     abs_tolerance = DEFAULT_TOLERANCE
     tolerance = int(max(pct_tolerance, abs_tolerance))
@@ -494,7 +497,8 @@ def complete_task(
         if promise.tasks[task_index].task_id != report.task_id:
             raise PromiseError(
                 f"Task {task_index} identity changed between check and completion "
-                f"(expected task_id {report.task_id!r}, got {promise.tasks[task_index].task_id!r}); "
+                f"(expected task_id {report.task_id!r}, "
+                f"got {promise.tasks[task_index].task_id!r}); "
                 "re-run `promise check` and retry"
             )
         if promise.tasks[task_index].completed:

@@ -23,7 +23,7 @@ src/prothon/
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, doc agents, execution, compliance, promise system, versioning, skill management — requirements 1-9, 22, 27-28, 34-37, 42-50, 54) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
+This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
 
 ### Module Dependencies
 
@@ -71,7 +71,7 @@ AI coding CLIs fall into two structural categories based on how they receive ski
 - **Category A (native skill directories)** — Claude Code, opencode, and Gemini CLI have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
 - **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. These are out of scope per the SPEC but the abstraction accommodates them for future expansion.
 
-A registry maps assistant names to backend classes. Claude Code, opencode, and Gemini CLI are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 52-53 (Claude Code and opencode support, assistant selection).
+A registry maps assistant names to backend classes. Claude Code, opencode, and Gemini CLI are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 57-58 (Claude Code, opencode, and Gemini CLI support; assistant selection).
 
 ### Promise Verification
 
@@ -119,9 +119,9 @@ The doc-harmonizer maintains internal consistency across the documentation hiera
 - **Top-Down Enforcement:** Validates that lower-authority documents do not contradict higher-authority ones.
 - **Approval Workflow:** Presents proposed amendments as "Before/After" diffs for user approval before applying changes.
 
-### Tech-Researcher (R39-41)
+### Tech-Researcher (R43-46)
 
-The tech-researcher refreshes project-specific reference skills based on the technology choices in DESIGN.md.
+The tech-researcher refreshes project-specific reference skills based on the technology choices in DESIGN.md (serves R43-46).
 
 - **Sourcing:** Combines local inspection (`uv pip show`, `inspect`) with direct web fetching (`web_fetch` on official doc URLs) to ensure version accuracy and up-to-date idiomatic knowledge.
 - **Multi-File Skills:** Generates skills as directories in `.agents/skills/` following Anthropic's multi-file structure (`SKILL.md`, `reference.md`, `conventions.md`, `examples/`).
@@ -384,7 +384,7 @@ Every assistant session launched via the CLI (`spec`, `design`, `patterns`, `exe
 
 ### Tech Research Contract
 
-The tech-researcher generates reference skills in `.agents/skills/` based on the technology choices in DESIGN.md (serves R38-R41). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
+The tech-researcher generates reference skills in .agents/skills/ based on the technology choices in DESIGN.md (serves R43-46). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
 
 **Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer, refactor, or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
 

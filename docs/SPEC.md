@@ -80,7 +80,7 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 ### CLI and Agent Integration
 
 51. All documentation and execution workflows must be invocable via CLI commands (`prothon spec`, `prothon design`, `prothon patterns`, `prothon execute`, `prothon compliance`).
-52. The system must support Claude Code and opencode as AI assistants for all agent workflows, with identical behavior and experience across both.
+52. The system must support Claude Code, opencode, and Gemini CLI as AI assistants for all agent workflows, with identical behavior and experience across all.
 53. The user must be able to select their preferred AI assistant via CLI flag, environment variable, project-level configuration, and global user-level configuration.
 54. Built-in skills must be bundled with the package and synced to the active assistant's skill directory on every CLI invocation.
 55. The scaffolded project's agent instructions must be assistant-agnostic, using symlinks so that any AI assistant that reads project-level markdown picks up the same instructions.
@@ -97,7 +97,7 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 
 ## Out of Scope
 
-- Support for AI assistants beyond Claude Code and opencode (future consideration).
+- Support for AI assistants beyond Claude Code, opencode, and Gemini CLI (future consideration).
 - Project templates beyond library-style Python packages (planned for future).
 - Customization of the scaffolded toolchain (tools are fixed by design).
 - Non-Python project scaffolding (planned for future as separate equivalent tools).

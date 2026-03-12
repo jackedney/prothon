@@ -1,0 +1,58 @@
+name: Version Tag
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  version-tag:
+    if: {% raw %}"!startsWith(github.event.head_commit.message, 'chore: bump version')"{% endraw %}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version and create tag
+        run: |
+          VERSION=$(python3 - <<'PYEOF'
+          import sys
+          try:
+              import tomllib
+          except ImportError:
+              try:
+                  import tomli as tomllib
+              except ImportError:
+                  print("")
+                  sys.exit(0)
+          try:
+              with open("pyproject.toml", "rb") as f:
+                  data = tomllib.load(f)
+              print(data.get("project", {}).get("version", ""))
+          except Exception:
+              print("")
+          PYEOF
+          )
+
+          if [ -z "$VERSION" ]; then
+            echo "No version found, skipping"
+            exit 0
+          fi
+
+          TAG="v${VERSION}"
+
+          # Check if tag already exists
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" -m "release ${VERSION}"
+          git push origin "$TAG"

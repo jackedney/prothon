@@ -17,7 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 from prothon import promise
-from prothon.assistant import get_backend, launch
+from prothon.assistant import _BACKENDS, get_backend, launch
 from prothon.exceptions import ProthonError
 from prothon.promise import CheckStatus, TaskCheckReport
 from prothon.project import find_project_root
@@ -25,13 +25,15 @@ from prothon.scaffold import generate, init_existing
 
 console = Console()
 
+_agent_choices = ", ".join(sorted(_BACKENDS.keys()))
+
 AgentOption = Annotated[
     str | None,
     typer.Option(
         "--agent",
         "-a",
         envvar="PROTHON_AGENT",
-        help="AI agent backend (claude-code, opencode)",
+        help=f"AI agent backend ({_agent_choices})",
     ),
 ]
 
@@ -41,7 +43,7 @@ ModelOption = Annotated[
         "--model",
         "-m",
         envvar="PROTHON_MODEL",
-        help="Model name (opencode only)",
+        help="Model name passed to the agent backend",
     ),
 ]
 
@@ -476,6 +478,20 @@ def compliance(
     _launch_skill("prothon-compliance-checker", root, agent, model, provider)
 
 
+@app.command()
+def refactor(
+    agent: AgentOption = None,
+    model: ModelOption = None,
+    provider: ProviderOption = None,
+) -> None:
+    """Perform documentation-driven full-stack refactoring with the refactor agent."""
+    root = _require_project_root()
+    _require_doc(root, "SPEC.md")
+    _require_doc(root, "DESIGN.md")
+    _require_doc(root, "PATTERNS.md")
+    _launch_skill("prothon-refactor", root, agent, model, provider)
+
+
 # --- Promise subcommands ---
 
 
@@ -517,18 +533,33 @@ def promise_check(
 @promise_app.command("complete")
 def promise_complete(
     task_index: int = typer.Argument(help="Zero-based task index to mark complete"),
-    attempts: int = typer.Argument(default=1, help="Number of attempts taken"),
 ) -> None:
-    """Mark a task as completed and record attempt count."""
+    """Mark a task as completed (attempt count is read from the promise file)."""
     root = _require_project_root()
     promise_path = _require_promise_file(root)
     try:
-        promise.complete_task(task_index, attempts=attempts, path=promise_path)
+        promise.complete_task(task_index, path=promise_path)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}")
         raise typer.Exit(1)
-    suffix = "s" if attempts != 1 else ""
-    typer.echo(f"Task {task_index} marked as completed ({attempts} attempt{suffix}).")
+    typer.echo(f"Task {task_index} marked as completed.")
+
+
+@promise_app.command("record-attempt")
+def promise_record_attempt(
+    task_index: int = typer.Argument(
+        help="Zero-based task index to record attempt for"
+    ),
+) -> None:
+    """Increment the attempt counter for a task."""
+    root = _require_project_root()
+    promise_path = _require_promise_file(root)
+    try:
+        promise.record_attempt(task_index, path=promise_path)
+    except ProthonError as exc:
+        typer.echo(f"Error: {exc}")
+        raise typer.Exit(1)
+    typer.echo(f"Attempt recorded for task {task_index}.")
 
 
 @promise_app.command("cleanup")

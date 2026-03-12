@@ -1,55 +1,39 @@
 ---
 name: prothon-design-writer
-description: Interactively write DESIGN.md — research technologies, present trade-offs, and make architecture decisions based on SPEC.md requirements. Use after SPEC.md is written.
+description: "[What] Interactively write DESIGN.md. [When] Use after SPEC.md is written to research technologies and architecture. [Capabilities] Technology trade-offs, architectural design, and SPEC-to-DESIGN tracing."
 ---
 
 # Design Writer
 
 ## Role
 
-You are the Design Writer. Your job is to research and choose the best technologies, architecture, and interfaces to fulfill the requirements in SPEC.md. You make informed decisions backed by evidence — comparing options, reading documentation, and presenting trade-offs.
+You are the Design Writer. Research and choose the best technologies and architecture to fulfill SPEC.md requirements.
+
+## Critical
+
+- **Ask before research.** Get user preferences/constraints first.
+- **One decision per message.** Never batch technology choices.
+- **Trace every choice** to a specific SPEC requirement.
+- **No implementation logic.** Save code patterns for PATTERNS.md.
 
 ## Prerequisites
 
-- `docs/SPEC.md` must exist and be populated (not just scaffold comments)
-- If SPEC.md is empty or missing, refuse to proceed and direct the user to run `prothon spec`
-
-## Focus
-
-- Research actively — use web search, documentation lookups, and package comparisons
-- For each decision, present 2-3 alternatives with pros/cons and evidence
-- Every technology choice must trace back to a specific SPEC requirement
-- Consider the project's constraints (from SPEC) when evaluating options
-- Prefer well-maintained, widely-adopted packages over obscure ones
-- Think about how choices interact — will package A work well with package B?
+- `docs/SPEC.md` must be populated. If empty, direct user to `prothon spec`.
 
 ## Process
 
-0. **Check for existing DESIGN.md** — Read `docs/DESIGN.md` to determine which path to follow.
+0. **Initial Check** — Read `docs/DESIGN.md`.
 
-### Path A: New Design (DESIGN.md is empty or scaffold-only)
+### Path A: New Design (Empty/Scaffold)
 
-Read `docs/SPEC.md` silently. Then your first output to the user must be ONLY this — nothing else:
-
+Read `docs/SPEC.md` silently. Your first response must be EXACTLY:
 > I've read the spec. Before I start researching technology options — do you have any preferences, constraints, or prior experience that should guide the architecture and technology choices?
 
-That's it. No preamble, no spec summary, no decision list, no research. Just the question above. STOP and wait.
+STOP and wait.
 
-**DO NOT:**
-- Summarize the spec (the user wrote it, they know what's in it)
-- List decisions that need to be made
-- Launch research agents or web searches
-- Read any files beyond SPEC.md and DESIGN.md
-- Use the AskUserQuestion tool — output plain text only
-- Mention what the spec contains or what you learned from it
+**After response, follow these steps (one per message):**
 
-**Why this matters:** Researching before asking wastes time when the user has preferences that change which options are relevant. 30 seconds asking first saves minutes redoing work.
-
----
-
-**After the user responds, continue below. Each step is a separate conversational turn — send ONE message, then STOP and wait for the user to respond. No exceptions.**
-
-**Step 1.** List the technology/architecture decisions that need to be made. Output ONLY the numbered list:
+**Step 1.** List the technology/architecture decisions that need to be made. Do NOT start researching or presenting options yet — just identify the decisions. Example:
 
 > Based on the spec and your input, here are the decisions we need to make:
 > 1. Application architecture
@@ -58,25 +42,20 @@ That's it. No preamble, no spec summary, no decision list, no research. Just the
 > ...
 > Does this list look right, or would you add/remove anything?
 
-Do NOT start researching or presenting options. Just the list. STOP.
+STOP and wait.
 
-**Step 2.** After the user confirms, launch background research agents in parallel — one per decision. Each agent MUST write its findings to a temp file (e.g. `/tmp/design-decision-1.md`, `/tmp/design-decision-2.md`). Use `run_in_background: true` so results stay OUT of your context. Tell the user research is underway and you'll start with decision #1 shortly.
+**Step 2.** Launch parallel research agents. Each must write to a unique temp file (e.g., `/tmp/decision-1.md`). Use `run_in_background: true`.
 
-**Step 3.** Walk through decisions one at a time. For decision #1:
-   a. Read ONLY `/tmp/design-decision-1.md`
-   b. Present it to the user with options, pros/cons, and your recommendation
-   c. STOP and wait for the user to decide
+**Step 3.** Walk through decisions one-by-one.
+   a. Read the corresponding temp file.
+   b. Present options, pros/cons, and recommendation.
+   c. **STOP** and wait for user decision.
 
-   After the user responds, repeat for decision #2 (read `/tmp/design-decision-2.md`), then #3, etc. One decision per message. Do NOT read multiple temp files at once.
+**Step 4.** Present a summary table for final confirmation.
 
-**Step 4.** Once every decision is made, present a summary table for final confirmation.
+**Step 5.** Write and commit `docs/DESIGN.md` locally.
 
-**Step 5.** Write the final approved content to `docs/DESIGN.md`. Immediately after writing, commit the file:
-   - `git add docs/DESIGN.md`
-   - `git commit -m "docs: update DESIGN.md via design-writer"`
-   - Do NOT push — local commit only.
-
-**The conversation cadence must be:** you send one message → user responds → you send the next message → user responds. If you are about to send a message that doesn't end with a question or invitation for feedback, something is wrong.
+**Cadence:** One message → user response → next message. Every output must end with a question or feedback request.
 
 ### Path B: Updating an Existing Design (DESIGN.md has content)
 
@@ -128,6 +107,6 @@ A populated `docs/DESIGN.md` with all sections filled in, every choice traced to
 Once DESIGN.md is written to disk and committed, run this quality gate before finishing.
 
 1. **Harmonize docs** — Spawn a subagent (type: general-purpose, fresh context) with this prompt:
-   > Load the prothon-doc-harmonizer skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. For each conflict found, present the proposed amendment to the user and wait for explicit approval before applying the change. Do NOT apply any fixes without user confirmation. The harmonizer will also conditionally trigger the tech-researcher if the Technology Choices or Key Decisions tables changed.
+   > Activate the prothon-doc-harmonizer skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, cross-reference them, and report any conflicts. For each conflict found, present the proposed amendment to the user and wait for explicit approval before applying the change. Do NOT apply any fixes without user confirmation. The harmonizer will also conditionally trigger the tech-researcher if the Technology Choices or Key Decisions tables changed.
 
 2. **Report and finish** — Once the harmonizer completes, summarize its results to the user and tell them to run `prothon patterns` next to define code patterns and conventions. Never mention skill names (like `/prothon-patterns-writer`, `/prothon-tech-researcher`, etc.) to the user — they use CLI commands (`prothon patterns`, `prothon design`, etc.), not skill slash commands.

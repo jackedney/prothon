@@ -22,6 +22,11 @@ PROMISE_PATH = Path("docs/change_promise.toml")
 DEFAULT_TOLERANCE = 30
 
 
+def _generate_id() -> str:
+    """Generate a stable unique identifier for a task."""
+    return uuid.uuid4().hex[:8]
+
+
 if sys.platform == "win32":
     import msvcrt
 
@@ -116,7 +121,7 @@ class Task:
     """A single promised task within the change promise."""
 
     title: str
-    task_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    task_id: str = field(default_factory=_generate_id)
     goal: str = ""
     success_criteria: str = ""
     files_to_create: list[str] = field(default_factory=list)
@@ -149,25 +154,39 @@ class Promise:
     tasks: list[Task] = field(default_factory=list)
 
 
+def _coerce_int(value: object, field: str) -> int:
+    """Coerce a TOML value to int, raising PromiseError on failure."""
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        raise PromiseError(
+            f"field '{field}' must be an integer, got {type(value).__name__}: {value!r}"
+        )
+
+
 def _task_from_dict(d: dict) -> Task:
-    """Construct a Task from a TOML dict, tolerating missing keys."""
+    """Construct a Task from a TOML dict, requiring task_id."""
     return Task(
         title=d.get("title", ""),
-        task_id=d.get("task_id") or uuid.uuid4().hex,
+        task_id=d.get("task_id", ""),
         goal=d.get("goal", ""),
         success_criteria=d.get("success_criteria", ""),
         files_to_create=list(d.get("files_to_create", [])),
         files_to_modify=list(d.get("files_to_modify", [])),
         files_to_remove=list(d.get("files_to_remove", [])),
-        expected_lines_added=d.get("expected_lines_added", 0),
-        expected_lines_removed=d.get("expected_lines_removed", 0),
+        expected_lines_added=_coerce_int(
+            d.get("expected_lines_added", 0), "expected_lines_added"
+        ),
+        expected_lines_removed=_coerce_int(
+            d.get("expected_lines_removed", 0), "expected_lines_removed"
+        ),
         context_files=list(d.get("context_files", [])),
         doc_sections=list(d.get("doc_sections", [])),
         reference_skills=list(d.get("reference_skills", [])),
         dependencies=list(d.get("dependencies", [])),
         completed=d.get("completed", False),
-        max_attempts=d.get("max_attempts", 3),
-        attempts=d.get("attempts", 0),
+        max_attempts=_coerce_int(d.get("max_attempts", 3), "max_attempts"),
+        attempts=_coerce_int(d.get("attempts", 0), "attempts"),
     )
 
 
@@ -218,7 +237,18 @@ def load_promise(path: Path = PROMISE_PATH) -> Promise:
         raise PromiseError(f"malformed TOML in {path}: {exc}") from exc
     metadata = _metadata_from_dict(dict(doc.get("metadata", {})))
     tasks = [_task_from_dict(dict(t)) for t in doc.get("tasks", [])]
-    return Promise(metadata=metadata, tasks=tasks)
+    promise = Promise(metadata=metadata, tasks=tasks)
+
+    # Backfill missing task_ids and persist them so subsequent loads are stable.
+    needs_backfill = [i for i, t in enumerate(promise.tasks) if not t.task_id]
+    if needs_backfill:
+        with _lock_promise(path):
+            for i in needs_backfill:
+                new_id = _generate_id()
+                promise.tasks[i].task_id = new_id
+                _update_task_fields(path, i, {"task_id": new_id})
+
+    return promise
 
 
 def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
@@ -428,7 +458,6 @@ def check_task(
 def complete_task(
     task_index: int,
     *,
-    attempts: int = 1,
     diff: GitDiffProvider | None = None,
     path: Path = PROMISE_PATH,
 ) -> None:
@@ -437,9 +466,11 @@ def complete_task(
     Runs ``check_task`` first and refuses to mark the task complete if
     any check fails (SPEC R34: compliance mandatory before completion).
 
+    The persisted ``attempts`` counter (incremented by ``record_attempt``)
+    is preserved as-is — this function does not overwrite it.
+
     Args:
         task_index: Zero-based index of the task to mark complete.
-        attempts: Number of attempts taken to complete the task.
         diff: Git diff data source; defaults to SubprocessGitDiff().
         path: Path to the promise TOML file.
 
@@ -451,7 +482,6 @@ def complete_task(
         raise PromiseError(
             f"Task {task_index} cannot be completed: promise checks failed"
         )
-    # Lock the promise file so parallel completions don't overwrite each other.
     with _lock_promise(path):
         promise = load_promise(path)
         if task_index < 0 or task_index >= len(promise.tasks):
@@ -459,6 +489,8 @@ def complete_task(
                 f"Task index {task_index} out of range after re-load; "
                 "promise file may have changed — re-run `promise check` and retry"
             )
+        if not report.task_id:
+            raise PromiseError(f"Task {task_index} is missing a task_id")
         if promise.tasks[task_index].task_id != report.task_id:
             raise PromiseError(
                 f"Task {task_index} identity changed between check and completion "
@@ -468,8 +500,67 @@ def complete_task(
         if promise.tasks[task_index].completed:
             return
         promise.tasks[task_index].completed = True
-        promise.tasks[task_index].attempts = attempts
-        save_promise(promise, path)
+        _update_task_fields(path, task_index, {"completed": True})
+
+
+def _update_task_fields(path: Path, task_index: int, updates: dict) -> None:
+    """Mutate specific task fields in the TOML file, preserving comments and formatting.
+
+    Must be called while ``_lock_promise`` is held.
+    """
+    try:
+        doc = tomlkit.parse(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise PromiseError(f"promise file not found: {path}") from None
+    tasks = doc.get("tasks", [])
+    if task_index < 0 or task_index >= len(tasks):
+        raise PromiseError(
+            f"Task index {task_index} out of range; promise file may have changed"
+        )
+    for key, value in updates.items():
+        tasks[task_index][key] = value
+    content = tomlkit.dumps(doc)
+    data = content.encode("utf-8")
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        written = 0
+        while written < len(data):
+            written += os.write(fd, data[written:])
+        os.fsync(fd)
+    except BaseException:
+        os.close(fd)
+        os.unlink(tmp)
+        raise
+    os.close(fd)
+    try:
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+def record_attempt(
+    task_index: int,
+    *,
+    path: Path = PROMISE_PATH,
+) -> None:
+    """Increment the attempt counter for a task.
+
+    Args:
+        task_index: Zero-based index of the task.
+        path: Path to the promise TOML file.
+
+    Raises:
+        PromiseError: If task_index is out of range or attempts is not an integer.
+    """
+    with _lock_promise(path):
+        promise = load_promise(path)
+        if task_index < 0 or task_index >= len(promise.tasks):
+            raise PromiseError(
+                f"Task index {task_index} out of range; promise file may have changed"
+            )
+        new_attempts = promise.tasks[task_index].attempts + 1
+        _update_task_fields(path, task_index, {"attempts": new_attempts})
 
 
 def status(path: Path = PROMISE_PATH) -> str:

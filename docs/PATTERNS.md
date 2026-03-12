@@ -30,8 +30,9 @@ Each module exposes a small public API. Internal helpers use the `_` prefix. No 
 ```python
 def load_promise(path: Path = PROMISE_PATH) -> Promise: ...
 def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None: ...
-def check_task(task_index: int, ...) -> TaskCheckReport: ...
-def complete_task(task_index: int, ...) -> None: ...
+def check_task(task_index: int, *, diff: GitDiffProvider | None = None, path: Path = PROMISE_PATH) -> TaskCheckReport: ...
+def complete_task(task_index: int, *, diff: GitDiffProvider | None = None, path: Path = PROMISE_PATH) -> None: ...
+def record_attempt(task_index: int, *, path: Path = PROMISE_PATH) -> None: ...
 def status(path: Path = PROMISE_PATH) -> str: ...
 def plan(path: Path = PROMISE_PATH) -> str: ...
 def cleanup(path: Path = PROMISE_PATH) -> None: ...
@@ -115,47 +116,16 @@ Functions use production defaults (e.g., `path: Path = PROMISE_PATH`) but accept
 
 When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates. `save_promise()` writes atomically via `tempfile.mkstemp` + `os.fsync` + `os.replace`, so readers never see partially-written content — read-only operations (`status`, `check_task`, `plan`) are safe without locking.
 
-The lock implementation is cross-platform: `fcntl.flock` on Unix, `msvcrt.locking` on Windows.
+The lock implementation is cross-platform: `fcntl.flock` on Unix, `msvcrt.locking` on Windows. The lock uses a sibling `.toml.lock` file (not the TOML itself) so the promise file can be fully rewritten without interfering with the lock. `complete_task()` runs verification (read-only, no lock needed due to atomic writes) before acquiring the exclusive lock for the read-modify-write cycle.
 
 ```python
 @contextmanager
-def _lock_promise(path: Path) -> Iterator[None]:
-    lock_path = path.with_suffix(".toml.lock")
-    lock_path.touch(exist_ok=True)
-    with lock_path.open("w") as fd:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-
-def complete_task(task_index, ...):
-    report = check_task(...)       # read-only, no lock needed (atomic writes)
-    with _lock_promise(path):      # exclusive lock for read-modify-write
-        promise = load_promise(path)
-        promise.tasks[task_index].completed = True
-        save_promise(promise, path)
+def _lock_promise(path: Path) -> Iterator[None]: ...
 ```
-
-The lock uses a sibling `.toml.lock` file (not the TOML itself) so the promise file can be fully rewritten without interfering with the lock.
 
 ### Guard-Clause Preconditions
 
-Domain functions that require specific environmental conditions validate them upfront and raise domain exceptions. Guards come first, happy path follows. No nested `if/else` trees.
-
-```python
-def init_existing(cwd: Path | None = None) -> list[Path]:
-    root = Path(cwd) if cwd else Path.cwd()
-    try:
-        run_git("rev-parse", "--git-dir", cwd=root)
-    except GitError:
-        raise GitError(f"not a git repository: {root}") from None
-    if (root / "docs" / "SPEC.md").exists():
-        raise ProjectAlreadyInitError(f"docs/SPEC.md already exists in {root}")
-    ...
-```
-
-This keeps validation in the domain layer (not the CLI) and follows the existing "raise at source" error handling pattern.
+Domain functions that require specific environmental conditions validate them upfront and raise domain exceptions. Guards come first, happy path follows. No nested `if/else` trees. For example, `init_existing()` checks for a git repository and the absence of `docs/SPEC.md` before proceeding. This keeps validation in the domain layer (not the CLI) and follows the "raise at source" error handling pattern.
 
 ### Inline Content Constants
 
@@ -171,27 +141,12 @@ Backends and configuration readers that access user-level directories respect `$
 
 ### Rich Table Rendering as Private Helpers
 
-`cli.py` builds tables via private `_render_*` functions that return `Table` objects. Commands print them. This separates rendering logic from I/O. Status styling uses a dict mapping enum values to label/style tuples to avoid branching.
-
-### Per-Command Options with Annotated Types
-
-@promise_app.command("plan")
-def promise_plan() -> None:
-    p = promise.load_promise(promise_path)
-    console.print(_render_plan(p))
-```
-
-Status styling uses a dict mapping enum values to `(label, style)` tuples — avoids branching:
+`cli.py` builds tables via private `_render_*` functions that return `Table` objects. Commands print them. This separates rendering logic from I/O. Status styling uses a dict mapping `CheckStatus` enum values to `(label, style)` tuples to avoid branching.
 
 ```python
-_status_styles = {
-    CheckStatus.PASSED: ("PASS", "green"),
-    CheckStatus.FAILED: ("FAIL", "red"),
-    CheckStatus.SKIPPED: ("SKIP", "yellow"),
-}
-for c in report.checks:
-    label, style = _status_styles[c.status]
-    table.add_row(c.name, Text(label, style=style), c.detail)
+def _render_plan(p: Promise) -> Table: ...
+def _render_status(p: Promise) -> Table: ...
+def _render_check_report(report: TaskCheckReport) -> Table: ...
 ```
 
 ### Per-Command Agent Option with Annotated Type
@@ -324,112 +279,15 @@ Copier is imported inside the function body, not at module level, to avoid loadi
 
 ### Versioning as Pure Functions
 
-Semver arithmetic uses pure functions with no external library — parse, bump major/minor/patch, return new string. File update functions are split: one for `pyproject.toml` (tomlkit preserves formatting) and one for `__init__.py` (regex replacement). Change detection takes before/after SHAs and returns the bump type based on which doc files changed.
+Semver arithmetic uses pure functions with no external library — parse, bump major/minor/patch, return new string. File update functions are split: one for `pyproject.toml` (tomlkit preserves formatting) and one for `__init__.py` (regex replacement). Change detection takes before/after SHAs and returns the bump type based on which doc files changed. Priority: `docs/SPEC.md` → major, `docs/DESIGN.md` → minor, `docs/PATTERNS.md` or `src/` → patch, otherwise `None`.
 
 ### SPEC.md Tamper Detection
 
 `_launch_skill()` computes a SHA-256 hash of `docs/SPEC.md` before launching any non-spec-writer skill and compares it after the session completes. If the hash differs, a warning is emitted. This is a soft guard complementing the skill-level edit restrictions — it detects accidental SPEC modification by agents that shouldn't be writing to it.
 
-### Versioning as Pure Functions
-
-**Semver arithmetic** — Pure functions, no external library. Parses version string, bumps major/minor/patch, returns new string.
-
-```python
-import re
-
-def parse_version(v: str) -> tuple[int, int, int]:
-    match = re.match(r"v?(\d+)\.(\d+)\.(\d+)", v)
-    if not match:
-        raise VersionError(f"invalid version format: {v!r}")
-    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
-
-def bump_major(v: str) -> str:
-    major, _, _ = parse_version(v)
-    return f"{major + 1}.0.0"
-
-def bump_minor(v: str) -> str:
-    major, minor, _ = parse_version(v)
-    return f"{major}.{minor + 1}.0"
-
-def bump_patch(v: str) -> str:
-    major, minor, patch = parse_version(v)
-    return f"{major}.{minor}.{patch + 1}"
-```
-
-**File update functions** — Two functions: one for `pyproject.toml` (tomlkit preserves formatting), one for `__init__.py` (string replacement). Both accept the new version string.
-
-```python
-def update_pyproject_version(path: Path, new_version: str) -> None:
-    doc = tomlkit.parse(path.read_text())
-    doc["project"]["version"] = new_version
-    path.write_text(tomlkit.dumps(doc))
-
-def update_init_version(path: Path, new_version: str) -> None:
-    content = path.read_text()
-    updated = re.sub(
-        r'__version__\s*=\s*["\'][^"\']+["\']',
-        f'__version__ = "{new_version}"',
-        content,
-    )
-    path.write_text(updated)
-```
-
-**Git tagging** — Thin wrapper using existing `git` module. Annotated tag with message.
-
-```python
-def create_tag(version: str, cwd: Path | None = None) -> None:
-    run_git("tag", "-a", f"v{version}", "-m", f"release {version}", cwd=cwd)
-```
-
-**Change detection** — Function that takes before/after SHAs and returns which bump type applies (or `None` if no relevant files changed). Used by CI workflows.
-
-```python
-def detect_bump_type(before_sha: str, after_sha: str, cwd: Path | None = None) -> str | None:
-    """Returns 'major', 'minor', 'patch', or None."""
-    changed = run_git("diff", "--name-only", before_sha, after_sha, cwd=cwd)
-    files = {line for line in changed.strip().splitlines() if line.strip()}
-
-    if "docs/SPEC.md" in files:
-        return "major"
-    if "docs/DESIGN.md" in files:
-        return "minor"
-    if "docs/PATTERNS.md" in files or any(f.startswith("src/") for f in files):
-        return "patch"
-    return None
-```
-
 ### CI Workflow Patterns
 
-**Workflow templates** — Inlined as module-level constants in `scaffold.py` (same pattern as doc scaffolds). Not separate files — keeps template/ directory focused on Copier template.
-
-```python
-_GITHUB_VERSION_BUMP_WORKFLOW = """\
-name: Version Bump
-on:
-  push:
-    branches: [main, master]
-permissions:
-  contents: write
-jobs:
-  bump:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: astral-sh/setup-uv@v5
-      - name: Detect and bump version
-        run: |
-          ...
-"""
-
-_GITLAB_VERSION_BUMP_JOB = """\
-version-bump:
-  stage: deploy
-  script:
-    - ...
-"""
-```
+CI workflow templates (GitHub Actions version-bump and version-tag, GitLab CI version-bump) are inlined as `_UPPER_SNAKE` module-level constants in `scaffold.py`, following the same pattern as doc scaffolds. This keeps the `template/` directory focused on Copier template files and decouples `init` from Copier's layout.
 
 ### Pattern Summary
 
@@ -529,7 +387,7 @@ Skills that need to spawn subagents use canonical agent type names from the DESI
 
 ```
 Spawn a subagent (type: general-purpose, fresh context) with this prompt:
-"Load the prothon-<skill-name> skill and execute it. ..."
+"Activate the prothon-<skill-name> skill and execute it. ..."
 ```
 
 Skills must NOT reference tool-specific APIs (e.g., `Task tool, subagent_type: general-purpose` for Claude Code, or `task` tool for opencode). Each assistant's LLM translates the canonical instruction into its native tool call. The canonical names are:

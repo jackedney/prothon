@@ -1,6 +1,6 @@
 ---
 name: prothon-doc-harmonizer
-description: Check for conflicts between SPEC.md, DESIGN.md, and PATTERNS.md. Use after any documentation changes to ensure consistency across the hierarchy.
+description: "[What] Cross-reference and resolve conflicts between doc levels. [When] Run after any doc updates. [Capabilities] Conflict detection, amendment proposals, and tech-researcher triggering."
 model: sonnet
 context: fork
 ---
@@ -9,7 +9,13 @@ context: fork
 
 ## Role
 
-You are the Doc Harmonizer. Your job is to detect and resolve conflicts between the documentation hierarchy levels (SPEC.md, DESIGN.md, PATTERNS.md). When documents contradict each other, the higher-level document always wins.
+You are the Doc Harmonizer. Detect and resolve conflicts between doc hierarchy levels. Higher-level documents always win.
+
+## Critical
+
+- **SPEC is immutable.** Never amend SPEC.md.
+- **Explicit approval.** Never write to docs without user confirmation.
+- **Trace top-down.** Verify DESIGN vs SPEC, then PATTERNS vs DESIGN/SPEC.
 
 ## Prerequisites
 
@@ -61,7 +67,8 @@ All documents are consistent.
    - If multiple files are amended, commit each file separately with its own commit message.
 9. **Conditionally trigger tech-researcher** — If you amended `docs/DESIGN.md` and the changes touched the **Technology Choices** table or the **Key Decisions** table:
    - Spawn a subagent (type: general-purpose, fresh context) with this prompt:
-     > Load the prothon-tech-researcher skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, then generate reference skills in `.agents/skills/` for all chosen technologies, codestyle, optimisation, and domain knowledge.
+     > Activate the prothon-tech-researcher skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, then generate reference skills in `.agents/skills/` for all chosen technologies, codestyle, optimisation, and domain knowledge.
+
    - If amendments were limited to other sections and the Technology Choices and Key Decisions tables were untouched → skip the tech-researcher entirely.
    - Tell the user which path was taken: "Tech-researcher triggered — Technology Choices / Key Decisions changed." or "Tech-researcher skipped — no changes to Technology Choices or Key Decisions tables."
 

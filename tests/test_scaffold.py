@@ -186,6 +186,7 @@ def test_init_existing_returns_created_paths(tmp_path):
         "AGENT.md",
         "skills",
         "version-bump.yml",
+        "version-tag.yml",
         ".gitlab-ci.yml",
     }
     created_names = {p.name for p in created}
@@ -580,6 +581,18 @@ def test_init_existing_version_bump_workflow_content(tmp_path):
     assert "branches: [main]" in content
     assert "version-bump:" in content
     assert "name: Version Bump" in content
+
+
+def test_init_existing_version_tag_workflow_content(tmp_path):
+    """version-tag.yml triggers on main and has version-tag job."""
+    run_git("init", cwd=tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+    init_existing(cwd=tmp_path)
+
+    content = (tmp_path / ".github" / "workflows" / "version-tag.yml").read_text()
+    assert "branches: [main]" in content
+    assert "version-tag:" in content
+    assert "name: Version Tag" in content
 
 
 def test_init_existing_appends_prothon_ci_to_pyproject(tmp_path):

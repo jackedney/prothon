@@ -50,19 +50,26 @@ _VERSION_BUMP_WORKFLOW = """\
 name: Version Bump
 
 on:
-  push:
+  pull_request:
     branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: version-bump-${{ github.head_ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
   version-bump:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -93,28 +100,15 @@ jobs:
       - name: Detect changed files and bump type
         if: steps.config.outputs.auto_version == 'true'
         id: detect
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
-          AFTER_SHA: ${{ github.sha }}
         run: |
+          git fetch origin main
           BUMP_TYPE=$(python3 - <<'PYEOF'
-          import os
           import subprocess
           import sys
 
-          before = os.environ.get("BEFORE_SHA", "").strip()
-          after = os.environ.get("AFTER_SHA", "HEAD").strip()
-
-          # Validate before SHA — the zero SHA means no previous commit (first push)
-          zero_sha = "0000000000000000000000000000000000000000"
-          if not before or before == zero_sha:
-              # No previous commit to diff against; skip bump
-              print("none")
-              sys.exit(0)
-
           try:
               result = subprocess.run(
-                  ["git", "diff", "--name-only", before, after],
+                  ["git", "diff", "--name-only", "origin/main...HEAD"],
                   capture_output=True,
                   text=True,
                   check=True,
@@ -124,6 +118,10 @@ jobs:
               sys.exit(0)
 
           files = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+          # Exclude version bump files from consideration
+          files.discard("pyproject.toml")
+          files = {f for f in files if not f.endswith("__init__.py")}
 
           if "docs/SPEC.md" in files:
               print("major")
@@ -139,10 +137,13 @@ jobs:
 
       - name: Apply version bump
         if: steps.config.outputs.auto_version == 'true' && steps.detect.outputs.bump_type != 'none'
+        id: bump
         env:
           BUMP_TYPE: ${{ steps.detect.outputs.bump_type }}
         run: |
+          pip install tomlkit
           python3 - <<'PYEOF'
+          import io
           import os
           import re
           import subprocess
@@ -165,9 +166,18 @@ jobs:
 
           bump_type = os.environ["BUMP_TYPE"]
 
-          # Read current version from pyproject.toml
-          with open("pyproject.toml", "rb") as f:
-              raw = tomllib.load(f)
+          # Read current version from origin/main
+          try:
+              res = subprocess.run(
+                  ["git", "show", "origin/main:pyproject.toml"],
+                  capture_output=True,
+                  check=True,
+              )
+              raw = tomllib.load(io.BytesIO(res.stdout))
+          except Exception as e:
+              print(f"ERROR: failed to read pyproject.toml from origin/main: {e}", file=sys.stderr)
+              sys.exit(1)
+
           current = raw.get("project", {}).get("version", "")
           if not current:
               print("ERROR: no version found in pyproject.toml [project]", file=sys.stderr)
@@ -186,6 +196,15 @@ jobs:
               new_version = f"{major}.{minor + 1}.0"
           else:
               new_version = f"{major}.{minor}.{patch + 1}"
+
+          # Check if already bumped to this version
+          with open("pyproject.toml", "rb") as f:
+              branch_raw = tomllib.load(f)
+          branch_version = branch_raw.get("project", {}).get("version", "")
+          if branch_version == new_version:
+              print(f"Version already at {new_version}, skipping")
+              open(".bump_skipped", "w").write("true")
+              sys.exit(0)
 
           print(f"Bumping {current} -> {new_version} ({bump_type})")
 
@@ -207,13 +226,18 @@ jobs:
                   init_path.write_text(updated, encoding="utf-8")
                   print(f"Updated {init_path}")
 
-          # Write new version to file for subsequent steps
           open(".new_version", "w").write(new_version)
           PYEOF
 
-      - name: Commit, tag, and push
+      - name: Commit and push version bump
         if: steps.config.outputs.auto_version == 'true' && steps.detect.outputs.bump_type != 'none'
         run: |
+          if [ -f .bump_skipped ]; then
+            echo "Version already bumped, nothing to do"
+            rm -f .bump_skipped
+            exit 0
+          fi
+
           NEW_VERSION=$(cat .new_version)
           rm -f .new_version
 
@@ -223,10 +247,75 @@ jobs:
           git add pyproject.toml
           git add src/
 
-          git commit -m "chore: bump version to ${NEW_VERSION} [skip ci]"
-          git tag -a "v${NEW_VERSION}" -m "release ${NEW_VERSION}"
-          git push origin main
-          git push origin "v${NEW_VERSION}"
+          # Only commit if there are staged changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore: bump version to ${NEW_VERSION}"
+          git push
+"""
+
+_VERSION_TAG_WORKFLOW = """\
+name: Version Tag
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  version-tag:
+    if: "!startsWith(github.event.head_commit.message, 'chore: bump version')"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version and create tag
+        run: |
+          VERSION=$(python3 - <<'PYEOF'
+          import sys
+          try:
+              import tomllib
+          except ImportError:
+              try:
+                  import tomli as tomllib
+              except ImportError:
+                  print("")
+                  sys.exit(0)
+          try:
+              with open("pyproject.toml", "rb") as f:
+                  data = tomllib.load(f)
+              print(data.get("project", {}).get("version", ""))
+          except Exception:
+              print("")
+          PYEOF
+          )
+
+          if [ -z "$VERSION" ]; then
+            echo "No version found, skipping"
+            exit 0
+          fi
+
+          TAG="v${VERSION}"
+
+          # Check if tag already exists
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" -m "release ${VERSION}"
+          git push origin "$TAG"
 """
 
 _GITLAB_VERSION_BUMP = """\
@@ -403,9 +492,9 @@ Write the code changes.
 **This is an always-on quality gate.** Before claiming any implementation \
 work is complete, you MUST spawn a dedicated subagent (type: general-purpose, \
 fresh context) to verify code matches documentation. Do not perform this \
-check inline — spawn a fresh subagent with the compliance-checker skill \
-content so it gets a clean context focused solely on compliance verification. \
-Report the subagent's findings to the user.
+check inline — spawn a fresh subagent: "Activate prothon-compliance-checker \
+and produce a report." This ensures it gets a clean context focused solely \
+on compliance verification. Report the subagent's findings to the user.
 
 If the compliance check reports failures, fix the code or update docs and \
 re-check.
@@ -415,8 +504,8 @@ For explicit full compliance scans, the user can run `prothon compliance`.
 ## Skills Directory
 
 Project-specific reference skills live in `.agents/skills/` as directories \
-containing `SKILL.md`. Both Claude Code and opencode discover this directory \
-natively — no symlinks or additional configuration needed.
+containing `SKILL.md`. Claude Code, opencode, and Gemini CLI discover this \
+directory natively — no symlinks or additional configuration needed.
 
 When creating new skills, place them in \
 `.agents/skills/<skill-name>/SKILL.md`.
@@ -616,6 +705,13 @@ def init_existing(cwd: Path | None = None) -> list[Path]:
         workflow_path.parent.mkdir(parents=True, exist_ok=True)
         workflow_path.write_text(_VERSION_BUMP_WORKFLOW)
         created.append(workflow_path)
+
+    # Add version-tag CI workflow if not already present
+    tag_workflow_path = root / ".github" / "workflows" / "version-tag.yml"
+    if not tag_workflow_path.exists():
+        tag_workflow_path.parent.mkdir(parents=True, exist_ok=True)
+        tag_workflow_path.write_text(_VERSION_TAG_WORKFLOW)
+        created.append(tag_workflow_path)
 
     # Add GitLab CI version-bump workflow if no .gitlab-ci.yml exists
     gitlab_ci_path = root / ".gitlab-ci.yml"

@@ -1,6 +1,6 @@
 [project]
 name = "prothon"
-version = "3.0.0"
+version = "3.0.1"
 description = "Python project generator with docs-first AI workflow"
 requires-python = ">=3.11"
 license = "MIT"

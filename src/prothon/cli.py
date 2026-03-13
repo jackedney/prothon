@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -262,10 +263,23 @@ def _file_hash(path: Path) -> str | None:
         return None
 
 
+class Skill(StrEnum):
+    """Canonical skill names used by the CLI."""
+
+    SPEC_WRITER = "prothon-spec-writer"
+    DESIGN_WRITER = "prothon-design-writer"
+    PATTERNS_WRITER = "prothon-patterns-writer"
+    EXECUTE = "prothon-execute"
+    COMPLIANCE = "prothon-compliance-checker"
+    DOC_HARMONIZER = "prothon-doc-harmonizer"
+    TECH_RESEARCHER = "prothon-tech-researcher"
+    REFACTOR = "prothon-refactor"
+
+
 SKILL_DOC_MAP = {
-    "prothon-spec-writer": Path("docs/SPEC.md"),
-    "prothon-design-writer": Path("docs/DESIGN.md"),
-    "prothon-patterns-writer": Path("docs/PATTERNS.md"),
+    Skill.SPEC_WRITER: Path("docs/SPEC.md"),
+    Skill.DESIGN_WRITER: Path("docs/DESIGN.md"),
+    Skill.PATTERNS_WRITER: Path("docs/PATTERNS.md"),
 }
 
 
@@ -300,10 +314,10 @@ def _trigger_follow_ups(
     # subagent inside their skill flow (and the harmonizer conditionally
     # triggers tech-researcher).  Only spec-writer lacks an internal
     # harmonizer step, so the CLI triggers it here.
-    if skill_name == "prothon-spec-writer":
+    if skill_name == Skill.SPEC_WRITER:
         typer.echo("\n  Triggering doc-harmonizer...")
         _launch_skill(
-            "prothon-doc-harmonizer",
+            Skill.DOC_HARMONIZER,
             cwd,
             agent,
             model,
@@ -326,7 +340,7 @@ def _launch_skill(
 ) -> None:
     """Resolve backend, launch skill, handle errors, and enforce lifecycle."""
     spec_path = cwd / "docs" / "SPEC.md"
-    guard_spec = skill_name != "prothon-spec-writer"
+    guard_spec = skill_name != Skill.SPEC_WRITER
     spec_hash = _file_hash(spec_path) if guard_spec else None
 
     try:
@@ -670,7 +684,7 @@ def spec(
 ) -> None:
     """Write or revise SPEC.md — extract requirements through probing questions."""
     root = _require_project_root()
-    _launch_skill("prothon-spec-writer", root, agent, model, provider)
+    _launch_skill(Skill.SPEC_WRITER, root, agent, model, provider)
 
 
 @app.command()
@@ -682,7 +696,7 @@ def design(
     """Write or revise DESIGN.md — research technologies and architecture."""
     root = _require_project_root()
     _require_doc(root, "SPEC.md")
-    _launch_skill("prothon-design-writer", root, agent, model, provider)
+    _launch_skill(Skill.DESIGN_WRITER, root, agent, model, provider)
 
 
 @app.command()
@@ -694,7 +708,7 @@ def patterns(
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
     root = _require_project_root()
     _require_doc(root, "DESIGN.md")
-    _launch_skill("prothon-patterns-writer", root, agent, model, provider)
+    _launch_skill(Skill.PATTERNS_WRITER, root, agent, model, provider)
 
 
 @app.command()
@@ -705,7 +719,7 @@ def execute(
 ) -> None:
     """Align source code to documentation — plan and implement with subagents."""
     root = _require_project_root()
-    _launch_skill("prothon-execute", root, agent, model, provider)
+    _launch_skill(Skill.EXECUTE, root, agent, model, provider)
 
 
 @app.command()
@@ -729,7 +743,7 @@ def compliance(
         results_path.parent.mkdir(parents=True, exist_ok=True)
 
     typer.echo("Launching semantic compliance checks (LLM)...")
-    _launch_skill("prothon-compliance-checker", root, agent, model, provider)
+    _launch_skill(Skill.COMPLIANCE, root, agent, model, provider)
 
     # Step 3: Merge and display unified report
     if results_path.exists():
@@ -757,7 +771,7 @@ def refactor(
     _require_doc(root, "SPEC.md")
     _require_doc(root, "DESIGN.md")
     _require_doc(root, "PATTERNS.md")
-    _launch_skill("prothon-refactor", root, agent, model, provider)
+    _launch_skill(Skill.REFACTOR, root, agent, model, provider)
 
 
 # --- Promise subcommands ---

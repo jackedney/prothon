@@ -358,7 +358,18 @@ def _is_signature_node(node: ast.AST) -> bool:
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         return _is_func_signature(node)
     if isinstance(node, ast.ClassDef):
-        return all(_is_signature_node(n) for n in node.body)
+        for n in node.body:
+            if isinstance(n, ast.Pass):
+                continue
+            if (
+                isinstance(n, ast.Expr)
+                and isinstance(n.value, ast.Constant)
+                and (isinstance(n.value.value, str) or n.value.value is Ellipsis)
+            ):
+                continue
+            if not _is_signature_node(n):
+                return False
+        return True
     return False
 
 

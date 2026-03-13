@@ -31,7 +31,8 @@ jobs:
       - name: Apply version bump
         run: |
           git fetch origin master
-          prothon ci bump --before-sha origin/master --no-tag
+          MERGE_BASE=$(git merge-base HEAD origin/master)
+          prothon ci bump --before-sha "$MERGE_BASE" --no-tag
 
       - name: Commit and push version bump
         run: |

@@ -154,9 +154,7 @@ def test_sync_skills_continue_processes_all_dirs(tmp_path: Path) -> None:
 
 
 def test_sync_skills_default_path_uses_home_claude_skills(tmp_path: Path) -> None:
-    """sync_skills() without target= uses ~/.claude/skills/
-    (kills default path mutations).
-    """
+    """sync_skills() without target= uses ~/.claude/skills/ and does not mutate it."""
     from unittest.mock import patch as mock_patch
 
     fake_home = tmp_path / "fakehome"

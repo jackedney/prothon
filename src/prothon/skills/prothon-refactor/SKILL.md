@@ -27,11 +27,11 @@ You are **advisory-first**. You do NOT modify docs or code autonomously. You:
 1. **Read all docs** — Read `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` in full.
 2. **Ask for focus** — Present the following menu to the user:
    > Where would you like to focus?
-   >   1. Documentation hierarchy (SPEC > DESIGN > PATTERNS exists and aligns)
-   >   2. Pattern compliance (prose rationale, signature-only code blocks)
-   >   3. Code health (large files > 500 lines, missing tests)
-   >   4. Architectural drift (code diverging from DESIGN/PATTERNS)
-   >   5. Full scan (all of the above)
+   > 1. Documentation hierarchy (SPEC > DESIGN > PATTERNS exists and aligns)
+   > 2. Pattern compliance (prose rationale, signature-only code blocks)
+   > 3. Code health (large files > 500 lines, missing tests)
+   > 4. Architectural drift (code diverging from DESIGN/PATTERNS)
+   > 5. Full scan (all of the above)
 
 3. **Scan and Analyze** — Based on the selection, perform analysis across the doc hierarchy and codebase:
    - **Doc Hierarchy (R24):** Verify `docs/` contains SPEC, DESIGN, and PATTERNS. Check for contradictions using the authority hierarchy (SPEC > DESIGN > PATTERNS).
@@ -41,7 +41,7 @@ You are **advisory-first**. You do NOT modify docs or code autonomously. You:
 
 4. **Present Findings** — Present a menu of findings grouped by the **Refactor Wave** levels with impact (High/Medium/Low).
    Example format:
-   ```
+   ```text
    Findings:
      [DESIGN]
        [D1] Module X could use strategy pattern to better satisfy R12 (high impact)

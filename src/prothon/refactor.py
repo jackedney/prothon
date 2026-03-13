@@ -130,26 +130,23 @@ def _check_missing_tests(root: Path) -> list[DriftFinding]:
     """Check for source modules that are missing corresponding test files."""
     src_dir = root / "src"
     tests_dir = root / "tests"
-    if not src_dir.exists() or not tests_dir.exists():
+    if not src_dir.exists():
         return []
 
     findings = []
-    package_dir = src_dir / "prothon"
-    if package_dir.exists():
-        for py_file in package_dir.glob("*.py"):
-            if py_file.name == "__init__.py":
-                continue
-            test_file = tests_dir / f"test_{py_file.stem}.py"
-            if not test_file.exists():
-                findings.append(
-                    DriftFinding(
-                        title=f"Missing tests for {py_file.name}",
-                        rationale=f"No corresponding test file found at "
-                        f"{test_file.relative_to(root)}. Prothon encourages "
-                        "high test coverage.",
-                        files_affected=[test_file],
-                    )
+    for py_file in src_dir.rglob("*.py"):
+        if py_file.name == "__init__.py":
+            continue
+        test_file = tests_dir / f"test_{py_file.stem}.py"
+        if not test_file.exists():
+            rel = py_file.relative_to(root)
+            findings.append(
+                DriftFinding(
+                    title=f"Missing tests for {py_file.name}",
+                    rationale=f"No corresponding test file found for {rel}.",
+                    files_affected=[test_file],
                 )
+            )
     return findings
 
 

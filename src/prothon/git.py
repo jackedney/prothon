@@ -95,7 +95,7 @@ def is_dirty(path: Path, cwd: Path | None = None) -> bool:
         path: File path to check (relative to cwd).
         cwd: Working directory for the git process.
     """
-    output = run_git("status", "--porcelain", str(path), cwd=cwd).strip()
+    output = run_git("status", "--porcelain", "--", str(path), cwd=cwd).strip()
     return bool(output)
 
 
@@ -107,5 +107,5 @@ def commit_file(path: Path, message: str, cwd: Path | None = None) -> None:
         message: Commit message.
         cwd: Working directory for the git process.
     """
-    run_git("add", str(path), cwd=cwd)
-    run_git("commit", "-m", message, cwd=cwd)
+    run_git("add", "--", str(path), cwd=cwd)
+    run_git("commit", "-m", message, "--", str(path), cwd=cwd)

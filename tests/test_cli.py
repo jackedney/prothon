@@ -8,7 +8,7 @@ from prothon.cli import (
     app,
     resolve_agent,
 )
-from prothon.exceptions import AssistantNotFoundError, ProthonError
+from prothon.exceptions import AssistantNotFoundError, GitError, ProthonError
 from prothon.git import rev_parse_head, run_git
 from prothon.scaffold import generate
 from typer.testing import CliRunner
@@ -1113,16 +1113,14 @@ def test_ci_detect_none(tmp_path, monkeypatch, context):
 
 
 def test_ci_bump_disabled(tmp_path, monkeypatch, context):
-    """ci bump respects auto_version = "False" in pyproject.toml."""
+    """ci bump respects auto_version = false in pyproject.toml."""
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
 
     pyproject = dest / "pyproject.toml"
     content = pyproject.read_text()
-    pyproject.write_text(
-        content.replace("auto_version = true", 'auto_version = "False"')
-    )
+    pyproject.write_text(content.replace("auto_version = true", "auto_version = false"))
 
     result = runner.invoke(app, ["ci", "bump", "--before-sha", "HEAD"])
     assert result.exit_code == 0
@@ -1288,7 +1286,7 @@ def test_ci_bump_base_version_fallback(tmp_path, monkeypatch, context):
 
     def fake_run_git(*args, **kwargs):
         if len(args) > 1 and args[0] == "show" and "pyproject.toml" in args[1]:
-            raise Exception("git show failed")
+            raise GitError("git show failed")
         return original_run_git(*args, **kwargs)
 
     with patch("prothon.git.run_git", side_effect=fake_run_git):

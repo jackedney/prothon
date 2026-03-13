@@ -188,7 +188,7 @@ Contradictions found by the `doc-harmonizer` are treated as data rather than exc
 
 ### Compliance Failure Pattern
 
-Compliance checking produces a report of `CheckResult` objects with `CheckStatus.FAILED` for unmet requirements. These are not treated as flow-control exceptions unless specifically running in a CI environment where a non-zero exit code is required for failure.
+Compliance checking produces a report of `CheckResult` objects with `CheckStatus.FAIL` for unmet requirements. These are not treated as flow-control exceptions unless specifically running in a CI environment where a non-zero exit code is required for failure.
 
 ## Testing Patterns
 

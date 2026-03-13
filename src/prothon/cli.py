@@ -119,6 +119,31 @@ def _nested_get(doc: dict, *keys: str) -> str | None:
     return str(current) if current is not None else None
 
 
+def _find_init_path(root: Path, project_name: str, module_name: str) -> Path | None:
+    """Locate the package __init__.py under src/."""
+    for name in (module_name, project_name):
+        candidate = root / "src" / name / "__init__.py"
+        if candidate.exists():
+            return candidate
+    return _scan_src_for_versioned_init(root / "src")
+
+
+def _scan_src_for_versioned_init(src_root: Path) -> Path | None:
+    """Find a package __init__.py containing __version__ under *src_root*."""
+    if not src_root.is_dir():
+        return None
+    for candidate_dir in sorted(src_root.iterdir()):
+        candidate_init = candidate_dir / "__init__.py"
+        if not (candidate_dir.is_dir() and candidate_init.is_file()):
+            continue
+        try:
+            if "__version__" in candidate_init.read_text():
+                return candidate_init
+        except (OSError, UnicodeDecodeError):
+            continue
+    return None
+
+
 def resolve_agent(cli_value: str | None = None) -> str:
     """Resolve agent backend name via 5-level precedence chain.
 
@@ -486,13 +511,18 @@ def _run_static_checks(root: Path) -> ComplianceReport:
 
 
 def _check_doc_existence(root: Path, report: ComplianceReport) -> None:
-    """Verify SPEC.md and DESIGN.md exist."""
+    """Verify SPEC.md, DESIGN.md, and PATTERNS.md exist."""
     from prothon.compliance import CheckResult, CheckStatus, Requirement
 
-    for doc in ["SPEC.md", "DESIGN.md"]:
+    doc_reqs = [
+        ("SPEC.md", "R18", "SPEC"),
+        ("DESIGN.md", "R20", "SPEC"),
+        ("PATTERNS.md", "R20", "SPEC"),
+    ]
+    for doc, req_id, source in doc_reqs:
         req = Requirement(
-            source="DESIGN",
-            requirement_id="R34",
+            source=source,
+            requirement_id=req_id,
             statement=f"Prerequisite document {doc} must exist.",
         )
         doc_path = root / "docs" / doc
@@ -863,7 +893,7 @@ def ci_bump(
 
     # Check auto_version
     auto_version = _nested_get(doc, "tool", "prothon", "ci", "auto_version")
-    if auto_version == "False":
+    if auto_version is not None and str(auto_version).lower() in ("false", "0", "no"):
         typer.echo("Automatic versioning is disabled in pyproject.toml")
         return
 
@@ -917,15 +947,10 @@ def ci_bump(
         typer.echo("Error: [project] name not found in pyproject.toml", err=True)
         raise typer.Exit(1)
 
-    # Standard prothon/hatch layout: src/<module_name>/__init__.py
     module_name = project_name.replace("-", "_")
-    init_path = root / "src" / module_name / "__init__.py"
+    init_path = _find_init_path(root, project_name, module_name)
 
-    if not init_path.exists():
-        # Fallback: maybe it's src/<name>/__init__.py (no hyphen replacement)
-        init_path = root / "src" / project_name / "__init__.py"
-
-    if init_path.exists():
+    if init_path:
         versioning.update_init_version(init_path, expected_version)
         typer.echo(f"Updated {init_path.relative_to(root)}")
     else:

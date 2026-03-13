@@ -97,10 +97,11 @@ You are implementing a single refactoring task with fresh context. You MUST clos
       - Stage modified files: git add {files_to_modify}
       - Stage new files: git add {files_to_create}
       - Remove deleted files: git rm {files_to_remove}
-   b) Quality gate: Run `pre-commit run --all-files --show-diff-on-failure`
-   c) If hooks auto-fixed files, re-stage the specific files and re-run pre-commit once. If still failing, EXIT with FAILURE.
-   d) Commit: git commit -m "refactor: {title}"
-   e) Final check: Run `uvx prothon promise check {task_index}`
+   b) Type checking: Run `uvx ty check src/ tests/` and fix ALL errors and warnings before proceeding. ty errors are NOT optional — they indicate real type safety issues that must be resolved. Do not suppress warnings or skip this step.
+   c) Quality gate: Run `pre-commit run --all-files --show-diff-on-failure`
+   d) If hooks auto-fixed files, re-stage the specific files and re-run pre-commit once. If still failing, EXIT with FAILURE.
+   e) Commit: git commit -m "refactor: {title}"
+   f) Final check: Run `uvx prothon promise check {task_index}`
 
 4. EXIT:
    - If `promise check` passed:

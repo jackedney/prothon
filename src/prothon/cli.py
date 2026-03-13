@@ -295,27 +295,15 @@ def _trigger_follow_ups(
     provider: str | None = None,
 ) -> None:
     """Launch follow-up sessions based on the completed skill and file changes."""
-    # R24: doc-harmonizer detects conflicts after any doc change
-    if skill_name in (
-        "prothon-spec-writer",
-        "prothon-design-writer",
-        "prothon-patterns-writer",
-    ):
+    # R24: doc-harmonizer detects conflicts after any doc change.
+    # design-writer and patterns-writer already spawn the harmonizer as a
+    # subagent inside their skill flow (and the harmonizer conditionally
+    # triggers tech-researcher).  Only spec-writer lacks an internal
+    # harmonizer step, so the CLI triggers it here.
+    if skill_name == "prothon-spec-writer":
         typer.echo("\n  Triggering doc-harmonizer...")
         _launch_skill(
             "prothon-doc-harmonizer",
-            cwd,
-            agent,
-            model,
-            provider,
-            run_follow_ups=False,
-        )
-
-    # R38: Automatically generate tech references after design changes
-    if skill_name == "prothon-design-writer":
-        typer.echo("  Triggering tech-researcher...")
-        _launch_skill(
-            "prothon-tech-researcher",
             cwd,
             agent,
             model,

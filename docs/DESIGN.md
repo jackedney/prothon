@@ -17,6 +17,8 @@ src/prothon/
     project.py          # Project root detection, shared project context
     git.py              # Thin typed wrapper around git CLI via subprocess
     assistant.py        # Abstract assistant interface and backend registry
+    compliance.py       # Static AST checks and semantic compliance verification
+    refactor.py         # Drift discovery and refactor promise generation
     exceptions.py       # Custom exception hierarchy
     skills/             # Bundled skill assets (non-Python, 8 directories)
 

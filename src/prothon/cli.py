@@ -323,17 +323,9 @@ def _trigger_follow_ups(
             run_follow_ups=False,
         )
 
-    # R36: Compliance check is mandatory after execution
-    if skill_name == "prothon-execute":
-        typer.echo("\n  Triggering compliance-checker...")
-        _launch_skill(
-            "prothon-compliance-checker",
-            cwd,
-            agent,
-            model,
-            provider,
-            run_follow_ups=False,
-        )
+    # R36 compliance is satisfied by the agent's always-on quality gate
+    # (CLAUDE.md step 6) which runs compliance as a subagent inside the
+    # execute session.  A second CLI-triggered session would be redundant.
 
 
 def _launch_skill(

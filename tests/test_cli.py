@@ -1,9 +1,11 @@
 """Tests for workflow CLI commands."""
 
-from unittest.mock import patch
+from __future__ import annotations
 
 import re
+
 import pytest
+from tests.fakes import FakeAssistantBackend, Recorder
 from prothon.cli import (
     app,
     resolve_agent,
@@ -111,8 +113,8 @@ def test_design_fails_without_spec(tmp_path, monkeypatch):
     """design command requires docs/SPEC.md to exist."""
     (tmp_path / "docs").mkdir()
     monkeypatch.chdir(tmp_path)
-    with patch("prothon.cli.find_project_root", return_value=tmp_path):
-        result = runner.invoke(app, ["design"])
+    monkeypatch.setattr("prothon.cli.find_project_root", lambda: tmp_path)
+    result = runner.invoke(app, ["design"])
     assert result.exit_code == 1
     assert "SPEC.md must exist" in result.output
 
@@ -131,30 +133,28 @@ def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with (
-        patch("prothon.cli.launch") as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        mock_backend = mock_get_backend.return_value
-        runner.invoke(app, ["spec"])
-    mock_launch.assert_called_once_with(
-        mock_backend, "prothon-spec-writer", dest, model=None
-    )
+    fake_backend = FakeAssistantBackend()
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr("prothon.cli.get_backend", Recorder(return_value=fake_backend))
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    runner.invoke(app, ["spec"])
+    assert fake_launch.call_count >= 1
+    assert fake_launch.calls[0][0][:3] == (fake_backend, "prothon-spec-writer", dest)
+    assert fake_launch.calls[0][1] == {"model": None}
 
 
 def test_design_launches_single_session(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with (
-        patch("prothon.cli.launch") as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        mock_backend = mock_get_backend.return_value
-        runner.invoke(app, ["design"])
-    mock_launch.assert_called_once_with(
-        mock_backend, "prothon-design-writer", dest, model=None
-    )
+    fake_backend = FakeAssistantBackend()
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr("prothon.cli.get_backend", Recorder(return_value=fake_backend))
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    runner.invoke(app, ["design"])
+    assert fake_launch.call_count >= 1
+    assert fake_launch.calls[0][0][:3] == (fake_backend, "prothon-design-writer", dest)
+    assert fake_launch.calls[0][1] == {"model": None}
 
 
 # --- _require_project_root ---
@@ -174,8 +174,11 @@ def test_launch_skill_nonzero_exit_code_propagated(tmp_path, monkeypatch, contex
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.launch", return_value=42), patch("prothon.cli.get_backend"):
-        result = runner.invoke(app, ["spec"])
+    monkeypatch.setattr(
+        "prothon.cli.get_backend", Recorder(return_value=FakeAssistantBackend())
+    )
+    monkeypatch.setattr("prothon.cli.launch", Recorder(return_value=42))
+    result = runner.invoke(app, ["spec"])
     assert result.exit_code == 42
 
 
@@ -183,8 +186,11 @@ def test_launch_skill_zero_exit_succeeds(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.launch", return_value=0), patch("prothon.cli.get_backend"):
-        result = runner.invoke(app, ["spec"])
+    monkeypatch.setattr(
+        "prothon.cli.get_backend", Recorder(return_value=FakeAssistantBackend())
+    )
+    monkeypatch.setattr("prothon.cli.launch", Recorder(return_value=0))
+    result = runner.invoke(app, ["spec"])
     assert result.exit_code == 0
 
 
@@ -192,17 +198,19 @@ def test_launch_skill_assistant_not_found(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with (
-        patch(
-            "prothon.cli.launch",
+    monkeypatch.setattr(
+        "prothon.cli.get_backend", Recorder(return_value=FakeAssistantBackend())
+    )
+    monkeypatch.setattr(
+        "prothon.cli.launch",
+        Recorder(
             side_effect=AssistantNotFoundError(
                 "Claude Code (claude) not found on PATH. "
                 "Install: https://docs.anthropic.com/en/docs/claude-code"
             ),
         ),
-        patch("prothon.cli.get_backend"),
-    ):
-        result = runner.invoke(app, ["spec"])
+    )
+    result = runner.invoke(app, ["spec"])
     assert result.exit_code == 1
     assert "not found on PATH" in result.output
 
@@ -211,14 +219,14 @@ def test_launch_skill_prothon_error(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with (
-        patch("prothon.cli.get_backend"),
-        patch(
-            "prothon.cli.launch",
-            side_effect=ProthonError("something wrong"),
-        ),
-    ):
-        result = runner.invoke(app, ["spec"])
+    monkeypatch.setattr(
+        "prothon.cli.get_backend", Recorder(return_value=FakeAssistantBackend())
+    )
+    monkeypatch.setattr(
+        "prothon.cli.launch",
+        Recorder(side_effect=ProthonError("something wrong")),
+    )
+    result = runner.invoke(app, ["spec"])
     assert result.exit_code == 1
     assert "something wrong" in result.output
 
@@ -237,14 +245,14 @@ def test_launch_skill_passes_correct_skill_name(tmp_path, monkeypatch, context):
         ("compliance", "prothon-compliance-checker"),
     ]
     for cmd, skill_name in commands_skills:
-        with (
-            patch("prothon.cli.launch", return_value=0) as mock_launch,
-            patch("prothon.cli.get_backend") as mock_backend,
-        ):
-            runner.invoke(app, [cmd])
-        mock_launch.assert_any_call(
-            mock_backend.return_value, skill_name, dest, model=None
+        fake_backend = FakeAssistantBackend()
+        fake_launch = Recorder(return_value=0)
+        monkeypatch.setattr(
+            "prothon.cli.get_backend", Recorder(return_value=fake_backend)
         )
+        monkeypatch.setattr("prothon.cli.launch", fake_launch)
+        runner.invoke(app, [cmd])
+        assert fake_launch.called_with_arg(1, skill_name)
 
 
 def test_launch_skill_exit_code_one_is_nonzero(tmp_path, monkeypatch, context):
@@ -252,8 +260,11 @@ def test_launch_skill_exit_code_one_is_nonzero(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.launch", return_value=1), patch("prothon.cli.get_backend"):
-        result = runner.invoke(app, ["spec"])
+    monkeypatch.setattr(
+        "prothon.cli.get_backend", Recorder(return_value=FakeAssistantBackend())
+    )
+    monkeypatch.setattr("prothon.cli.launch", Recorder(return_value=1))
+    result = runner.invoke(app, ["spec"])
     assert result.exit_code == 1
 
 
@@ -262,17 +273,19 @@ def test_launch_skill_assistant_not_found_install_url(tmp_path, monkeypatch, con
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with (
-        patch(
-            "prothon.cli.launch",
+    monkeypatch.setattr(
+        "prothon.cli.get_backend", Recorder(return_value=FakeAssistantBackend())
+    )
+    monkeypatch.setattr(
+        "prothon.cli.launch",
+        Recorder(
             side_effect=AssistantNotFoundError(
                 "Claude Code (claude) not found on PATH. "
                 "Install: https://docs.anthropic.com/en/docs/claude-code"
             ),
         ),
-        patch("prothon.cli.get_backend"),
-    ):
-        result = runner.invoke(app, ["spec"])
+    )
+    result = runner.invoke(app, ["spec"])
     assert "Install:" in result.output
     assert "anthropic.com" in result.output
 
@@ -282,17 +295,19 @@ def test_launch_skill_assistant_not_found_no_xx_prefix(tmp_path, monkeypatch, co
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with (
-        patch(
-            "prothon.cli.launch",
+    monkeypatch.setattr(
+        "prothon.cli.get_backend", Recorder(return_value=FakeAssistantBackend())
+    )
+    monkeypatch.setattr(
+        "prothon.cli.launch",
+        Recorder(
             side_effect=AssistantNotFoundError(
                 "Claude Code (claude) not found on PATH. "
                 "Install: https://docs.anthropic.com/en/docs/claude-code"
             ),
         ),
-        patch("prothon.cli.get_backend"),
-    ):
-        result = runner.invoke(app, ["spec"])
+    )
+    result = runner.invoke(app, ["spec"])
     assert "XX" not in result.output
 
 
@@ -379,13 +394,13 @@ def test_agent_flag_passed_through_to_backend(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with (
-        patch("prothon.cli.launch", return_value=0) as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        runner.invoke(app, ["spec", "--agent", "opencode"])
-    mock_get_backend.assert_any_call("opencode")
-    assert mock_launch.call_count >= 1
+    fake_get_backend = Recorder(return_value=FakeAssistantBackend())
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr("prothon.cli.get_backend", fake_get_backend)
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    runner.invoke(app, ["spec", "--agent", "opencode"])
+    assert fake_get_backend.called_with_arg(0, "opencode")
+    assert fake_launch.call_count >= 1
 
 
 def test_unknown_backend_produces_error(tmp_path, monkeypatch, context):
@@ -410,12 +425,11 @@ def test_resolve_agent_env_var_via_cli_runner(tmp_path, monkeypatch, context):
     generate(dest, context)
     monkeypatch.chdir(dest)
     monkeypatch.setenv("PROTHON_AGENT", "opencode")
-    with (
-        patch("prothon.cli.launch", return_value=0),
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        runner.invoke(app, ["spec"])
-    mock_get_backend.assert_any_call("opencode")
+    fake_get_backend = Recorder(return_value=FakeAssistantBackend())
+    monkeypatch.setattr("prothon.cli.get_backend", fake_get_backend)
+    monkeypatch.setattr("prothon.cli.launch", Recorder(return_value=0))
+    runner.invoke(app, ["spec"])
+    assert fake_get_backend.called_with_arg(0, "opencode")
 
 
 def test_resolve_agent_cli_flag_overrides_env_var(tmp_path, monkeypatch, context):
@@ -424,12 +438,11 @@ def test_resolve_agent_cli_flag_overrides_env_var(tmp_path, monkeypatch, context
     generate(dest, context)
     monkeypatch.chdir(dest)
     monkeypatch.setenv("PROTHON_AGENT", "opencode")
-    with (
-        patch("prothon.cli.launch", return_value=0),
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        runner.invoke(app, ["spec", "--agent", "claude-code"])
-    mock_get_backend.assert_any_call("claude-code")
+    fake_get_backend = Recorder(return_value=FakeAssistantBackend())
+    monkeypatch.setattr("prothon.cli.get_backend", fake_get_backend)
+    monkeypatch.setattr("prothon.cli.launch", Recorder(return_value=0))
+    runner.invoke(app, ["spec", "--agent", "claude-code"])
+    assert fake_get_backend.called_with_arg(0, "claude-code")
 
 
 def test_resolve_agent_pyproject_without_tool_prothon_section(tmp_path, monkeypatch):
@@ -672,28 +685,19 @@ def test_opencode_receives_resolved_model(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-
-    with (
-        patch("prothon.cli.launch", return_value=0) as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        mock_get_backend.return_value.name = "opencode"
-        result = runner.invoke(
-            app,
-            [
-                "spec",
-                "--agent",
-                "opencode",
-                "--model",
-                "glm-5",
-                "--provider",
-                "z-ai",
-            ],
-        )
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr(
+        "prothon.cli.get_backend",
+        Recorder(return_value=FakeAssistantBackend(name="opencode")),
+    )
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    result = runner.invoke(
+        app,
+        ["spec", "--agent", "opencode", "--model", "glm-5", "--provider", "z-ai"],
+    )
     assert result.exit_code == 0
-    assert mock_launch.call_count >= 1
-
-    assert mock_launch.call_args.kwargs["model"] == "z-ai/glm-5"
+    assert fake_launch.call_count >= 1
+    assert fake_launch.last_kwargs["model"] == "z-ai/glm-5"
 
 
 def test_opencode_receives_slash_model_as_is(tmp_path, monkeypatch, context):
@@ -701,26 +705,19 @@ def test_opencode_receives_slash_model_as_is(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-
-    with (
-        patch("prothon.cli.launch", return_value=0) as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        mock_get_backend.return_value.name = "opencode"
-        result = runner.invoke(
-            app,
-            [
-                "spec",
-                "--agent",
-                "opencode",
-                "--model",
-                "z-ai/glm-5",
-            ],
-        )
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr(
+        "prothon.cli.get_backend",
+        Recorder(return_value=FakeAssistantBackend(name="opencode")),
+    )
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    result = runner.invoke(
+        app,
+        ["spec", "--agent", "opencode", "--model", "z-ai/glm-5"],
+    )
     assert result.exit_code == 0
-    assert mock_launch.call_count >= 1
-
-    assert mock_launch.call_args.kwargs["model"] == "z-ai/glm-5"
+    assert fake_launch.call_count >= 1
+    assert fake_launch.last_kwargs["model"] == "z-ai/glm-5"
 
 
 def test_opencode_no_model_passes_none(tmp_path, monkeypatch, context):
@@ -730,17 +727,16 @@ def test_opencode_no_model_passes_none(tmp_path, monkeypatch, context):
     monkeypatch.chdir(dest)
     monkeypatch.delenv("PROTHON_MODEL", raising=False)
     monkeypatch.delenv("PROTHON_PROVIDER", raising=False)
-
-    with (
-        patch("prothon.cli.launch", return_value=0) as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        mock_get_backend.return_value.name = "opencode"
-        result = runner.invoke(app, ["spec", "--agent", "opencode"])
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr(
+        "prothon.cli.get_backend",
+        Recorder(return_value=FakeAssistantBackend(name="opencode")),
+    )
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    result = runner.invoke(app, ["spec", "--agent", "opencode"])
     assert result.exit_code == 0
-    assert mock_launch.call_count >= 1
-
-    assert mock_launch.call_args.kwargs["model"] is None
+    assert fake_launch.call_count >= 1
+    assert fake_launch.last_kwargs["model"] is None
 
 
 # --- SPEC.md protection (R21) ---
@@ -756,11 +752,11 @@ def test_launch_skill_warns_when_spec_modified(tmp_path, monkeypatch, context):
         (dest / "docs" / "SPEC.md").write_text("# Tampered\n")
         return 0
 
-    with (
-        patch("prothon.cli.launch", side_effect=modify_spec),
-        patch("prothon.cli.get_backend"),
-    ):
-        result = runner.invoke(app, ["design"])
+    monkeypatch.setattr(
+        "prothon.cli.get_backend", Recorder(return_value=FakeAssistantBackend())
+    )
+    monkeypatch.setattr("prothon.cli.launch", Recorder(side_effect=modify_spec))
+    result = runner.invoke(app, ["design"])
     assert "SPEC.md was modified outside" in result.output
 
 
@@ -774,11 +770,11 @@ def test_launch_skill_no_warning_for_spec_writer(tmp_path, monkeypatch, context)
         (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
         return 0
 
-    with (
-        patch("prothon.cli.launch", side_effect=modify_spec),
-        patch("prothon.cli.get_backend"),
-    ):
-        result = runner.invoke(app, ["spec"])
+    monkeypatch.setattr(
+        "prothon.cli.get_backend", Recorder(return_value=FakeAssistantBackend())
+    )
+    monkeypatch.setattr("prothon.cli.launch", Recorder(side_effect=modify_spec))
+    result = runner.invoke(app, ["spec"])
     assert "SPEC.md was modified" not in result.output
 
 
@@ -787,9 +783,11 @@ def test_launch_skill_no_warning_when_spec_unchanged(tmp_path, monkeypatch, cont
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-
-    with patch("prothon.cli.launch", return_value=0), patch("prothon.cli.get_backend"):
-        result = runner.invoke(app, ["design"])
+    monkeypatch.setattr(
+        "prothon.cli.get_backend", Recorder(return_value=FakeAssistantBackend())
+    )
+    monkeypatch.setattr("prothon.cli.launch", Recorder(return_value=0))
+    result = runner.invoke(app, ["design"])
     assert "SPEC.md was modified" not in result.output
 
 
@@ -801,19 +799,16 @@ def test_launch_skill_claude_ignores_model_only(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-
-    with (
-        patch("prothon.cli.launch", return_value=0) as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        mock_get_backend.return_value.name = "Claude Code"
-        result = runner.invoke(
-            app, ["spec", "--model", "glm-5", "--agent", "claude-code"]
-        )
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr(
+        "prothon.cli.get_backend",
+        Recorder(return_value=FakeAssistantBackend(name="Claude Code")),
+    )
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    result = runner.invoke(app, ["spec", "--model", "glm-5", "--agent", "claude-code"])
     assert result.exit_code == 0
-    assert mock_launch.call_count >= 1
-
-    assert mock_launch.call_args.kwargs["model"] is None
+    assert fake_launch.call_count >= 1
+    assert fake_launch.last_kwargs["model"] is None
 
 
 def test_launch_skill_claude_ignores_provider_only(tmp_path, monkeypatch, context):
@@ -821,19 +816,18 @@ def test_launch_skill_claude_ignores_provider_only(tmp_path, monkeypatch, contex
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-
-    with (
-        patch("prothon.cli.launch", return_value=0) as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        mock_get_backend.return_value.name = "Claude Code"
-        result = runner.invoke(
-            app, ["spec", "--provider", "z-ai", "--agent", "claude-code"]
-        )
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr(
+        "prothon.cli.get_backend",
+        Recorder(return_value=FakeAssistantBackend(name="Claude Code")),
+    )
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    result = runner.invoke(
+        app, ["spec", "--provider", "z-ai", "--agent", "claude-code"]
+    )
     assert result.exit_code == 0
-    assert mock_launch.call_count >= 1
-
-    assert mock_launch.call_args.kwargs["model"] is None
+    assert fake_launch.call_count >= 1
+    assert fake_launch.last_kwargs["model"] is None
 
 
 def test_launch_skill_claude_ignores_model_env_var(tmp_path, monkeypatch, context):
@@ -842,17 +836,16 @@ def test_launch_skill_claude_ignores_model_env_var(tmp_path, monkeypatch, contex
     generate(dest, context)
     monkeypatch.chdir(dest)
     monkeypatch.setenv("PROTHON_MODEL", "glm-5")
-
-    with (
-        patch("prothon.cli.launch", return_value=0) as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        mock_get_backend.return_value.name = "Claude Code"
-        result = runner.invoke(app, ["spec", "--agent", "claude-code"])
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr(
+        "prothon.cli.get_backend",
+        Recorder(return_value=FakeAssistantBackend(name="Claude Code")),
+    )
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    result = runner.invoke(app, ["spec", "--agent", "claude-code"])
     assert result.exit_code == 0
-    assert mock_launch.call_count >= 1
-
-    assert mock_launch.call_args.kwargs["model"] is None
+    assert fake_launch.call_count >= 1
+    assert fake_launch.last_kwargs["model"] is None
 
 
 def test_launch_skill_opencode_validates_model_provider(tmp_path, monkeypatch, context):
@@ -860,10 +853,11 @@ def test_launch_skill_opencode_validates_model_provider(tmp_path, monkeypatch, c
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-
-    with patch("prothon.cli.get_backend") as mock_get_backend:
-        mock_get_backend.return_value.name = "opencode"
-        result = runner.invoke(app, ["spec", "--model", "glm-5", "--agent", "opencode"])
+    monkeypatch.setattr(
+        "prothon.cli.get_backend",
+        Recorder(return_value=FakeAssistantBackend(name="opencode")),
+    )
+    result = runner.invoke(app, ["spec", "--model", "glm-5", "--agent", "opencode"])
     assert result.exit_code == 1
     assert "--provider requires --model" in result.output
 
@@ -875,28 +869,19 @@ def test_launch_skill_opencode_accepts_both_model_provider(
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-
-    with (
-        patch("prothon.cli.launch", return_value=0) as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        mock_get_backend.return_value.name = "opencode"
-        result = runner.invoke(
-            app,
-            [
-                "spec",
-                "--model",
-                "glm-5",
-                "--provider",
-                "z-ai",
-                "--agent",
-                "opencode",
-            ],
-        )
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr(
+        "prothon.cli.get_backend",
+        Recorder(return_value=FakeAssistantBackend(name="opencode")),
+    )
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    result = runner.invoke(
+        app,
+        ["spec", "--model", "glm-5", "--provider", "z-ai", "--agent", "opencode"],
+    )
     assert result.exit_code == 0
-    assert mock_launch.call_count >= 1
-
-    assert mock_launch.call_args.kwargs["model"] == "z-ai/glm-5"
+    assert fake_launch.call_count >= 1
+    assert fake_launch.last_kwargs["model"] == "z-ai/glm-5"
 
 
 def test_launch_skill_opencode_conflicting_qualified_model_provider(
@@ -906,26 +891,26 @@ def test_launch_skill_opencode_conflicting_qualified_model_provider(
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-
-    with (
-        patch("prothon.cli.launch", return_value=0) as mock_launch,
-        patch("prothon.cli.get_backend") as mock_get_backend,
-    ):
-        mock_get_backend.return_value.name = "opencode"
-        result = runner.invoke(
-            app,
-            [
-                "spec",
-                "--model",
-                "providerA/modelX",
-                "--provider",
-                "providerB",
-                "--agent",
-                "opencode",
-            ],
-        )
+    fake_launch = Recorder(return_value=0)
+    monkeypatch.setattr(
+        "prothon.cli.get_backend",
+        Recorder(return_value=FakeAssistantBackend(name="opencode")),
+    )
+    monkeypatch.setattr("prothon.cli.launch", fake_launch)
+    result = runner.invoke(
+        app,
+        [
+            "spec",
+            "--model",
+            "providerA/modelX",
+            "--provider",
+            "providerB",
+            "--agent",
+            "opencode",
+        ],
+    )
     assert result.exit_code == 1
-    mock_launch.assert_not_called()
+    assert fake_launch.call_count == 0
     assert "conflicting providers" in result.output
     assert "providerA" in result.output
     assert "providerB" in result.output
@@ -1260,8 +1245,11 @@ def test_ci_bump_tag_failure(tmp_path, monkeypatch, context):
     run_git("add", "docs/SPEC.md")
     run_git("commit", "-m", "docs: update spec")
 
-    with patch("prothon.versioning.create_tag", side_effect=ProthonError("tag error")):
-        result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
+    monkeypatch.setattr(
+        "prothon.versioning.create_tag",
+        Recorder(side_effect=ProthonError("tag error")),
+    )
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
     assert result.exit_code == 0
     assert "Tag creation failed: tag error" in result.output
 
@@ -1289,8 +1277,8 @@ def test_ci_bump_base_version_fallback(tmp_path, monkeypatch, context):
             raise GitError("git show failed")
         return original_run_git(*args, **kwargs)
 
-    with patch("prothon.git.run_git", side_effect=fake_run_git):
-        result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
+    monkeypatch.setattr("prothon.git.run_git", fake_run_git)
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
 
     assert result.exit_code == 0
     assert "Falling back to branch version" in result.output

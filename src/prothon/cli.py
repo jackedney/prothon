@@ -15,11 +15,12 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from prothon import promise
+from prothon import promise, versioning
 from prothon.assistant import _BACKENDS, get_backend, launch
+from prothon.compliance import ComplianceReport, check_patterns_doc
 from prothon.exceptions import ProthonError
-from prothon.promise import CheckStatus, TaskCheckReport
 from prothon.project import find_project_root
+from prothon.promise import CheckStatus, TaskCheckReport
 from prothon.scaffold import generate, init_existing
 
 console = Console()
@@ -65,6 +66,9 @@ app = typer.Typer(
 promise_app = typer.Typer(help="Manage change promises (plan, check, execute).")
 app.add_typer(promise_app, name="promise")
 
+ci_app = typer.Typer(help="CI automation (version bumping, detection).")
+app.add_typer(ci_app, name="ci")
+
 
 def _require_project_root() -> Path:
     """Find the project root or exit with an error."""
@@ -72,7 +76,7 @@ def _require_project_root() -> Path:
         return find_project_root()
     except ProthonError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
 
 def _require_doc(root: Path, doc_name: str) -> None:
@@ -106,13 +110,38 @@ def _read_toml(path: Path) -> dict:
 
 
 def _nested_get(doc: dict, *keys: str) -> str | None:
-    """Walk *keys* through nested dicts, returning None if any level is not a mapping."""
+    """Walk *keys* through nested dicts, returning None if not a mapping."""
     current: object = doc
     for key in keys:
         if not isinstance(current, dict):
             return None
         current = current.get(key)
     return str(current) if current is not None else None
+
+
+def _find_init_path(root: Path, project_name: str, module_name: str) -> Path | None:
+    """Locate the package __init__.py under src/."""
+    for name in (module_name, project_name):
+        candidate = root / "src" / name / "__init__.py"
+        if candidate.exists():
+            return candidate
+    return _scan_src_for_versioned_init(root / "src")
+
+
+def _scan_src_for_versioned_init(src_root: Path) -> Path | None:
+    """Find a package __init__.py containing __version__ under *src_root*."""
+    if not src_root.is_dir():
+        return None
+    for candidate_dir in sorted(src_root.iterdir()):
+        candidate_init = candidate_dir / "__init__.py"
+        if not (candidate_dir.is_dir() and candidate_init.is_file()):
+            continue
+        try:
+            if "__version__" in candidate_init.read_text():
+                return candidate_init
+        except (OSError, UnicodeDecodeError):
+            continue
+    return None
 
 
 def resolve_agent(cli_value: str | None = None) -> str:
@@ -161,7 +190,7 @@ def _resolve_config_value(
     env_var: str,
     config_key: str,
 ) -> str | None:
-    """Resolve a config value via 5-level precedence: CLI > env > pyproject > global > None."""
+    """Resolve a config value via 5-level precedence chain."""
     if cli_value:
         return cli_value
     env_val = os.environ.get(env_var)
@@ -189,12 +218,12 @@ def _resolve_config_value(
 
 
 def _resolve_model_value(cli_value: str | None) -> str | None:
-    """Resolve model name via 5-level precedence: CLI > env > pyproject > global > None."""
+    """Resolve model name via 5-level precedence chain."""
     return _resolve_config_value(cli_value, "PROTHON_MODEL", "model")
 
 
 def _resolve_provider_value(cli_value: str | None) -> str | None:
-    """Resolve provider name via 5-level precedence: CLI > env > pyproject > global > None."""
+    """Resolve provider name via 5-level precedence chain."""
     return _resolve_config_value(cli_value, "PROTHON_PROVIDER", "provider")
 
 
@@ -226,11 +255,85 @@ def resolve_model(cli_model: str | None, cli_provider: str | None) -> str | None
 
 
 def _file_hash(path: Path) -> str | None:
-    """Return the SHA-256 hex digest of a file, or None if it doesn't exist or is unreadable."""
+    """Return SHA-256 hex digest of a file, or None if unreadable."""
     try:
         return hashlib.sha256(path.read_bytes()).hexdigest()
     except OSError:
         return None
+
+
+SKILL_DOC_MAP = {
+    "prothon-spec-writer": Path("docs/SPEC.md"),
+    "prothon-design-writer": Path("docs/DESIGN.md"),
+    "prothon-patterns-writer": Path("docs/PATTERNS.md"),
+}
+
+
+def _enforce_commit(skill_name: str, root: Path) -> None:
+    """If a doc-writing skill modified a file but didn't commit, do it now."""
+    doc_path = SKILL_DOC_MAP.get(skill_name)
+    if not doc_path:
+        return
+
+    full_path = root / doc_path
+    if not full_path.exists():
+        return
+
+    from prothon.git import commit_file, is_dirty
+
+    if is_dirty(doc_path, cwd=root):
+        typer.echo(f"  Enforcing commit for {doc_path}...")
+        msg = f"docs: update {doc_path.name} via {skill_name}"
+        commit_file(doc_path, msg, cwd=root)
+
+
+def _trigger_follow_ups(
+    skill_name: str,
+    cwd: Path,
+    agent: str | None = None,
+    model: str | None = None,
+    provider: str | None = None,
+) -> None:
+    """Launch follow-up sessions based on the completed skill and file changes."""
+    # R24: doc-harmonizer detects conflicts after any doc change
+    if skill_name in (
+        "prothon-spec-writer",
+        "prothon-design-writer",
+        "prothon-patterns-writer",
+    ):
+        typer.echo("\n  Triggering doc-harmonizer...")
+        _launch_skill(
+            "prothon-doc-harmonizer",
+            cwd,
+            agent,
+            model,
+            provider,
+            run_follow_ups=False,
+        )
+
+    # R38: Automatically generate tech references after design changes
+    if skill_name == "prothon-design-writer":
+        typer.echo("  Triggering tech-researcher...")
+        _launch_skill(
+            "prothon-tech-researcher",
+            cwd,
+            agent,
+            model,
+            provider,
+            run_follow_ups=False,
+        )
+
+    # R36: Compliance check is mandatory after execution
+    if skill_name == "prothon-execute":
+        typer.echo("\n  Triggering compliance-checker...")
+        _launch_skill(
+            "prothon-compliance-checker",
+            cwd,
+            agent,
+            model,
+            provider,
+            run_follow_ups=False,
+        )
 
 
 def _launch_skill(
@@ -239,8 +342,9 @@ def _launch_skill(
     agent: str | None = None,
     model: str | None = None,
     provider: str | None = None,
+    run_follow_ups: bool = True,
 ) -> None:
-    """Resolve backend, launch skill, handle errors."""
+    """Resolve backend, launch skill, handle errors, and enforce lifecycle."""
     spec_path = cwd / "docs" / "SPEC.md"
     guard_spec = skill_name != "prothon-spec-writer"
     spec_hash = _file_hash(spec_path) if guard_spec else None
@@ -252,7 +356,7 @@ def _launch_skill(
         rc = launch(backend, skill_name, cwd, model=resolved_model)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
     if guard_spec and _file_hash(spec_path) != spec_hash:
         typer.echo(
@@ -260,6 +364,10 @@ def _launch_skill(
             "Only the spec-writer should modify SPEC.md.",
             err=True,
         )
+
+    if rc == 0 and run_follow_ups:
+        _enforce_commit(skill_name, cwd)
+        _trigger_follow_ups(skill_name, cwd, agent, model, provider)
 
     if rc != 0:
         raise typer.Exit(rc)
@@ -329,9 +437,11 @@ def _render_check_report(report: TaskCheckReport) -> Table:
     result_style = "green" if report.passed else "red"
     result_label = "PASS" if report.passed else "DISCREPANCY"
 
-    table = Table(
-        title=f'Task {report.task_index}: "{escape(report.title)}" \u2014 [{result_style}]{result_label}[/{result_style}]',
+    title = (
+        f'Task {report.task_index}: "{escape(report.title)}" \u2014 '
+        f"[{result_style}]{result_label}[/{result_style}]"
     )
+    table = Table(title=title)
     table.add_column("Check", style="bold")
     table.add_column("Result", width=6)
     table.add_column("Detail")
@@ -346,6 +456,158 @@ def _render_check_report(report: TaskCheckReport) -> Table:
         table.add_row(c.name, Text(label, style=style), c.detail)
 
     return table
+
+
+def _render_compliance_report(report: ComplianceReport) -> Table:
+    """Build a Rich table for a compliance report."""
+    table = Table(title="COMPLIANCE REPORT", show_lines=True)
+    table.add_column("Type", width=10)
+    table.add_column("Source", style="bold", width=10)
+    table.add_column("ID", width=5)
+    table.add_column("Requirement")
+    table.add_column("Status", width=6)
+    table.add_column("Evidence", no_wrap=False)
+
+    from prothon.compliance import CheckStatus as ComplianceStatus
+
+    _status_styles = {
+        ComplianceStatus.PASS: ("PASS", "green"),
+        ComplianceStatus.FAIL: ("FAIL", "red"),
+        ComplianceStatus.SKIP: ("SKIP", "yellow"),
+    }
+
+    for res in report.results:
+        label, style = _status_styles[res.status]
+        table.add_row(
+            res.check_type.value,
+            res.requirement.source,
+            res.requirement.requirement_id or "-",
+            escape(res.requirement.statement),
+            Text(label, style=style),
+            escape(res.evidence) if res.evidence else "-",
+        )
+
+    return table
+
+
+def _run_static_checks(root: Path) -> ComplianceReport:
+    """Run all deterministic static compliance checks."""
+    report = ComplianceReport()
+
+    # R25, R26: PATTERNS.md code blocks
+    patterns_path = root / "docs" / "PATTERNS.md"
+    report.results.extend(check_patterns_doc(patterns_path))
+
+    _check_doc_existence(root, report)
+    _check_inheritance(root, report)
+    _check_agent_files(root, report)
+
+    from prothon.compliance import CheckType
+
+    for res in report.results:
+        res.check_type = CheckType.STATIC
+
+    return report
+
+
+def _check_doc_existence(root: Path, report: ComplianceReport) -> None:
+    """Verify SPEC.md, DESIGN.md, and PATTERNS.md exist."""
+    from prothon.compliance import CheckResult, CheckStatus, Requirement
+
+    doc_reqs = [
+        ("SPEC.md", "R18", "SPEC"),
+        ("DESIGN.md", "R20", "SPEC"),
+        ("PATTERNS.md", "R20", "SPEC"),
+    ]
+    for doc, req_id, source in doc_reqs:
+        req = Requirement(
+            source=source,
+            requirement_id=req_id,
+            statement=f"Prerequisite document {doc} must exist.",
+        )
+        doc_path = root / "docs" / doc
+        if doc_path.is_file():
+            report.results.append(
+                CheckResult(req, CheckStatus.PASS, evidence=str(doc_path))
+            )
+        else:
+            report.results.append(
+                CheckResult(
+                    req,
+                    CheckStatus.FAIL,
+                    evidence=f"docs/{doc}",
+                    rationale="Required document is missing.",
+                )
+            )
+
+
+def _check_inheritance(root: Path, report: ComplianceReport) -> None:
+    """Verify all custom exceptions inherit from ProthonError."""
+    from prothon.compliance import (
+        CheckResult,
+        CheckStatus,
+        Requirement,
+        analyze_python_file,
+    )
+
+    exc_path = root / "src" / "prothon" / "exceptions.py"
+    if not exc_path.is_file():
+        return
+
+    req = Requirement(
+        source="DESIGN",
+        statement="All domain exceptions must inherit from ProthonError.",
+    )
+    analysis = analyze_python_file(exc_path)
+    violations = [
+        name
+        for name, bases in analysis.get("base_classes", {}).items()
+        if name != "ProthonError" and "ProthonError" not in bases
+    ]
+
+    if not violations:
+        report.results.append(
+            CheckResult(req, CheckStatus.PASS, evidence=str(exc_path))
+        )
+    else:
+        report.results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence=f"{exc_path}:1",
+                rationale=f"Exceptions not inheriting from ProthonError: {', '.join(violations)}",
+            )
+        )
+
+
+def _check_agent_files(root: Path, report: ComplianceReport) -> None:
+    """Verify AGENTS.md and its expected symlinks."""
+    from prothon.compliance import CheckResult, CheckStatus, Requirement
+
+    for filename in ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "AGENT.md"]:
+        req = Requirement(
+            source="DESIGN",
+            requirement_id="R4",
+            statement=f"Project must have {filename}.",
+        )
+        file_path = root / filename
+        if not file_path.exists():
+            report.results.append(CheckResult(req, CheckStatus.FAIL, evidence=filename))
+            continue
+
+        if filename != "AGENTS.md" and not file_path.is_symlink():
+            report.results.append(
+                CheckResult(
+                    req,
+                    CheckStatus.FAIL,
+                    evidence=filename,
+                    rationale=f"{filename} must be a symlink to AGENTS.md.",
+                )
+            )
+        else:
+            report.results.append(
+                CheckResult(req, CheckStatus.PASS, evidence=str(file_path))
+            )
 
 
 @app.callback(invoke_without_command=True)
@@ -417,7 +679,7 @@ def init() -> None:
         typer.echo("\nNext step: uvx prothon spec")
     except ProthonError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()
@@ -437,7 +699,7 @@ def design(
     model: ModelOption = None,
     provider: ProviderOption = None,
 ) -> None:
-    """Write or revise DESIGN.md — research technologies and architecture, then generate tech references."""
+    """Write or revise DESIGN.md — research technologies and architecture."""
     root = _require_project_root()
     _require_doc(root, "SPEC.md")
     _launch_skill("prothon-design-writer", root, agent, model, provider)
@@ -474,7 +736,34 @@ def compliance(
 ) -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
     root = _require_project_root()
+
+    # Step 1: Deterministic Static Analysis
+    report = _run_static_checks(root)
+
+    # Step 2: Semantic Analysis (LLM)
+    # Ensure any previous semantic results are cleared
+    results_path = root / ".prothon" / "compliance_semantic.json"
+    if results_path.exists():
+        results_path.unlink()
+    else:
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+
+    typer.echo("Launching semantic compliance checks (LLM)...")
     _launch_skill("prothon-compliance-checker", root, agent, model, provider)
+
+    # Step 3: Merge and display unified report
+    if results_path.exists():
+        import json
+
+        try:
+            with open(results_path, encoding="utf-8") as f:
+                findings = json.load(f)
+            report.add_from_dicts(findings)
+        except (OSError, json.JSONDecodeError):
+            typer.echo("Warning: Failed to load semantic compliance results.")
+
+    console.print("\n", _render_compliance_report(report))
+    typer.echo("\n" + report.format_summary())
 
 
 @app.command()
@@ -523,7 +812,7 @@ def promise_check(
         report = promise.check_task(task_index, path=promise_path)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
     console.print(_render_check_report(report))
     if not report.passed:
         raise typer.Exit(1)
@@ -540,7 +829,7 @@ def promise_complete(
         promise.complete_task(task_index, path=promise_path)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
     typer.echo(f"Task {task_index} marked as completed.")
 
 
@@ -557,7 +846,7 @@ def promise_record_attempt(
         promise.record_attempt(task_index, path=promise_path)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
     typer.echo(f"Attempt recorded for task {task_index}.")
 
 
@@ -568,3 +857,134 @@ def promise_cleanup() -> None:
     promise_path = _require_promise_file(root)
     promise.cleanup(promise_path)
     typer.echo("Promise file removed.")
+
+
+# --- CI subcommands ---
+
+
+@ci_app.command("bump")
+def ci_bump(
+    before_sha: Annotated[
+        str, typer.Option("--before-sha", help="Git SHA to diff from")
+    ],
+    after_sha: Annotated[
+        str, typer.Option("--after-sha", help="Git SHA to diff to")
+    ] = "HEAD",
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Don't actually write changes")
+    ] = False,
+    no_tag: Annotated[
+        bool, typer.Option("--no-tag", help="Don't create a git tag")
+    ] = False,
+) -> None:
+    """Bump the project version based on changed files since before_sha.
+
+    Idempotent: if the current version already matches the expected bump,
+    the command exits successfully without making changes.
+    """
+    root = _require_project_root()
+    pyproject_path = root / "pyproject.toml"
+
+    # Read current pyproject.toml (CWD)
+    doc = _read_toml(pyproject_path)
+    if not doc:
+        typer.echo("Error: Could not read pyproject.toml", err=True)
+        raise typer.Exit(1)
+
+    # Check auto_version
+    auto_version = _nested_get(doc, "tool", "prothon", "ci", "auto_version")
+    if auto_version is not None and str(auto_version).lower() in ("false", "0", "no"):
+        typer.echo("Automatic versioning is disabled in pyproject.toml")
+        return
+
+    # Detect bump type
+    bump_type = versioning.detect_bump_type(before_sha, after_sha, cwd=root)
+    if not bump_type:
+        typer.echo("No version bump needed (no relevant files changed).")
+        return
+
+    # Get current version in the branch
+    branch_version = _nested_get(doc, "project", "version")
+    if not branch_version:
+        typer.echo("Error: [project] version not found in pyproject.toml", err=True)
+        raise typer.Exit(1)
+
+    # Read base version from before_sha
+    from prothon.git import run_git
+
+    try:
+        base_toml_content = run_git("show", f"{before_sha}:pyproject.toml", cwd=root)
+        base_doc = tomlkit.parse(base_toml_content)
+        base_version = _nested_get(base_doc, "project", "version")
+    except Exception as exc:
+        typer.echo(f"Warning: Could not read pyproject.toml from {before_sha}: {exc}")
+        base_version = None
+
+    if not base_version:
+        typer.echo(f"Falling back to branch version {branch_version} as base")
+        base_version = branch_version
+
+    # Compute expected new version
+    bump_fn = getattr(versioning, f"bump_{bump_type}")
+    expected_version = bump_fn(base_version)
+
+    if branch_version == expected_version:
+        typer.echo(f"Version already at {expected_version}, skipping.")
+        return
+
+    typer.echo(f"Detected {bump_type} bump: {base_version} -> {expected_version}")
+
+    if dry_run:
+        typer.echo("Dry run: Skipping file updates and tagging.")
+        return
+
+    # Update files
+    versioning.update_pyproject_version(pyproject_path, expected_version)
+
+    # Find __init__.py
+    project_name = _nested_get(doc, "project", "name")
+    if not project_name:
+        typer.echo("Error: [project] name not found in pyproject.toml", err=True)
+        raise typer.Exit(1)
+
+    module_name = project_name.replace("-", "_")
+    init_path = _find_init_path(root, project_name, module_name)
+
+    if init_path:
+        versioning.update_init_version(init_path, expected_version)
+        typer.echo(f"Updated {init_path.relative_to(root)}")
+    else:
+        typer.echo(
+            f"Warning: Could not find __init__.py in src/{module_name} "
+            f"or src/{project_name}"
+        )
+
+    # Create tag
+    if not no_tag:
+        try:
+            versioning.create_tag(expected_version, cwd=root)
+            typer.echo(f"Created tag v{expected_version}")
+        except ProthonError as exc:
+            typer.echo(f"Warning: Tag creation failed: {exc}", err=True)
+
+
+@ci_app.command("detect")
+def ci_detect(
+    before_sha: Annotated[
+        str, typer.Option("--before-sha", help="Git SHA to diff from")
+    ],
+    after_sha: Annotated[
+        str, typer.Option("--after-sha", help="Git SHA to diff to")
+    ] = "HEAD",
+) -> None:
+    """Detect the version bump type based on changed files since before_sha."""
+    root = _require_project_root()
+    bump_type = versioning.detect_bump_type(before_sha, after_sha, cwd=root)
+    if bump_type:
+        typer.echo(bump_type)
+    else:
+        typer.echo("none")
+
+
+if __name__ == "__main__":
+    app()

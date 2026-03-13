@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from prothon.exceptions import ProjectNotFoundError
 from prothon.project import find_project_root
 

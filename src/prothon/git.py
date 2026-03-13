@@ -86,3 +86,26 @@ def rev_parse_head(cwd: Path | None = None) -> str:
         GitError: If the git command fails (e.g. not inside a git repo).
     """
     return run_git("rev-parse", "HEAD", cwd=cwd).strip()
+
+
+def is_dirty(path: Path, cwd: Path | None = None) -> bool:
+    """Return True if *path* has unstaged or uncommitted changes.
+
+    Args:
+        path: File path to check (relative to cwd).
+        cwd: Working directory for the git process.
+    """
+    output = run_git("status", "--porcelain", "--", str(path), cwd=cwd).strip()
+    return bool(output)
+
+
+def commit_file(path: Path, message: str, cwd: Path | None = None) -> None:
+    """Stage and commit a single file with *message*.
+
+    Args:
+        path: File path to commit (relative to cwd).
+        message: Commit message.
+        cwd: Working directory for the git process.
+    """
+    run_git("add", "--", str(path), cwd=cwd)
+    run_git("commit", "-m", message, "--", str(path), cwd=cwd)

@@ -1,6 +1,6 @@
 [project]
 name = "prothon"
-version = "2.1.1"
+version = "3.0.0"
 description = "Python project generator with docs-first AI workflow"
 requires-python = ">=3.11"
 license = "MIT"
@@ -42,7 +42,7 @@ prothon = "prothon.cli:app"
 sync = { shell = "uv sync && pre-commit install" }
 lint = "ruff check src/ tests/"
 format = "ruff format --check src/ tests/"
-typecheck = "ty check"
+typecheck = "ty check src/ tests/"
 test = "pytest tests/"
 test-mut = { cmd = "mutmut run", help = "Run mutation testing" }
 security = "bandit -c pyproject.toml -r src/"

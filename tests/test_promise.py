@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
-
 from prothon.exceptions import PromiseError
 from prothon.git import DiffStat
 from prothon.promise import (
@@ -1358,7 +1357,9 @@ def test_check_line_counts_expected_one_removed_is_not_skipped():
 
 
 def test_check_line_counts_missing_file_adds_zero_not_one():
-    """Default for missing file is (0,0) not (1,0) or (0,1) -- kills default tuple mutations."""
+    """Default for missing file is (0,0) not (1,0) or (0,1)
+    -- kills default tuple mutations.
+    """
     task = Task(
         title="T",
         files_to_create=["missing.py"],
@@ -1386,7 +1387,9 @@ def test_check_line_counts_missing_file_removed_zero():
 
 
 def test_check_task_skipped_files_to_create_check_name(tmp_path: Path):
-    """When files_to_create is empty, the SKIPPED check is named exactly 'files_to_create'."""
+    """When files_to_create is empty, the SKIPPED check is named
+    exactly 'files_to_create'.
+    """
     p = Promise(metadata=Metadata(), tasks=[Task(title="T")])
     path = tmp_path / "p.toml"
     save_promise(p, path)
@@ -1484,8 +1487,11 @@ def test_check_line_count_fail_detail_no_xx():
 
 
 def test_check_task_default_diff_is_subprocess(tmp_path: Path):
-    """check_task without explicit diff= arg instantiates SubprocessGitDiff (kills diff=None)."""
-    from unittest.mock import MagicMock, patch as mock_patch
+    """check_task without explicit diff= arg instantiates SubprocessGitDiff
+    (kills diff=None).
+    """
+    from unittest.mock import MagicMock
+    from unittest.mock import patch as mock_patch
 
     p = Promise(metadata=Metadata(base_commit="abc"), tasks=[Task(title="T")])
     path = tmp_path / "p.toml"

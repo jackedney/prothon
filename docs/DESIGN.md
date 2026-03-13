@@ -17,13 +17,15 @@ src/prothon/
     project.py          # Project root detection, shared project context
     git.py              # Thin typed wrapper around git CLI via subprocess
     assistant.py        # Abstract assistant interface and backend registry
+    compliance.py       # Static AST checks and semantic compliance verification
+    refactor.py         # Drift discovery and refactor promise generation
     exceptions.py       # Custom exception hierarchy
     skills/             # Bundled skill assets (non-Python, 8 directories)
 
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, doc agents, execution, compliance, promise system, versioning, skill management — requirements 1-9, 22, 27-28, 34-37, 42-50, 54) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
+This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
 
 ### Module Dependencies
 
@@ -71,7 +73,7 @@ AI coding CLIs fall into two structural categories based on how they receive ski
 - **Category A (native skill directories)** — Claude Code, opencode, and Gemini CLI have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
 - **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. These are out of scope per the SPEC but the abstraction accommodates them for future expansion.
 
-A registry maps assistant names to backend classes. Claude Code, opencode, and Gemini CLI are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 52-53 (Claude Code and opencode support, assistant selection).
+A registry maps assistant names to backend classes. Claude Code, opencode, Gemini CLI, and OB1 are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 57-58 (Claude Code, opencode, and Gemini CLI support; assistant selection).
 
 ### Promise Verification
 
@@ -94,6 +96,45 @@ Each task in the execute workflow follows this lifecycle:
 If step 4 or step 6 fails, the subagent increments its attempt counter and retries from step 3. If `attempts >= max_attempts`, the subagent reports failure to the orchestrator, which asks the user to skip, retry (reset counter), or abort.
 
 Pre-commit hooks run with `--all-files` rather than scoped to declared task files because a task modifying one file may break checks in files that import from it. This matches what a real `git commit` would trigger, satisfying R32's requirement to run "the project's pre-commit hooks."
+
+### Compliance Checker (R34–37)
+
+The compliance checker is a hybrid verification engine that maps requirements from SPEC, DESIGN, and PATTERNS to source code evidence. It uses a three-tier evidence gathering strategy:
+
+- **Static Analysis (Regex/AST):** Deterministic checks for structural requirements (e.g., base class inheritance, type hint usage) and documentation form rules (e.g., signature-only code in PATTERNS.md).
+- **Semantic Analysis (LLM):** Targeted subagents verify high-level requirements that cannot be proven through static analysis.
+- **Evidence Mapping:** Every check produces a `CheckResult` with a tri-state status (PASS, FAIL, SKIP) and `file:line` evidence.
+
+### Refactor Workflow
+
+The refactor workflow facilitates the evolution of the project by identifying and resolving drift or opportunities for improvement.
+
+- **Refactor Wave:** Changes flow from **DESIGN -> PATTERNS -> CODE**. Architectural shifts must be documented before code is modified.
+- **Discovery Phase:** Scans the codebase and docs for drift and proactive optimization opportunities (e.g., improving patterns or decisions based on current project context).
+- **Execution Phase:** Orchestrates implementation tasks using self-correcting subagent loops to align the project with the updated documentation.
+
+### Doc-Harmonizer (R24)
+
+The doc-harmonizer maintains internal consistency across the documentation hierarchy.
+
+- **Semantic Cross-Referencing:** Uses LLM-based analysis to detect contradictions and scope creep (e.g., DESIGN introducing requirements that belong in SPEC).
+- **Top-Down Enforcement:** Validates that lower-authority documents do not contradict higher-authority ones.
+- **Approval Workflow:** Presents proposed amendments as "Before/After" diffs for user approval before applying changes.
+
+### Tech-Researcher (R43-46)
+
+The tech-researcher refreshes project-specific reference skills based on the technology choices in DESIGN.md (serves R43-46).
+
+- **Sourcing:** Combines local inspection (`uv pip show`, `inspect`) with direct web fetching (`web_fetch` on official doc URLs) to ensure version accuracy and up-to-date idiomatic knowledge.
+- **Multi-File Skills:** Generates skills as directories in `.agents/skills/` following Anthropic's multi-file structure (`SKILL.md`, `reference.md`, `conventions.md`, `examples/`).
+- **Progressive Disclosure:** Leverages the assistant's ability to load only the necessary context, keeping the core `SKILL.md` concise.
+
+### Mutation Testing CI (R6)
+
+Mutation testing is integrated as an asynchronous, non-blocking audit to avoid slowing down the development cycle.
+
+- **Non-blocking Job:** Configured with `continue-on-error: true` (GitHub) or `allow_failure: true` (GitLab).
+- **Artifacts:** Produces `mutants/mutmut-stats.json` for analysis, serving as a durable record of test suite effectiveness.
 
 ### Retry Configuration (R33)
 
@@ -295,7 +336,7 @@ When the resolved agent is `opencode`, the user can configure which model and pr
 
 ### Documentation Safety Contract
 
-Documentation files (`docs/SPEC.md`, `docs/DESIGN.md`, `docs/PATTERNS.md`) are protected by two mechanisms:
+Documentation files (`docs/SPEC.md`, `docs/DESIGN.md`, `docs/PATTERNS.md`) are protected by three mechanisms:
 
 **Edit guard** — Only five agents may write to documentation files:
 
@@ -309,7 +350,7 @@ The doc-harmonizer may only write after presenting proposed amendments to the us
 
 All other agents (execute, compliance, tech-researcher, and any subagents they spawn) must treat these files as read-only. This is enforced at the skill level — each non-doc agent's skill instructions explicitly state that `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` are read-only and must not be written to.
 
-**Commit-after-write** — Every agent that writes to a documentation file must commit that file immediately after writing. This prevents subsequent agent sessions from accidentally overwriting uncommitted changes.
+**Commit-after-write (CLI Enforced)** — Every agent that writes to a documentation file must commit that file immediately after writing. The CLI enforces this: after a session finishes, it checks if the relevant doc file is dirty and performs the commit if the agent failed to do so.
 
 | Agent | Commits |
 |-------|---------|
@@ -321,15 +362,31 @@ All other agents (execute, compliance, tech-researcher, and any subagents they s
 
 The commit message follows the format `docs: update <FILENAME> via <agent-name>`. No push is performed — the commit is local only.
 
+**Follow-up Triggers (CLI Enforced)** — The CLI automatically launches follow-up agents after a session completes successfully:
+
+- After `spec`, `design`, or `patterns`: Launches `doc-harmonizer` to detect cross-doc conflicts.
+- After `design`: Launches `tech-researcher` to refresh project reference skills.
+- After `execute`: Launches `compliance-checker` to verify implementation against docs.
+
+### Session Lifecycle
+
+Every assistant session launched via the CLI (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) follows a managed lifecycle in `cli.py`:
+
+1. **Pre-session guards** — Record `SPEC.md` hash (to detect unauthorized writes).
+2. **Resolve and Launch** — Resolve the preferred agent and model, sync skills, and launch the assistant subprocess.
+3. **Enforce Commit** — After successful exit (RC=0), check if the relevant doc file is dirty. If so, stage and commit it with a standardized message.
+4. **Trigger Follow-ups** — Launch the appropriate follow-up agents (harmonizer, researcher, compliance) as separate sessions.
+5. **Post-session guards** — Compare `SPEC.md` hash and warn if it was modified outside of `prothon spec`.
+
 **Content constraints** — In addition to edit permissions, PATTERNS.md has content form rules (R25-R26):
 
-- The patterns-writer skill guards must refuse implementation logic in code blocks and limit code examples to function and method signatures (name, parameter types, return types) only.
+- The patterns-writer skill guards must refuse implementation logic in code blocks and limit code examples to function and method signatures (name, parameter types, and return types) only.
 - The compliance checker includes doc-form verification as part of its SPEC compliance pass, checking PATTERNS.md code blocks against R25-R26 and reporting violations as FAIL rows.
 - No runtime enforcement is needed — these are authored content constraints enforced at write-time (patterns-writer guards) and audit-time (compliance checker).
 
 ### Tech Research Contract
 
-The tech-researcher generates reference skills in `.agents/skills/` based on the technology choices in DESIGN.md (serves R38-R41). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
+The tech-researcher generates reference skills in .agents/skills/ based on the technology choices in DESIGN.md (serves R43-46). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
 
 **Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer, refactor, or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
 
@@ -534,3 +591,9 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 | Retry enforcement | Skill prompt reads `max_attempts` from promise file | Programmatic `attempt_task()` with file locking; hybrid skill + validation | Skill prompt already manages the retry loop. Reading `max_attempts` from the promise file is the minimal change. Programmatic enforcement can be added later if stricter guarantees are needed. |
 | PATTERNS.md content form | Signature-only code, natural language rationale | Allow full code examples; no code at all | Signatures communicate interface contracts without prescribing implementation. Full code examples drift from actual implementations and constrain developer judgment. No code at all loses the precision of typed signatures. |
 | Documentation content contracts | Explicit section structure and content rules for all three doc levels | Implicit via skill instructions only; single combined contract | Each doc level has distinct content rules (SPEC: no tech choices; DESIGN: no code; PATTERNS: no implementation logic). Explicit contracts make the hierarchy self-describing and enable compliance checking. Per-level contracts are clearer than a single combined contract. |
+| Compliance Evidence Strategy | Hybrid (Regex, AST, LLM) | Pure LLM; Pure Static | Balances speed and precision with semantic understanding. |
+| Refactor Orchestration | 3-layer Wave (DESIGN -> PATTERNS -> CODE) | Code-first refactor | Maintains documentation as the source of truth for architectural shifts and proactive optimization. |
+| Harmonization Mechanism | Semantic LLM Cross-Referencing | Keyword matching; manual audit | Essential for natural language documentation consistency. |
+| Tech-Researcher Sourcing | uv + Direct Web Fetch | Context7/MCP; Training data only | Version accuracy and cost efficiency without usage limits. |
+| Tech-Researcher Structure | Multi-file Skill Directories | Single SKILL.md | Improves context efficiency via progressive disclosure. |
+| Mutation Testing CI | Non-blocking Asynchronous Audit | Blocking CI gate | Provides feedback without impeding development speed. |

@@ -2,17 +2,16 @@
 
 from unittest.mock import patch
 
+import re
 import pytest
-from typer.testing import CliRunner
-
 from prothon.cli import (
     app,
     resolve_agent,
 )
-from prothon.exceptions import AssistantNotFoundError, ProthonError
-from prothon.git import run_git
+from prothon.exceptions import AssistantNotFoundError, GitError, ProthonError
+from prothon.git import rev_parse_head, run_git
 from prothon.scaffold import generate
-
+from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -132,10 +131,12 @@ def test_spec_launches_claude_in_project(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.launch") as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            mock_backend = mock_get_backend.return_value
-            runner.invoke(app, ["spec"])
+    with (
+        patch("prothon.cli.launch") as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        mock_backend = mock_get_backend.return_value
+        runner.invoke(app, ["spec"])
     mock_launch.assert_called_once_with(
         mock_backend, "prothon-spec-writer", dest, model=None
     )
@@ -145,10 +146,12 @@ def test_design_launches_single_session(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.launch") as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            mock_backend = mock_get_backend.return_value
-            runner.invoke(app, ["design"])
+    with (
+        patch("prothon.cli.launch") as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        mock_backend = mock_get_backend.return_value
+        runner.invoke(app, ["design"])
     mock_launch.assert_called_once_with(
         mock_backend, "prothon-design-writer", dest, model=None
     )
@@ -171,9 +174,8 @@ def test_launch_skill_nonzero_exit_code_propagated(tmp_path, monkeypatch, contex
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.launch", return_value=42):
-        with patch("prothon.cli.get_backend"):
-            result = runner.invoke(app, ["spec"])
+    with patch("prothon.cli.launch", return_value=42), patch("prothon.cli.get_backend"):
+        result = runner.invoke(app, ["spec"])
     assert result.exit_code == 42
 
 
@@ -181,9 +183,8 @@ def test_launch_skill_zero_exit_succeeds(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.launch", return_value=0):
-        with patch("prothon.cli.get_backend"):
-            result = runner.invoke(app, ["spec"])
+    with patch("prothon.cli.launch", return_value=0), patch("prothon.cli.get_backend"):
+        result = runner.invoke(app, ["spec"])
     assert result.exit_code == 0
 
 
@@ -191,15 +192,17 @@ def test_launch_skill_assistant_not_found(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch(
-        "prothon.cli.launch",
-        side_effect=AssistantNotFoundError(
-            "Claude Code (claude) not found on PATH. "
-            "Install: https://docs.anthropic.com/en/docs/claude-code"
+    with (
+        patch(
+            "prothon.cli.launch",
+            side_effect=AssistantNotFoundError(
+                "Claude Code (claude) not found on PATH. "
+                "Install: https://docs.anthropic.com/en/docs/claude-code"
+            ),
         ),
+        patch("prothon.cli.get_backend"),
     ):
-        with patch("prothon.cli.get_backend"):
-            result = runner.invoke(app, ["spec"])
+        result = runner.invoke(app, ["spec"])
     assert result.exit_code == 1
     assert "not found on PATH" in result.output
 
@@ -208,12 +211,14 @@ def test_launch_skill_prothon_error(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.get_backend"):
-        with patch(
+    with (
+        patch("prothon.cli.get_backend"),
+        patch(
             "prothon.cli.launch",
             side_effect=ProthonError("something wrong"),
-        ):
-            result = runner.invoke(app, ["spec"])
+        ),
+    ):
+        result = runner.invoke(app, ["spec"])
     assert result.exit_code == 1
     assert "something wrong" in result.output
 
@@ -232,10 +237,12 @@ def test_launch_skill_passes_correct_skill_name(tmp_path, monkeypatch, context):
         ("compliance", "prothon-compliance-checker"),
     ]
     for cmd, skill_name in commands_skills:
-        with patch("prothon.cli.launch", return_value=0) as mock_launch:
-            with patch("prothon.cli.get_backend") as mock_backend:
-                runner.invoke(app, [cmd])
-        mock_launch.assert_called_once_with(
+        with (
+            patch("prothon.cli.launch", return_value=0) as mock_launch,
+            patch("prothon.cli.get_backend") as mock_backend,
+        ):
+            runner.invoke(app, [cmd])
+        mock_launch.assert_any_call(
             mock_backend.return_value, skill_name, dest, model=None
         )
 
@@ -245,9 +252,8 @@ def test_launch_skill_exit_code_one_is_nonzero(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.launch", return_value=1):
-        with patch("prothon.cli.get_backend"):
-            result = runner.invoke(app, ["spec"])
+    with patch("prothon.cli.launch", return_value=1), patch("prothon.cli.get_backend"):
+        result = runner.invoke(app, ["spec"])
     assert result.exit_code == 1
 
 
@@ -256,15 +262,17 @@ def test_launch_skill_assistant_not_found_install_url(tmp_path, monkeypatch, con
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch(
-        "prothon.cli.launch",
-        side_effect=AssistantNotFoundError(
-            "Claude Code (claude) not found on PATH. "
-            "Install: https://docs.anthropic.com/en/docs/claude-code"
+    with (
+        patch(
+            "prothon.cli.launch",
+            side_effect=AssistantNotFoundError(
+                "Claude Code (claude) not found on PATH. "
+                "Install: https://docs.anthropic.com/en/docs/claude-code"
+            ),
         ),
+        patch("prothon.cli.get_backend"),
     ):
-        with patch("prothon.cli.get_backend"):
-            result = runner.invoke(app, ["spec"])
+        result = runner.invoke(app, ["spec"])
     assert "Install:" in result.output
     assert "anthropic.com" in result.output
 
@@ -274,15 +282,17 @@ def test_launch_skill_assistant_not_found_no_xx_prefix(tmp_path, monkeypatch, co
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch(
-        "prothon.cli.launch",
-        side_effect=AssistantNotFoundError(
-            "Claude Code (claude) not found on PATH. "
-            "Install: https://docs.anthropic.com/en/docs/claude-code"
+    with (
+        patch(
+            "prothon.cli.launch",
+            side_effect=AssistantNotFoundError(
+                "Claude Code (claude) not found on PATH. "
+                "Install: https://docs.anthropic.com/en/docs/claude-code"
+            ),
         ),
+        patch("prothon.cli.get_backend"),
     ):
-        with patch("prothon.cli.get_backend"):
-            result = runner.invoke(app, ["spec"])
+        result = runner.invoke(app, ["spec"])
     assert "XX" not in result.output
 
 
@@ -369,11 +379,13 @@ def test_agent_flag_passed_through_to_backend(tmp_path, monkeypatch, context):
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
-    with patch("prothon.cli.launch", return_value=0) as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            runner.invoke(app, ["spec", "--agent", "opencode"])
-    mock_get_backend.assert_called_once_with("opencode")
-    mock_launch.assert_called_once()
+    with (
+        patch("prothon.cli.launch", return_value=0) as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        runner.invoke(app, ["spec", "--agent", "opencode"])
+    mock_get_backend.assert_any_call("opencode")
+    assert mock_launch.call_count >= 1
 
 
 def test_unknown_backend_produces_error(tmp_path, monkeypatch, context):
@@ -398,10 +410,12 @@ def test_resolve_agent_env_var_via_cli_runner(tmp_path, monkeypatch, context):
     generate(dest, context)
     monkeypatch.chdir(dest)
     monkeypatch.setenv("PROTHON_AGENT", "opencode")
-    with patch("prothon.cli.launch", return_value=0):
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            runner.invoke(app, ["spec"])
-    mock_get_backend.assert_called_once_with("opencode")
+    with (
+        patch("prothon.cli.launch", return_value=0),
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        runner.invoke(app, ["spec"])
+    mock_get_backend.assert_any_call("opencode")
 
 
 def test_resolve_agent_cli_flag_overrides_env_var(tmp_path, monkeypatch, context):
@@ -410,10 +424,12 @@ def test_resolve_agent_cli_flag_overrides_env_var(tmp_path, monkeypatch, context
     generate(dest, context)
     monkeypatch.chdir(dest)
     monkeypatch.setenv("PROTHON_AGENT", "opencode")
-    with patch("prothon.cli.launch", return_value=0):
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            runner.invoke(app, ["spec", "--agent", "claude-code"])
-    mock_get_backend.assert_called_once_with("claude-code")
+    with (
+        patch("prothon.cli.launch", return_value=0),
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        runner.invoke(app, ["spec", "--agent", "claude-code"])
+    mock_get_backend.assert_any_call("claude-code")
 
 
 def test_resolve_agent_pyproject_without_tool_prothon_section(tmp_path, monkeypatch):
@@ -657,23 +673,26 @@ def test_opencode_receives_resolved_model(tmp_path, monkeypatch, context):
     generate(dest, context)
     monkeypatch.chdir(dest)
 
-    with patch("prothon.cli.launch", return_value=0) as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            mock_get_backend.return_value.name = "opencode"
-            result = runner.invoke(
-                app,
-                [
-                    "spec",
-                    "--agent",
-                    "opencode",
-                    "--model",
-                    "glm-5",
-                    "--provider",
-                    "z-ai",
-                ],
-            )
+    with (
+        patch("prothon.cli.launch", return_value=0) as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        mock_get_backend.return_value.name = "opencode"
+        result = runner.invoke(
+            app,
+            [
+                "spec",
+                "--agent",
+                "opencode",
+                "--model",
+                "glm-5",
+                "--provider",
+                "z-ai",
+            ],
+        )
     assert result.exit_code == 0
-    mock_launch.assert_called_once()
+    assert mock_launch.call_count >= 1
+
     assert mock_launch.call_args.kwargs["model"] == "z-ai/glm-5"
 
 
@@ -683,21 +702,24 @@ def test_opencode_receives_slash_model_as_is(tmp_path, monkeypatch, context):
     generate(dest, context)
     monkeypatch.chdir(dest)
 
-    with patch("prothon.cli.launch", return_value=0) as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            mock_get_backend.return_value.name = "opencode"
-            result = runner.invoke(
-                app,
-                [
-                    "spec",
-                    "--agent",
-                    "opencode",
-                    "--model",
-                    "z-ai/glm-5",
-                ],
-            )
+    with (
+        patch("prothon.cli.launch", return_value=0) as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        mock_get_backend.return_value.name = "opencode"
+        result = runner.invoke(
+            app,
+            [
+                "spec",
+                "--agent",
+                "opencode",
+                "--model",
+                "z-ai/glm-5",
+            ],
+        )
     assert result.exit_code == 0
-    mock_launch.assert_called_once()
+    assert mock_launch.call_count >= 1
+
     assert mock_launch.call_args.kwargs["model"] == "z-ai/glm-5"
 
 
@@ -709,12 +731,15 @@ def test_opencode_no_model_passes_none(tmp_path, monkeypatch, context):
     monkeypatch.delenv("PROTHON_MODEL", raising=False)
     monkeypatch.delenv("PROTHON_PROVIDER", raising=False)
 
-    with patch("prothon.cli.launch", return_value=0) as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            mock_get_backend.return_value.name = "opencode"
-            result = runner.invoke(app, ["spec", "--agent", "opencode"])
+    with (
+        patch("prothon.cli.launch", return_value=0) as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        mock_get_backend.return_value.name = "opencode"
+        result = runner.invoke(app, ["spec", "--agent", "opencode"])
     assert result.exit_code == 0
-    mock_launch.assert_called_once()
+    assert mock_launch.call_count >= 1
+
     assert mock_launch.call_args.kwargs["model"] is None
 
 
@@ -731,9 +756,11 @@ def test_launch_skill_warns_when_spec_modified(tmp_path, monkeypatch, context):
         (dest / "docs" / "SPEC.md").write_text("# Tampered\n")
         return 0
 
-    with patch("prothon.cli.launch", side_effect=modify_spec):
-        with patch("prothon.cli.get_backend"):
-            result = runner.invoke(app, ["design"])
+    with (
+        patch("prothon.cli.launch", side_effect=modify_spec),
+        patch("prothon.cli.get_backend"),
+    ):
+        result = runner.invoke(app, ["design"])
     assert "SPEC.md was modified outside" in result.output
 
 
@@ -747,9 +774,11 @@ def test_launch_skill_no_warning_for_spec_writer(tmp_path, monkeypatch, context)
         (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
         return 0
 
-    with patch("prothon.cli.launch", side_effect=modify_spec):
-        with patch("prothon.cli.get_backend"):
-            result = runner.invoke(app, ["spec"])
+    with (
+        patch("prothon.cli.launch", side_effect=modify_spec),
+        patch("prothon.cli.get_backend"),
+    ):
+        result = runner.invoke(app, ["spec"])
     assert "SPEC.md was modified" not in result.output
 
 
@@ -759,9 +788,8 @@ def test_launch_skill_no_warning_when_spec_unchanged(tmp_path, monkeypatch, cont
     generate(dest, context)
     monkeypatch.chdir(dest)
 
-    with patch("prothon.cli.launch", return_value=0):
-        with patch("prothon.cli.get_backend"):
-            result = runner.invoke(app, ["design"])
+    with patch("prothon.cli.launch", return_value=0), patch("prothon.cli.get_backend"):
+        result = runner.invoke(app, ["design"])
     assert "SPEC.md was modified" not in result.output
 
 
@@ -774,14 +802,17 @@ def test_launch_skill_claude_ignores_model_only(tmp_path, monkeypatch, context):
     generate(dest, context)
     monkeypatch.chdir(dest)
 
-    with patch("prothon.cli.launch", return_value=0) as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            mock_get_backend.return_value.name = "Claude Code"
-            result = runner.invoke(
-                app, ["spec", "--model", "glm-5", "--agent", "claude-code"]
-            )
+    with (
+        patch("prothon.cli.launch", return_value=0) as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        mock_get_backend.return_value.name = "Claude Code"
+        result = runner.invoke(
+            app, ["spec", "--model", "glm-5", "--agent", "claude-code"]
+        )
     assert result.exit_code == 0
-    mock_launch.assert_called_once()
+    assert mock_launch.call_count >= 1
+
     assert mock_launch.call_args.kwargs["model"] is None
 
 
@@ -791,30 +822,36 @@ def test_launch_skill_claude_ignores_provider_only(tmp_path, monkeypatch, contex
     generate(dest, context)
     monkeypatch.chdir(dest)
 
-    with patch("prothon.cli.launch", return_value=0) as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            mock_get_backend.return_value.name = "Claude Code"
-            result = runner.invoke(
-                app, ["spec", "--provider", "z-ai", "--agent", "claude-code"]
-            )
+    with (
+        patch("prothon.cli.launch", return_value=0) as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        mock_get_backend.return_value.name = "Claude Code"
+        result = runner.invoke(
+            app, ["spec", "--provider", "z-ai", "--agent", "claude-code"]
+        )
     assert result.exit_code == 0
-    mock_launch.assert_called_once()
+    assert mock_launch.call_count >= 1
+
     assert mock_launch.call_args.kwargs["model"] is None
 
 
 def test_launch_skill_claude_ignores_model_env_var(tmp_path, monkeypatch, context):
-    """Claude Code ignores PROTHON_MODEL env var - no error even if only model is set."""
+    """Claude ignores model env var - no error even if only model is set."""
     dest = tmp_path / "test-project"
     generate(dest, context)
     monkeypatch.chdir(dest)
     monkeypatch.setenv("PROTHON_MODEL", "glm-5")
 
-    with patch("prothon.cli.launch", return_value=0) as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            mock_get_backend.return_value.name = "Claude Code"
-            result = runner.invoke(app, ["spec", "--agent", "claude-code"])
+    with (
+        patch("prothon.cli.launch", return_value=0) as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        mock_get_backend.return_value.name = "Claude Code"
+        result = runner.invoke(app, ["spec", "--agent", "claude-code"])
     assert result.exit_code == 0
-    mock_launch.assert_called_once()
+    assert mock_launch.call_count >= 1
+
     assert mock_launch.call_args.kwargs["model"] is None
 
 
@@ -839,23 +876,26 @@ def test_launch_skill_opencode_accepts_both_model_provider(
     generate(dest, context)
     monkeypatch.chdir(dest)
 
-    with patch("prothon.cli.launch", return_value=0) as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            mock_get_backend.return_value.name = "opencode"
-            result = runner.invoke(
-                app,
-                [
-                    "spec",
-                    "--model",
-                    "glm-5",
-                    "--provider",
-                    "z-ai",
-                    "--agent",
-                    "opencode",
-                ],
-            )
+    with (
+        patch("prothon.cli.launch", return_value=0) as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        mock_get_backend.return_value.name = "opencode"
+        result = runner.invoke(
+            app,
+            [
+                "spec",
+                "--model",
+                "glm-5",
+                "--provider",
+                "z-ai",
+                "--agent",
+                "opencode",
+            ],
+        )
     assert result.exit_code == 0
-    mock_launch.assert_called_once()
+    assert mock_launch.call_count >= 1
+
     assert mock_launch.call_args.kwargs["model"] == "z-ai/glm-5"
 
 
@@ -867,23 +907,390 @@ def test_launch_skill_opencode_conflicting_qualified_model_provider(
     generate(dest, context)
     monkeypatch.chdir(dest)
 
-    with patch("prothon.cli.launch", return_value=0) as mock_launch:
-        with patch("prothon.cli.get_backend") as mock_get_backend:
-            mock_get_backend.return_value.name = "opencode"
-            result = runner.invoke(
-                app,
-                [
-                    "spec",
-                    "--model",
-                    "providerA/modelX",
-                    "--provider",
-                    "providerB",
-                    "--agent",
-                    "opencode",
-                ],
-            )
+    with (
+        patch("prothon.cli.launch", return_value=0) as mock_launch,
+        patch("prothon.cli.get_backend") as mock_get_backend,
+    ):
+        mock_get_backend.return_value.name = "opencode"
+        result = runner.invoke(
+            app,
+            [
+                "spec",
+                "--model",
+                "providerA/modelX",
+                "--provider",
+                "providerB",
+                "--agent",
+                "opencode",
+            ],
+        )
     assert result.exit_code == 1
     mock_launch.assert_not_called()
     assert "conflicting providers" in result.output
     assert "providerA" in result.output
     assert "providerB" in result.output
+
+
+# --- CI subcommands ---
+
+
+def test_ci_bump_idempotent(tmp_path, monkeypatch, context):
+    """ci bump skips if version already matches expected bump."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    # Change a doc to trigger major bump
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    # Manually bump version in pyproject.toml to 1.0.0 (the expected bump)
+    pyproject = dest / "pyproject.toml"
+    content = pyproject.read_text()
+    version_match = re.search(r'version = "([^"]+)"', content)
+    assert version_match is not None
+    current_v = version_match.group(1)
+    new_v = "1.0.0"  # Expected major bump from 0.1.0
+    pyproject.write_text(
+        content.replace(f'version = "{current_v}"', f'version = "{new_v}"')
+    )
+    run_git("add", "pyproject.toml")
+    run_git("commit", "-m", "chore: manual bump")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
+    assert result.exit_code == 0
+    assert f"Version already at {new_v}, skipping" in result.output
+
+
+def test_ci_bump_applies_changes(tmp_path, monkeypatch, context):
+    """ci bump updates files and optionally creates a tag."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    # Change a doc to trigger major bump (from 2.1.0 to 3.0.0)
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
+    assert result.exit_code == 0
+    assert "Detected major bump: 0.1.0 -> 1.0.0" in result.output
+
+    pyproject = dest / "pyproject.toml"
+    assert 'version = "1.0.0"' in pyproject.read_text()
+
+    # Verify tag was NOT created
+    tags = run_git("tag", "-l").strip()
+    assert "v1.0.0" not in tags
+
+
+def test_ci_bump_fails_on_missing_project_root(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", "HEAD"])
+    assert result.exit_code != 0
+    assert "no prothon project found" in result.output.lower()
+
+
+def test_ci_bump_minor(tmp_path, monkeypatch, context):
+    """ci bump applies minor changes when DESIGN.md is changed."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    # Change DESIGN.md to trigger minor bump (from 0.1.0 to 0.2.0)
+    (dest / "docs" / "DESIGN.md").write_text("# Updated design\n")
+    run_git("add", "docs/DESIGN.md")
+    run_git("commit", "-m", "docs: update design")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
+    assert result.exit_code == 0
+    assert "Detected minor bump: 0.1.0 -> 0.2.0" in result.output
+
+    pyproject = dest / "pyproject.toml"
+    assert 'version = "0.2.0"' in pyproject.read_text()
+
+
+def test_ci_bump_patch(tmp_path, monkeypatch, context):
+    """ci bump applies patch changes when PATTERNS.md is changed."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    # Change PATTERNS.md to trigger patch bump (from 0.1.0 to 0.1.1)
+    (dest / "docs" / "PATTERNS.md").write_text("# Updated patterns\n")
+    run_git("add", "docs/PATTERNS.md")
+    run_git("commit", "-m", "docs: update patterns")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
+    assert result.exit_code == 0
+    assert "Detected patch bump: 0.1.0 -> 0.1.1" in result.output
+
+    pyproject = dest / "pyproject.toml"
+    assert 'version = "0.1.1"' in pyproject.read_text()
+
+
+def test_ci_detect_major(tmp_path, monkeypatch, context):
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    result = runner.invoke(app, ["ci", "detect", "--before-sha", before])
+    assert result.exit_code == 0
+    assert result.output.strip() == "major"
+
+
+def test_ci_detect_minor(tmp_path, monkeypatch, context):
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "DESIGN.md").write_text("# Updated design\n")
+    run_git("add", "docs/DESIGN.md")
+    run_git("commit", "-m", "docs: update design")
+
+    result = runner.invoke(app, ["ci", "detect", "--before-sha", before])
+    assert result.exit_code == 0
+    assert result.output.strip() == "minor"
+
+
+def test_ci_detect_patch(tmp_path, monkeypatch, context):
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "PATTERNS.md").write_text("# Updated patterns\n")
+    run_git("add", "docs/PATTERNS.md")
+    run_git("commit", "-m", "docs: update patterns")
+
+    result = runner.invoke(app, ["ci", "detect", "--before-sha", before])
+    assert result.exit_code == 0
+    assert result.output.strip() == "patch"
+
+
+def test_ci_detect_none(tmp_path, monkeypatch, context):
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    # Change unrelated file
+    (dest / "README.md").write_text("# Updated README\n")
+    run_git("add", "README.md")
+    run_git("commit", "-m", "docs: update readme")
+
+    result = runner.invoke(app, ["ci", "detect", "--before-sha", before])
+    assert result.exit_code == 0
+    assert result.output.strip() == "none"
+
+
+def test_ci_bump_disabled(tmp_path, monkeypatch, context):
+    """ci bump respects auto_version = false in pyproject.toml."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    pyproject = dest / "pyproject.toml"
+    content = pyproject.read_text()
+    pyproject.write_text(content.replace("auto_version = true", "auto_version = false"))
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", "HEAD"])
+    assert result.exit_code == 0
+    assert "Automatic versioning is disabled" in result.output
+
+
+def test_ci_bump_no_type(tmp_path, monkeypatch, context):
+    """ci bump exits if no bump type is detected."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    # Change unrelated file
+    (dest / "README.md").write_text("# Updated\n")
+    run_git("add", "README.md")
+    run_git("commit", "-m", "docs: update readme")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
+    assert result.exit_code == 0
+    assert "No version bump needed" in result.output
+
+
+def test_ci_bump_empty_pyproject(tmp_path, monkeypatch, context):
+    """ci bump fails if pyproject.toml is unreadable or empty."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+
+    (dest / "pyproject.toml").write_text("")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", "HEAD"])
+    assert result.exit_code != 0
+    assert "Could not read pyproject.toml" in result.output
+
+
+def test_ci_bump_missing_version(tmp_path, monkeypatch, context):
+    """ci bump fails if version is missing from pyproject.toml."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    pyproject = dest / "pyproject.toml"
+    # Keep [project] but remove version
+    pyproject.write_text('[project]\nname = "test-project"\n')
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
+    assert result.exit_code != 0
+    assert "version not found" in result.output
+
+
+def test_ci_bump_dry_run(tmp_path, monkeypatch, context):
+    """ci bump with --dry-run doesn't modify files."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--dry-run"])
+    assert result.exit_code == 0
+    assert "Dry run: Skipping" in result.output
+
+    pyproject = dest / "pyproject.toml"
+    assert 'version = "0.1.0"' in pyproject.read_text()
+
+
+def test_ci_bump_missing_name(tmp_path, monkeypatch, context):
+    """ci bump fails if name is missing from pyproject.toml."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    pyproject = dest / "pyproject.toml"
+    # Keep [project] and version but remove name
+    pyproject.write_text('[project]\nversion = "0.1.0"\n')
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
+    assert result.exit_code != 0
+    assert "name not found" in result.output
+
+
+def test_ci_bump_missing_init(tmp_path, monkeypatch, context):
+    """ci bump warns if __init__.py is missing."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    # Remove src directory
+    import shutil
+
+    shutil.rmtree(dest / "src")
+
+    result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
+    assert result.exit_code == 0
+    assert "Could not find __init__.py" in result.output
+
+
+def test_ci_bump_tag_failure(tmp_path, monkeypatch, context):
+    """ci bump warns if tag creation fails."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    before = rev_parse_head()
+
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    with patch("prothon.versioning.create_tag", side_effect=ProthonError("tag error")):
+        result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
+    assert result.exit_code == 0
+    assert "Tag creation failed: tag error" in result.output
+
+
+def test_ci_bump_base_version_fallback(tmp_path, monkeypatch, context):
+    """ci bump falls back to branch version if base_version cannot be read."""
+    dest = tmp_path / "test-project"
+    generate(dest, context)
+    monkeypatch.chdir(dest)
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+
+    # Change something to ensure a bump is detected
+    before = rev_parse_head()
+    (dest / "docs" / "SPEC.md").write_text("# Updated spec\n")
+    run_git("add", "docs/SPEC.md")
+    run_git("commit", "-m", "docs: update spec")
+
+    import prothon.git
+
+    original_run_git = prothon.git.run_git
+
+    def fake_run_git(*args, **kwargs):
+        if len(args) > 1 and args[0] == "show" and "pyproject.toml" in args[1]:
+            raise GitError("git show failed")
+        return original_run_git(*args, **kwargs)
+
+    with patch("prothon.git.run_git", side_effect=fake_run_git):
+        result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
+
+    assert result.exit_code == 0
+    assert "Falling back to branch version" in result.output

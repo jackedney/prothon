@@ -242,12 +242,6 @@ def test_check_task_line_count_outside_tolerance(promise_file: Path):
     assert removed_check.status is CheckStatus.FAILED
 
 
-def test_check_task_raises_when_index_out_of_range(promise_file: Path):
-    fake_diff = FakeGitDiff()
-    with pytest.raises(PromiseError):
-        check_task(99, diff=fake_diff, path=promise_file)
-
-
 def test_check_task_empty_file_lists_are_skipped(promise_file: Path):
     """Tasks with empty file lists get SKIP status."""
     fake_diff = FakeGitDiff()
@@ -993,7 +987,7 @@ def test_check_task_out_of_range_shows_valid_range(tmp_path: Path):
     p = Promise(metadata=Metadata(), tasks=[Task(title="T1"), Task(title="T2")])
     path = tmp_path / "p.toml"
     save_promise(p, path)
-    with pytest.raises(PromiseError, match="0-1"):
+    with pytest.raises(PromiseError, match=r"Task index 5 out of range \(0-1\)"):
         check_task(5, diff=FakeGitDiff(), path=path)
 
 
@@ -1001,8 +995,17 @@ def test_check_task_negative_index_rejected(tmp_path: Path):
     p = Promise(metadata=Metadata(), tasks=[Task(title="T")])
     path = tmp_path / "p.toml"
     save_promise(p, path)
-    with pytest.raises(PromiseError):
+    with pytest.raises(PromiseError, match=r"Task index -1 out of range \(0-0\)"):
         check_task(-1, diff=FakeGitDiff(), path=path)
+
+
+def test_check_task_out_of_range_at_boundary(tmp_path: Path):
+    p = Promise(metadata=Metadata(), tasks=[Task(title="T1"), Task(title="T2")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    # index 2 is out of range for 2 tasks (0-1)
+    with pytest.raises(PromiseError, match=r"Task index 2 out of range \(0-1\)"):
+        check_task(2, diff=FakeGitDiff(), path=path)
 
 
 def test_check_task_defaults_to_head_when_no_base_commit(tmp_path: Path):

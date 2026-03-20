@@ -276,11 +276,11 @@ def test_check_task_passes_base_commit_to_diff_provider(tmp_path: Path):
     captured_commits: list[str] = []
 
     class CapturingFakeDiff:
-        def diff_names(self, base_commit: str) -> set[str]:
+        def diff_names(self, base_commit: str, *paths: str) -> set[str]:
             captured_commits.append(base_commit)
             return {"src/app.py"}
 
-        def diff_numstat(self, base_commit: str) -> DiffStat:
+        def diff_numstat(self, base_commit: str, *paths: str) -> DiffStat:
             captured_commits.append(base_commit)
             return {"src/app.py": (50, 5)}
 
@@ -1016,11 +1016,11 @@ def test_check_task_defaults_to_head_when_no_base_commit(tmp_path: Path):
     captured: list[str] = []
 
     class CapturingDiff:
-        def diff_names(self, base_commit: str) -> set[str]:
+        def diff_names(self, base_commit: str, *paths: str) -> set[str]:
             captured.append(base_commit)
             return {"a.py"}
 
-        def diff_numstat(self, base_commit: str) -> DiffStat:
+        def diff_numstat(self, base_commit: str, *paths: str) -> DiffStat:
             captured.append(base_commit)
             return {}
 
@@ -1504,3 +1504,61 @@ def test_check_task_default_diff_is_subprocess(tmp_path: Path):
     with mock_patch("prothon.promise.SubprocessGitDiff", mock_cls):
         check_task(0, path=path)
     mock_cls.assert_called_once()
+
+
+def test_check_task_scopes_diff_to_task_files(tmp_path: Path):
+    """check_task only requests diffs for files relevant to the task."""
+    import os
+
+    old_cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        new_file = Path("src/new.py")
+        new_file.parent.mkdir(parents=True, exist_ok=True)
+        new_file.touch()
+
+        promise = Promise(
+            metadata=Metadata(base_commit="abc1234"),
+            tasks=[
+                Task(
+                    title="Task 1",
+                    files_to_modify=["src/app.py"],
+                    files_to_create=["src/new.py"],
+                    files_to_remove=["src/old.py"],
+                    expected_lines_added=10,
+                    expected_lines_removed=5,
+                ),
+            ],
+        )
+        promise_path = Path("promise.toml")
+        save_promise(promise, promise_path)
+
+        fake_diff = FakeGitDiff(
+            names={"src/app.py"},
+            stats={
+                "src/app.py": (5, 5),
+                "src/new.py": (5, 0),
+                "src/old.py": (0, 0),
+                "unrelated.py": (100, 100),
+            },
+        )
+
+        report = check_task(0, diff=fake_diff, path=promise_path)
+
+        assert report.passed is True
+        # Verify that FakeGitDiff was called with scoped paths
+        assert set(fake_diff.last_diff_names_paths) == {"src/app.py"}
+        # sorted(['src/app.py', 'src/new.py', 'src/old.py'])
+        assert list(fake_diff.last_diff_numstat_paths) == [
+            "src/app.py",
+            "src/new.py",
+            "src/old.py",
+        ]
+
+        # Verify line counts only include task files
+        added_check = next(c for c in report.checks if c.name == "lines_added")
+        assert "actual 10" in added_check.detail  # 5 from app.py + 5 from new.py
+        removed_check = next(c for c in report.checks if c.name == "lines_removed")
+        assert "actual 5" in removed_check.detail  # 5 from app.py
+    finally:
+        os.chdir(old_cwd)

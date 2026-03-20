@@ -17,12 +17,20 @@ class FakeGitDiff:
     ):
         self._names = names or set()
         self._stats = stats or {}
+        self.last_diff_names_paths: tuple[str, ...] = ()
+        self.last_diff_numstat_paths: tuple[str, ...] = ()
 
-    def diff_names(self, base_commit: str) -> set[str]:
-        return self._names
+    def diff_names(self, base_commit: str, *paths: str) -> set[str]:
+        self.last_diff_names_paths = paths
+        if not paths:
+            return self._names
+        return {n for n in self._names if n in paths}
 
-    def diff_numstat(self, base_commit: str) -> DiffStat:
-        return self._stats
+    def diff_numstat(self, base_commit: str, *paths: str) -> DiffStat:
+        self.last_diff_numstat_paths = paths
+        if not paths:
+            return self._stats
+        return {k: v for k, v in self._stats.items() if k in paths}
 
 
 def make_task(

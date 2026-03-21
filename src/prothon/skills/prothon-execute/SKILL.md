@@ -32,7 +32,10 @@ You are stateless between invocations. Determine "what to do next" by inspecting
 4. **Select next phase** — Pick a small, testable chunk of work (3–7 tasks) that moves the project toward alignment. Prioritize foundational dependencies (e.g., data models before CLI).
 5. **Inventory reference skills** — List all skill directories in `.agents/skills/` matching `tech-*`, `style-*`, `optim-*`, and `domain-*`.
 6. **Get HEAD SHA** — Run: `git rev-parse HEAD`.
-7. **Write `docs/change_promise.toml`** — Create this file covering ONLY the selected phase. Every `[[tasks]]` entry MUST include all fields.
+7. **Write `docs/change_promise.toml` (Writing Plans)** — Create this file covering ONLY the selected phase. Break work into bite-sized tasks (2-5 minutes of work each).
+   - Document exactly which files to touch for each task.
+   - Embed complete code concepts or context rather than vague descriptions ("add validation").
+   - DRY. YAGNI. TDD. Every `[[tasks]]` entry MUST include all fields.
 
 ```toml
 [metadata]
@@ -41,8 +44,8 @@ created_at = "<ISO 8601 timestamp>"
 
 [[tasks]]
 title = "Add auth middleware"
-goal = "JWT validation on all protected routes"
-success_criteria = "Requests without valid token return 401"
+goal = "Implement JWT validation on all protected routes. Write failing test, implement minimal code to pass, commit."
+success_criteria = "pytest tests/test_auth.py passes and requests without valid token return 401"
 files_to_create = ["src/auth.py", "tests/test_auth.py"]
 files_to_modify = ["src/app.py"]
 files_to_remove = []
@@ -61,54 +64,25 @@ attempts = 0
 
 ---
 
-## Phase 2: Execute (Ralph-Style Loops)
+## Phase 2: Execute (Subagent-Driven Development)
 
 For each task in the promise (respecting dependency order):
 
-1. **Orchestrate Retries** — While `attempts < max_attempts` and task is not `completed`:
+1. **Orchestrate Retries & Two-Stage Review** — While `attempts < max_attempts` and task is not `completed`:
    a) **Record attempt** — Run: `uvx prothon promise record-attempt {task_index}` (counts every attempt, including the one about to start).
-   b) **Launch Subagent** — Spawn a **fresh** Claude/OpenCode instance (type: general-purpose) with the "Task Implementation Prompt" below.
-   c) **Monitor Result**:
-      - If subagent reports **SUCCESS** (task marked complete): Proceed to next task.
-      - If subagent reports **FAILURE**:
-        - If `attempts >= max_attempts`, report failure to user and ask skip/retry/abort.
-        - Otherwise, loop back to step (a) to spawn a **fresh** instance with the same goal + failure context.
+   b) **Launch Implementer Subagent** — Spawn a **fresh** Claude/OpenCode instance (type: general-purpose) using `./implementer-prompt.md`. Let it implement, test, commit, and self-review. If it asks questions before implementing, answer them.
+   c) **Launch Spec Reviewer Subagent** — Once the implementer finishes, spawn a **fresh** instance using `./spec-reviewer-prompt.md` to confirm the code matches the specification.
+      - If it reports gaps/issues, send the feedback back to the **Implementer Subagent** to fix. Re-review until approved.
+   d) **Launch Code Quality Reviewer Subagent** — Once spec compliance is approved, spawn a **fresh** instance using `./code-quality-reviewer-prompt.md`.
+      - If it reports issues, send the feedback back to the **Implementer Subagent** to fix. Re-review until approved.
+   e) **Monitor Result**:
+      - If all reviewers approve and verifications pass (task marked complete): Proceed to next task.
+      - If the process fails and `attempts >= max_attempts`: report failure to user and ask skip/retry/abort.
+      - Otherwise, loop back to step (a) to start a new attempt.
 
 2. **Parallelism** — Independent tasks can run in parallel if they touch different files.
 
-### Task Implementation Prompt
-
-```text
-You are implementing a single task with fresh context. You MUST close the session on completion.
-
-1. LOAD CONTEXT:
-   - Read these doc sections: {doc_sections}
-   - Activate these reference skills: {skill_names}
-   - Read these context files: {context_files}
-
-2. IMPLEMENT:
-   - Goal: {goal}
-   - Files: Create {files_to_create}, Modify {files_to_modify}, Remove {files_to_remove}
-   - Success criteria: {success_criteria}
-
-3. VERIFY:
-   a) Stage selectively by explicit path:
-      - Stage modified files: git add {files_to_modify}
-      - Stage new files: git add {files_to_create}
-      - Remove deleted files: git rm {files_to_remove}
-   b) Type checking: Run `uvx ty check src/ tests/` and fix ALL errors and warnings before proceeding. ty errors are NOT optional — they indicate real type safety issues that must be resolved. Do not suppress warnings or skip this step.
-   c) Quality gate: Run `pre-commit run --all-files --show-diff-on-failure`
-   d) If hooks auto-fixed files, re-stage the specific files and re-run pre-commit once. If still failing, EXIT with FAILURE.
-   e) Commit: git commit -m "feat: {title}"
-   f) Final check: Run `uvx prothon promise check {task_index}`
-
-4. EXIT:
-   - If `promise check` passed:
-     - Run: `uvx prothon promise complete {task_index}`
-     - Report SUCCESS and close session.
-   - If any step failed:
-     - Report FAILURE with context on what went wrong and close session.
-```
+*(The prompts `implementer-prompt.md`, `spec-reviewer-prompt.md`, and `code-quality-reviewer-prompt.md` are located in this skill directory.)*
 
 ---
 

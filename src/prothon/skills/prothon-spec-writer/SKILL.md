@@ -31,10 +31,14 @@ Your first response must be EXACTLY:
 
 1. **Wait for response** — Do nothing until the user describes their vision.
 2. **Explore context** — ONLY after the user responds, read `src/` and existing docs to understand current state.
-3. **Ask clarifying questions** — One topic at a time. Start with open-ended questions until you understand the domain well enough to offer meaningful choices. Only then shift to multiple-choice to narrow down specifics. Do NOT offer multiple-choice options when you lack context to make the options representative — bad options anchor the conversation in the wrong direction. **STOP and wait for the user's response before asking the next question.** Do NOT batch multiple topics into one message.
+3. **Ask clarifying questions (Brainstorming)** — One topic at a time. Start with open-ended questions until you understand the domain well enough to offer meaningful choices. Only then shift to multiple-choice to narrow down specifics. Do NOT offer multiple-choice options when you lack context to make the options representative — bad options anchor the conversation in the wrong direction.
+   - Propose 2-3 different approaches with trade-offs.
+   - Present options conversationally with your recommendation and reasoning.
+   - **STOP and wait for the user's response before asking the next question.** Do NOT batch multiple topics into one message.
 4. **Sections (One-at-a-time)** — Work through: (a) Purpose, (b) Requirements, (c) Constraints, (d) Out of Scope.
-   - Present ONE section.
-   - **STOP** and wait for feedback.
+   - Present ONE section in small, digestible chunks (200-300 words).
+   - **STOP** and wait for feedback (incremental validation).
+   - Be flexible - go back and clarify if something doesn't make sense.
    - Revise until approved, then move to next.
 
 5. **Summarize** — Present complete spec for final confirmation.

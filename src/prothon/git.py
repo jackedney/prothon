@@ -15,9 +15,9 @@ DiffStat = dict[str, tuple[int, int]]
 class GitDiffProvider(Protocol):
     """Protocol for git diff data sources -- real or fake for testing."""
 
-    def diff_names(self, base_commit: str) -> set[str]: ...
+    def diff_names(self, base_commit: str, *paths: str) -> set[str]: ...
 
-    def diff_numstat(self, base_commit: str) -> DiffStat: ...
+    def diff_numstat(self, base_commit: str, *paths: str) -> DiffStat: ...
 
 
 def run_git(*args: str, cwd: Path | None = None) -> str:
@@ -51,18 +51,24 @@ def run_git(*args: str, cwd: Path | None = None) -> str:
 class SubprocessGitDiff:
     """Real git diff provider that shells out to git CLI."""
 
-    def diff_names(self, base_commit: str) -> set[str]:
+    def diff_names(self, base_commit: str, *paths: str) -> set[str]:
         """Return set of file paths changed since *base_commit*."""
-        output = run_git("diff", base_commit, "--name-only")
+        cmd = ["diff", base_commit, "--name-only"]
+        if paths:
+            cmd.extend(["--", *paths])
+        output = run_git(*cmd)
         return {line for line in output.strip().splitlines() if line.strip()}
 
-    def diff_numstat(self, base_commit: str) -> DiffStat:
+    def diff_numstat(self, base_commit: str, *paths: str) -> DiffStat:
         """Return ``{filepath: (lines_added, lines_removed)}`` since *base_commit*.
 
         Binary files (reported as ``-`` by git) are skipped.
         """
         stats: DiffStat = {}
-        output = run_git("diff", base_commit, "--numstat")
+        cmd = ["diff", base_commit, "--numstat"]
+        if paths:
+            cmd.extend(["--", *paths])
+        output = run_git(*cmd)
         for line in output.strip().splitlines():
             parts = line.split("\t")
             if len(parts) == 3:

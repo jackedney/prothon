@@ -320,11 +320,12 @@ def _check_line_counts(
     task: Task, diff: GitDiffProvider, base_commit: str
 ) -> list[CheckResult]:
     """Check added/removed line counts against tolerances."""
-    add_files = set(task.files_to_create + task.files_to_modify)
-    remove_files = set(task.files_to_modify + task.files_to_remove)
+    add_files = {*task.files_to_create, *task.files_to_modify}
+    remove_files = {*task.files_to_modify, *task.files_to_remove}
+    all_task_files = add_files | remove_files
 
     results: list[CheckResult] = []
-    numstat = diff.diff_numstat(base_commit)
+    numstat = diff.diff_numstat(base_commit, *sorted(all_task_files))
 
     if not add_files or task.expected_lines_added <= 0:
         results.append(
@@ -413,7 +414,7 @@ def check_task(
 
     # Check files_to_modify
     if task.files_to_modify:
-        diff_names = diff.diff_names(base_commit)
+        diff_names = diff.diff_names(base_commit, *task.files_to_modify)
         modified = [f for f in task.files_to_modify if f in diff_names]
         all_modified = len(modified) == len(task.files_to_modify)
         report.checks.append(

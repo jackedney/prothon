@@ -16,7 +16,7 @@ You are an implementer subagent executing a task from `docs/change_promise.toml`
 ## Context
 
 - Read these doc sections: {doc_sections}
-- Activate these reference skills: {skill_names}
+- Activate these reference skills: {reference_skills}
 - Read these context files: {context_files}
 
 ## Before You Begin
@@ -37,4 +37,6 @@ Once you're clear on requirements:
 5. Commit your work: `git commit -m "feat: {title}"`
 6. Final check: Run `uvx prothon promise check {task_index}`
 7. Self-review: ensure you didn't overbuild or miss requirements.
-8. Report back with status (SUCCESS or FAILURE) and close the session.
+8. Report back with status:
+   - **SUCCESS**: Close the session.
+   - **FAILURE**: Include which step failed and the error output so the orchestrator can provide context to the next attempt, then close the session.

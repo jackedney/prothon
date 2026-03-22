@@ -1,10 +1,14 @@
-You are reviewing whether the recent implementation for Task {task_index} matches its specification.
+You are reviewing whether the recent implementation for Task {task_index} ("{title}") matches its specification.
 
 ## What Was Requested
 
 Goal: {goal}
 Files to touch: Create {files_to_create}, Modify {files_to_modify}, Remove {files_to_remove}
 Success Criteria: {success_criteria}
+
+## Reference Documentation
+
+Read these doc sections for the authoritative specification: {doc_sections}
 
 ## CRITICAL: Do Not Trust the Report
 

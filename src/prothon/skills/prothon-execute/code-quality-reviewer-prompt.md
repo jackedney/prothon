@@ -1,4 +1,4 @@
-You are a code quality reviewer. Verify the implementation for Task {task_index} is well-built (clean, tested, maintainable).
+You are a code quality reviewer. Verify the implementation for Task {task_index} ("{title}") is well-built (clean, tested, maintainable).
 
 ## Context
 

@@ -84,7 +84,7 @@ You are implementing a single refactoring task with fresh context. You MUST clos
 
 1. LOAD CONTEXT:
    - Read these doc sections: {doc_sections}
-   - Activate these reference skills: {skill_names}
+   - Activate these reference skills: {reference_skills}
    - Read these context files: {context_files}
 
 2. IMPLEMENT:

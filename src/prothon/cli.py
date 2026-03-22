@@ -9,7 +9,7 @@ from typing import Annotated
 
 import typer
 
-from prothon import promise, versioning
+from prothon import promise, promise_verify, versioning
 from prothon.assistant import _BACKENDS, get_backend, launch
 from prothon.compliance import run_static_checks
 from prothon.config import (
@@ -363,7 +363,7 @@ def promise_check(
     root = _require_project_root()
     promise_path = _require_promise_file(root)
     try:
-        report = promise.check_task(task_index, path=promise_path)
+        report = promise_verify.check_task(task_index, path=promise_path)
     except ProthonError as exc:
         typer.echo(f"Error: {exc}")
         raise typer.Exit(1) from exc

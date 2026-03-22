@@ -9,7 +9,7 @@ from rich.text import Text
 
 from prothon import promise
 from prothon.compliance import ComplianceReport
-from prothon.promise import CheckStatus, TaskCheckReport
+from prothon.promise_verify import CheckStatus, TaskCheckReport
 
 console = Console()
 

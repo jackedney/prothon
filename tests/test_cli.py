@@ -968,3 +968,106 @@ def test_ci_bump_base_version_fallback(tmp_path, monkeypatch, context):
 
     assert result.exit_code == 0
     assert "Falling back to branch version" in result.output
+
+
+# --- _enforce_commit ---
+
+
+def test_enforce_commit_dirty_doc_calls_commit(tmp_path, monkeypatch):
+    """Doc skill with dirty file triggers commit_file."""
+    from prothon.cli import _enforce_commit
+
+    doc = tmp_path / "docs" / "SPEC.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("# Spec\n")
+
+    fake_commit = Recorder()
+    monkeypatch.setattr("prothon.git.is_dirty", lambda path, cwd: True)
+    monkeypatch.setattr("prothon.git.commit_file", fake_commit)
+
+    _enforce_commit("prothon-spec-writer", tmp_path)
+
+    assert fake_commit.call_count == 1
+    assert fake_commit.last_args[0] == doc.relative_to(tmp_path)
+    assert "SPEC.md" in fake_commit.last_args[1]
+
+
+def test_enforce_commit_clean_doc_no_commit(tmp_path, monkeypatch):
+    """Doc skill with clean file does not commit."""
+    from prothon.cli import _enforce_commit
+
+    doc = tmp_path / "docs" / "SPEC.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("# Spec\n")
+
+    fake_commit = Recorder()
+    monkeypatch.setattr("prothon.git.is_dirty", lambda path, cwd: False)
+    monkeypatch.setattr("prothon.git.commit_file", fake_commit)
+
+    _enforce_commit("prothon-spec-writer", tmp_path)
+
+    assert fake_commit.call_count == 0
+
+
+def test_enforce_commit_non_doc_skill_no_commit(tmp_path, monkeypatch):
+    """Non-doc skill (execute) does not attempt any commit."""
+    from prothon.cli import _enforce_commit
+
+    fake_is_dirty = Recorder(return_value=False)
+    monkeypatch.setattr("prothon.git.is_dirty", fake_is_dirty)
+    monkeypatch.setattr("prothon.git.commit_file", Recorder())
+
+    _enforce_commit("prothon-execute", tmp_path)
+
+    # is_dirty should never be called for non-doc skills
+    assert fake_is_dirty.call_count == 0
+
+
+def test_enforce_commit_unknown_skill_noop(tmp_path, monkeypatch):
+    """Unknown skill name is a graceful no-op."""
+    from prothon.cli import _enforce_commit
+
+    # Should not raise or call any git functions
+    _enforce_commit("totally-unknown-skill", tmp_path)
+
+
+# --- _trigger_follow_ups ---
+
+
+def test_trigger_follow_ups_spec_writer_launches_harmonizer(tmp_path, monkeypatch):
+    """spec-writer triggers doc-harmonizer follow-up."""
+    from prothon.cli import _trigger_follow_ups
+
+    fake_launch = Recorder()
+    monkeypatch.setattr("prothon.cli._launch_skill", fake_launch)
+
+    _trigger_follow_ups("prothon-spec-writer", tmp_path, agent="claude-code")
+
+    assert fake_launch.call_count == 1
+    assert fake_launch.last_args[0] == "prothon-doc-harmonizer"
+    assert fake_launch.last_args[1] == tmp_path
+    assert fake_launch.last_kwargs.get("run_follow_ups") is False
+
+
+def test_trigger_follow_ups_design_writer_no_followup(tmp_path, monkeypatch):
+    """design-writer does not trigger any follow-up (harmonizer is in-skill)."""
+    from prothon.cli import _trigger_follow_ups
+
+    fake_launch = Recorder()
+    monkeypatch.setattr("prothon.cli._launch_skill", fake_launch)
+
+    _trigger_follow_ups("prothon-design-writer", tmp_path)
+
+    assert fake_launch.call_count == 0
+
+
+def test_trigger_follow_ups_execute_no_followup(tmp_path, monkeypatch):
+    """execute does not trigger any follow-up."""
+    from prothon.cli import _trigger_follow_ups
+
+    fake_launch = Recorder()
+    monkeypatch.setattr("prothon.cli._launch_skill", fake_launch)
+
+    _trigger_follow_ups("prothon-execute", tmp_path)
+
+    assert fake_launch.call_count == 0

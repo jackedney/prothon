@@ -120,14 +120,7 @@ def test_check_patterns_compliance_with_violations(tmp_path: Path):
     docs.mkdir()
     # Code-dominant doc with implementation logic (violates R25 and R26)
     (docs / "PATTERNS.md").write_text(
-        "# P\n"
-        "```python\n"
-        "import os\n"
-        "x = 1 + 2\n"
-        "y = x * 3\n"
-        "z = y + x\n"
-        "a = z * 2\n"
-        "```\n"
+        "# P\n```python\nimport os\nx = 1 + 2\ny = x * 3\nz = y + x\na = z * 2\n```\n"
     )
 
     findings = _check_patterns_compliance(tmp_path)

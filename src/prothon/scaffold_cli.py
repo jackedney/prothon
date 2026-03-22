@@ -49,7 +49,8 @@ def new_project(destination: str = ".") -> None:
     scaffold.generate(dest, data)
     typer.echo(f"\nProject created at {dest}")
     typer.echo("Next steps:")
-    typer.echo(f"  cd {dest.name}")
+    if not dest.samefile(Path.cwd()):
+        typer.echo(f"  cd {dest}")
     typer.echo("  uv sync")
     typer.echo("  uvx prothon spec       # Write requirements")
     typer.echo("  uvx prothon design     # Choose architecture")
@@ -67,6 +68,9 @@ def init_project(cwd: Path | None = None) -> None:
         run_git("rev-parse", "--is-inside-work-tree", cwd=root)
     except GitError:
         typer.echo("Error: current directory is not a git repository", err=True)
+        raise typer.Exit(code=1)
+    except OSError:
+        typer.echo("Error: git is not installed or not found on PATH", err=True)
         raise typer.Exit(code=1)
 
     # R12: Guard: must not already be initialized
@@ -99,10 +103,10 @@ def _collect_project_details() -> dict[str, str]:
     description = typer.prompt("Description")
     author_name = typer.prompt("Author name")
 
-    author_email = typer.prompt("Author email")
+    author_email = typer.prompt("Author email", default="")
     while author_email and "@" not in author_email:
         typer.echo("Must be a valid email address (e.g. user@example.com)")
-        author_email = typer.prompt("Author email")
+        author_email = typer.prompt("Author email", default="")
 
     python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
     while python_version not in ("3.11", "3.12", "3.13"):

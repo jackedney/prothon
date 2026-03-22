@@ -95,11 +95,30 @@ def _collect_project_details() -> dict[str, str]:
         Dict with module_name, description, author_name, author_email,
         python_version, and license.
     """
+    module_name = typer.prompt("Module name")
+    description = typer.prompt("Description")
+    author_name = typer.prompt("Author name")
+
+    author_email = typer.prompt("Author email")
+    while author_email and "@" not in author_email:
+        typer.echo("Must be a valid email address (e.g. user@example.com)")
+        author_email = typer.prompt("Author email")
+
+    python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
+    while python_version not in ("3.11", "3.12", "3.13"):
+        typer.echo("Must be 3.11, 3.12, or 3.13")
+        python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
+
+    license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
+    while license_choice not in ("MIT", "Apache-2.0", "None"):
+        typer.echo("Must be MIT, Apache-2.0, or None")
+        license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
+
     return {
-        "module_name": typer.prompt("Module name"),
-        "description": typer.prompt("Description"),
-        "author_name": typer.prompt("Author name"),
-        "author_email": typer.prompt("Author email"),
-        "python_version": typer.prompt("Python version", default="3.12"),
-        "license": typer.prompt("License", default="MIT"),
+        "module_name": module_name,
+        "description": description,
+        "author_name": author_name,
+        "author_email": author_email,
+        "python_version": python_version,
+        "license": license_choice,
     }

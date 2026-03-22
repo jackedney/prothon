@@ -20,7 +20,7 @@ from prothon.config import (
     resolve_agent,
     resolve_model,
 )
-from prothon.exceptions import ProthonError
+from prothon.exceptions import GitError, ProthonError
 from prothon.project import find_project_root
 from prothon import scaffold_cli
 from prothon.ui import (
@@ -466,13 +466,21 @@ def ci_bump(
     # Read base version from before_sha
     from prothon.git import run_git
 
+    import tomlkit
+    import tomlkit.exceptions
+
     try:
         base_toml_content = run_git("show", f"{before_sha}:pyproject.toml", cwd=root)
-        import tomlkit
-
         base_doc = tomlkit.parse(base_toml_content)
         base_version = nested_get(base_doc, "project", "version")
-    except Exception as exc:
+    except (
+        GitError,
+        FileNotFoundError,
+        tomlkit.exceptions.TOMLKitError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
         typer.echo(f"Warning: Could not read pyproject.toml from {before_sha}: {exc}")
         base_version = None
 

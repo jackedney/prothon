@@ -480,15 +480,28 @@ def check_agent_files(root: Path) -> list[CheckResult]:
             results.append(CheckResult(req, CheckStatus.FAIL, evidence=filename))
             continue
 
-        if filename != "AGENTS.md" and not file_path.is_symlink():
-            results.append(
-                CheckResult(
-                    req,
-                    CheckStatus.FAIL,
-                    evidence=filename,
-                    rationale=f"{filename} must be a symlink to AGENTS.md.",
+        if filename != "AGENTS.md":
+            if not file_path.is_symlink():
+                results.append(
+                    CheckResult(
+                        req,
+                        CheckStatus.FAIL,
+                        evidence=filename,
+                        rationale=f"{filename} must be a symlink to AGENTS.md.",
+                    )
                 )
-            )
-        else:
-            results.append(CheckResult(req, CheckStatus.PASS, evidence=str(file_path)))
+                continue
+            target = file_path.resolve()
+            expected = (root / "AGENTS.md").resolve()
+            if target != expected:
+                results.append(
+                    CheckResult(
+                        req,
+                        CheckStatus.FAIL,
+                        evidence=filename,
+                        rationale=f"{filename} symlink points to {target}, expected {expected}.",
+                    )
+                )
+                continue
+        results.append(CheckResult(req, CheckStatus.PASS, evidence=str(file_path)))
     return results

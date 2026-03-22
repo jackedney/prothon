@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 
 from prothon import scaffold
-from prothon.exceptions import ProthonError
+from prothon.exceptions import GitError, ProthonError
 
 
 def new_project(destination: str = ".") -> None:
@@ -65,7 +65,7 @@ def init_project(cwd: Path | None = None) -> None:
     # R11: Verify git repository before anything else
     try:
         run_git("rev-parse", "--is-inside-work-tree", cwd=root)
-    except Exception:
+    except GitError:
         typer.echo("Error: current directory is not a git repository", err=True)
         raise typer.Exit(code=1)
 

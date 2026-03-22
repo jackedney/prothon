@@ -13,7 +13,7 @@ from prothon.exceptions import ProthonError
 from prothon.project import find_project_root
 
 
-def _file_hash(path: Path) -> str | None:
+def file_hash(path: Path) -> str | None:
     """Return SHA-256 hex digest of a file, or None if unreadable."""
     try:
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -21,7 +21,7 @@ def _file_hash(path: Path) -> str | None:
         return None
 
 
-def _find_init_path(root: Path, project_name: str, module_name: str) -> Path | None:
+def find_init_path(root: Path, project_name: str, module_name: str) -> Path | None:
     """Locate the package __init__.py under src/."""
     for name in (module_name, project_name):
         candidate = root / "src" / name / "__init__.py"

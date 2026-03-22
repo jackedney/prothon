@@ -144,11 +144,11 @@ Functions use production defaults but accept overrides so tests never touch real
 
 ### UI Formatting Separation
 
-The visual representation of data is decoupled from the command logic. Domain objects (e.g., `Promise`, `TaskCheckReport`) are passed to specialized rendering helpers in `cli.py` that return `rich` objects (Tables, Panels, etc.). Command functions orchestrate logic and use `console.print()` to display these pre-rendered objects, ensuring consistency and testability of the UI layer.
+The visual representation of data is decoupled from the command logic. Domain objects (e.g., `Promise`, `TaskCheckReport`) are passed to specialized rendering helpers in `ui.py` (`render_plan`, `render_status`, `render_check_report`) that return `rich` objects (Tables, Panels, etc.). Command functions orchestrate logic and use `console.print()` to display these pre-rendered objects, ensuring consistency and testability of the UI layer.
 
 ### Unified Configuration Resolution
 
-Configuration values (agent, model, provider) are resolved through a centralized 5-level precedence chain: CLI flag > environment variable > `pyproject.toml` > global config > default. This resolution respects `$XDG_CONFIG_HOME` (defaulting to `~/.config/prothon/config.toml`) and is encapsulated in helper functions within `cli.py` to ensure all commands follow the same priority rules.
+Configuration values (agent, model, provider) are resolved through a centralized 5-level precedence chain: CLI flag > environment variable > `pyproject.toml` > global config > default. This resolution respects `$XDG_CONFIG_HOME` (defaulting to `~/.config/prothon/config.toml`) and is encapsulated in helper functions within `config.py` (`resolve_agent()`, `resolve_model()`) to ensure all commands follow the same priority rules.
 
 ## Skill Authoring Patterns
 

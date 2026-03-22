@@ -13,8 +13,8 @@ from prothon import promise, promise_verify, versioning
 from prothon.assistant import _BACKENDS, get_backend, launch
 from prothon.compliance import run_static_checks
 from prothon.config import (
-    _file_hash,
-    _find_init_path,
+    file_hash,
+    find_init_path,
     nested_get,
     read_toml,
     resolve_agent,
@@ -188,7 +188,7 @@ def _launch_skill(
     """Resolve backend, launch skill, handle errors, and enforce lifecycle."""
     spec_path = cwd / "docs" / "SPEC.md"
     guard_spec = skill_name != Skill.SPEC_WRITER
-    spec_hash = _file_hash(spec_path) if guard_spec else None
+    spec_hash = file_hash(spec_path) if guard_spec else None
 
     try:
         name = resolve_agent(agent)
@@ -199,7 +199,7 @@ def _launch_skill(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
 
-    if guard_spec and _file_hash(spec_path) != spec_hash:
+    if guard_spec and file_hash(spec_path) != spec_hash:
         typer.echo(
             "Warning: docs/SPEC.md was modified outside of 'prothon spec'. "
             "Only the spec-writer should modify SPEC.md.",
@@ -504,7 +504,7 @@ def ci_bump(
         raise typer.Exit(1)
 
     module_name = project_name.replace("-", "_")
-    init_path = _find_init_path(root, project_name, module_name)
+    init_path = find_init_path(root, project_name, module_name)
 
     if init_path:
         versioning.update_init_version(init_path, expected_version)

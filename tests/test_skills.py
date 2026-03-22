@@ -25,6 +25,9 @@ def test_sync_skills_creates_symlinks(tmp_path):
     assert target.is_dir()
     bundled = bundled_skills_dir()
 
+    # Guard: bundled dir must contain at least one skill directory
+    assert any(entry.is_dir() for entry in bundled.iterdir())
+
     # Verify each bundled skill directory is symlinked
     for skill_dir in bundled.iterdir():
         if skill_dir.is_dir():
@@ -69,6 +72,22 @@ def test_sync_skills_cleans_up_existing_directories(tmp_path):
     assert not (dummy_dir / "marker.txt").exists()
 
 
+def test_sync_skills_replaces_regular_files(tmp_path):
+    """sync_skills() must replace pre-existing regular files with symlinks."""
+    target = tmp_path / "target_skills"
+    target.mkdir()
+
+    bundled = bundled_skills_dir()
+    first_skill = next(s for s in bundled.iterdir() if s.is_dir())
+    regular_file = target / first_skill.name
+    regular_file.write_text("marker content")
+
+    sync_skills(target=target)
+
+    assert regular_file.is_symlink()
+    assert regular_file.resolve() == first_skill.resolve()
+
+
 @patch("pathlib.Path.home")
 def test_sync_skills_default_target(mock_home, tmp_path):
     """sync_skills() must use ~/.claude/skills/ by default."""
@@ -83,5 +102,10 @@ def test_sync_skills_default_target(mock_home, tmp_path):
 
     expected_target = fake_home / ".claude" / "skills"
     assert expected_target.is_dir()
-    # Check if at least one symlink exists there
-    assert any(expected_target.iterdir())
+    # Verify symlinks were created and resolve to real skill directories
+    entries = list(expected_target.iterdir())
+    assert entries, "expected at least one entry in skills directory"
+    for entry in entries:
+        assert entry.is_symlink()
+        assert entry.resolve().exists()
+        assert entry.resolve().is_dir()

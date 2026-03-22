@@ -32,11 +32,14 @@ def render_plan(p: promise.Promise) -> Table:
     for i, task in enumerate(p.tasks):
         files_parts: list[str] = []
         if task.files_to_create:
-            files_parts.append(f"[green]+[/green] {', '.join(task.files_to_create)}")
+            escaped = ", ".join(escape(f) for f in task.files_to_create)
+            files_parts.append(f"[green]+[/green] {escaped}")
         if task.files_to_modify:
-            files_parts.append(f"[yellow]~[/yellow] {', '.join(task.files_to_modify)}")
+            escaped = ", ".join(escape(f) for f in task.files_to_modify)
+            files_parts.append(f"[yellow]~[/yellow] {escaped}")
         if task.files_to_remove:
-            files_parts.append(f"[red]-[/red] {', '.join(task.files_to_remove)}")
+            escaped = ", ".join(escape(f) for f in task.files_to_remove)
+            files_parts.append(f"[red]-[/red] {escaped}")
         files_cell = "\n".join(files_parts) if files_parts else "-"
 
         lines_cell = f"+{task.expected_lines_added} / -{task.expected_lines_removed}"

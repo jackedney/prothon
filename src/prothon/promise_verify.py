@@ -167,7 +167,16 @@ def check_task(
     promise: Promise | None = None,
 ) -> TaskCheckReport:
     """Check a single task's promises against git reality."""
+    from prothon.promise import PROMISE_PATH
+
     diff, promise = _validate_params(task_index, diff, path, promise)
+
+    promise_path = path if path is not None else PROMISE_PATH
+    base_path = (
+        promise_path.parent.parent
+        if promise_path.parent.name == "docs"
+        else promise_path.parent
+    )
 
     base_commit = promise.metadata.base_commit or "HEAD"
     task = promise.tasks[task_index]
@@ -176,7 +185,7 @@ def check_task(
     )
 
     # Check files
-    report.checks.append(_check_files_to_create(task))
+    report.checks.append(_check_files_to_create(task, base_path))
     report.checks.append(_check_files_to_modify(task, diff, base_commit))
     report.checks.append(_check_files_to_remove(task))
 
@@ -186,7 +195,7 @@ def check_task(
     return report
 
 
-def _check_files_to_create(task: Task) -> CheckResult:
+def _check_files_to_create(task: Task, base_path: Path) -> CheckResult:
     """Verify that all files declared for creation actually exist."""
     if not task.files_to_create:
         return CheckResult(
@@ -194,7 +203,11 @@ def _check_files_to_create(task: Task) -> CheckResult:
             status=CheckStatus.SKIPPED,
             detail="none declared",
         )
-    existing = [f for f in task.files_to_create if Path(f).exists()]
+    existing = [
+        f
+        for f in task.files_to_create
+        if (Path(f) if Path(f).is_absolute() else base_path / f).exists()
+    ]
     all_exist = len(existing) == len(task.files_to_create)
     return CheckResult(
         name="files_to_create",

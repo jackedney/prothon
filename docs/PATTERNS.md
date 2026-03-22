@@ -142,13 +142,13 @@ Orchestrated tasks follow an iterative **Plan -> Act -> Validate** cycle. Each t
 
 Functions use production defaults but accept overrides so tests never touch real state and never need monkeypatching.
 
-### XDG_CONFIG_HOME Resolution
+### UI Formatting Separation
 
-Backends and configuration readers respect `$XDG_CONFIG_HOME` with a `~/.config` fallback. Empty or relative values fall back to `~/.config`.
+The visual representation of data is decoupled from the command logic. Domain objects (e.g., `Promise`, `TaskCheckReport`) are passed to specialized rendering helpers in `cli.py` that return `rich` objects (Tables, Panels, etc.). Command functions orchestrate logic and use `console.print()` to display these pre-rendered objects, ensuring consistency and testability of the UI layer.
 
-### Fallthrough Precedence Chain
+### Unified Configuration Resolution
 
-Configuration resolution (agent, model, provider) implements a multi-level precedence chain: CLI flag > env var > pyproject.toml > global config > default. The first non-empty value wins.
+Configuration values (agent, model, provider) are resolved through a centralized 5-level precedence chain: CLI flag > environment variable > `pyproject.toml` > global config > default. This resolution respects `$XDG_CONFIG_HOME` (defaulting to `~/.config/prothon/config.toml`) and is encapsulated in helper functions within `cli.py` to ensure all commands follow the same priority rules.
 
 ## Skill Authoring Patterns
 
@@ -174,9 +174,9 @@ Non-doc agents explicitly declare `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PA
 
 ## Error Handling
 
-### Custom Exception Hierarchy
+### Centralized CLI Error Boundary
 
-A flat hierarchy under `ProthonError` in `exceptions.py` provides domain-specific failure modes. `cli.py` serves as the single boundary for catching these and presenting formatted messages.
+The `cli.py` module acts as the single catch-all boundary for `ProthonError` and its domain-specific subclasses. Library modules and domain logic are responsible only for raising these exceptions. The CLI catches them at the command function entry point, presents a cleanly formatted error message to the user, and terminates the process with a non-zero exit code. This prevents terminal-specific formatting logic from leaking into core domain code.
 
 ### Terminal Failure Pattern
 

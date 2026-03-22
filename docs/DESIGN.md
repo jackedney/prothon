@@ -87,7 +87,9 @@ A registry maps assistant names to backend classes. Claude Code, opencode, Gemin
 
 The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) to represent the change contract declared in `docs/change_promise.toml`. Verification logic lives in `promise_verify.py` via a standalone `check_task()` function that accepts a `GitDiffProvider` protocol, enabling subprocess-free testing with a fake implementation.
 
-Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers. This serves requirements 27-33 (execution verification) and 34-37 (compliance verification).
+Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers.
+
+**Flexible Scope:** Verification allows the agent to modify files not explicitly declared in the task's `files_to_modify` if those changes are necessary to satisfy the `uv run poe check` quality gate. This serves requirements 27-33 (execution verification) and 34-37 (compliance verification).
 
 ### Task Lifecycle
 
@@ -96,14 +98,12 @@ Each task in the execute workflow follows this lifecycle:
 1. **Dependency check** — wait for all tasks in `dependencies` to be marked complete.
 2. **Read context** — read `doc_sections`, `reference_skills`, and `context_files`.
 3. **Implement** — create, modify, or remove files per the plan.
-4. **Quality gate (R32)** — stage all task files (`git add`), then run `pre-commit run --all-files --show-diff-on-failure`. If hooks auto-fix files, re-stage and re-run once. If hooks still fail, enter the retry loop.
-5. **Commit** — `git commit --no-verify` (hooks already ran explicitly in step 4; `--no-verify` avoids double execution).
-6. **Plan verification (R31)** — run `check_task()` which uses `git diff <base_commit>` (requires committed changes, so this must follow the commit step).
+4. **Quality gate (R32)** — run `uv run poe check`. The agent must fix all reported errors and warnings project-wide (including pre-existing ones) before proceeding.
+5. **Commit** — `git add . && git commit --no-verify`. This stages all changes, including any global health fixes performed in step 4. `--no-verify` avoids double execution of hooks that were just satisfied by `poe check`.
+6. **Plan verification (R31)** — run `check_task()` which uses `git diff <base_commit>`.
 7. **Completion** — mark the task complete via `complete_task()`.
 
 If step 4 or step 6 fails, the subagent increments its attempt counter and retries from step 3. If `attempts >= max_attempts`, the subagent reports failure to the orchestrator, which asks the user to skip, retry (reset counter), or abort.
-
-Pre-commit hooks run with `--all-files` rather than scoped to declared task files because a task modifying one file may break checks in files that import from it. This matches what a real `git commit` would trigger, satisfying R32's requirement to run "the project's pre-commit hooks."
 
 ### Compliance Checker (R34–37)
 
@@ -167,6 +167,8 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 | Package | Purpose | Serves Requirement | Alternatives Considered |
 |---------|---------|-------------------|------------------------|
 | typer (>=0.15) | CLI framework with type-hint-driven parameter inference | R51: CLI-invocable workflows | click, argparse |
+| uv (>=0.1) | Package management and project environment isolation | R4: fixed dev toolchain | pip, poetry, conda |
+| poethepoet (>=0.25) | Task runner for project-wide quality checks (`poe check`) | R32: quality gate | make, invoke, just |
 | copier (>=9.0) | Project templating with native `copier update` support | R1-R9: project scaffolding, R10-R17: project adoption | cookiecutter, custom Jinja2 |
 | tomlkit (>=0.13,<1.0) | TOML read/write with comment and formatting preservation | R27-R28: change promise contract | tomllib+tomli-w, toml |
 | rich (via typer) | Table rendering for promise plans, status, and compliance reports | R35: compliance report with PASS/FAIL/SKIP status | tabulate, click echo/style |
@@ -175,6 +177,10 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 ### Rationale
 
 **Typer** — Already in use. Lowest boilerplate for 12 commands across two nesting levels. Type hints drive parameter inference. Rich-formatted help output included. Actively maintained (v0.24.1, Feb 2026). If ever abandoned, migration to raw Click is mechanical since Typer generates Click objects internally.
+
+**uv** — Industry standard for high-performance Python package management. Provides deterministic environments across all project commands, including the execution quality gate.
+
+**poethepoet** — Provides a centralized `check` command that encapsulates the entire quality suite (Ruff, Ty, Pytest, Bandit, Vulture, Complexipy). This ensures the execution agent uses the same standard as CI and human developers.
 
 **Copier** — Template updating via `copier update` with 3-way merge is central to prothon's value proposition. When prothon's template evolves, existing projects pull in changes without losing local modifications. Clean Python API (`run_copy`, `run_update`, `run_recopy`) designed for library embedding. Declarative prompts with types, validation, and conditions. Neither cookiecutter nor custom Jinja2 provides template updating.
 
@@ -576,6 +582,8 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 |----------|--------|-------------|-----------|
 | Module structure | Flat modules, one per subsystem | Nested packages by subsystem; hybrid flat core + CLI package | 6 subsystems map cleanly to 6 flat modules at 2-5 KLOC. Minimal refactor. Any module can be promoted to a subpackage later without changing caller imports. |
 | CLI framework | Typer | Click, argparse | Already in use and working. Lowest boilerplate. Type-hint inference. Switching would be a rewrite with zero functional benefit. |
+| Execution Quality Gate | `uv run poe check` | `pre-commit` | Mandatory project-wide health check (lint, type, test, etc.) for every task completion. Ensures 100% project health. |
+| Fix Mandate | **Global Health Enforcement** | Surgical updates only | Agent must fix all errors/warnings project-wide (including pre-existing) before a task is verified. Prevents accumulation of tech debt. |
 | Templating engine | Copier | Cookiecutter, custom Jinja2 | Template updating (`copier update` with 3-way merge) is the decisive factor. Neither alternative provides it. Clean Python API for library embedding. |
 | TOML library | tomlkit | tomllib + tomli-w, toml (uiri) | Comment/formatting preservation on roundtrip is essential for human-authored promise files. Single library for read and write. Maintained by Poetry organization. |
 | Git interaction | subprocess wrapper | GitPython, pygit2, dulwich | All operations are single CLI commands with machine-readable flags. `--numstat` is trivial via subprocess but problematic with dulwich. Zero dependencies. GitPython is in maintenance mode with multiple CVEs. |
@@ -594,7 +602,7 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 | CI configurability | Basic toggle (`auto_version = true/false`) | No config; full branch/trigger configurability | "Minorly configurable" per SPEC. Single toggle lets users disable without deleting files. Branch/trigger customization belongs in the workflow YAML itself — users comfortable with CI can edit directly. |
 | Subagent invocation in skills | Canonical names with per-backend mapping | Tool-specific instructions per assistant; backend-specific skill variants | Single set of skills works across both backends. Canonical names are translated by each backend's `subagent_type_map`. Backend-specific variants would double maintenance. Tool-specific instructions (e.g., `Task tool, subagent_type:`) break when the other assistant has a different tool API. |
 | Skill frontmatter portability | Assistant-specific fields ignored by non-supporting backends | Require all backends to support all fields; strip unsupported fields at sync time | opencode silently ignores unknown frontmatter (`context: fork`, `model:`). Requiring support would block backend addition. Stripping adds complexity for zero benefit since unknown fields are already harmless. |
-| Task quality gate | `pre-commit run --all-files` replacing `poe check` | `poe check`; hooks as part of `git commit` (no `--no-verify`); scoped `--files` | Pre-commit is a superset of `poe check` (adds trailing-whitespace, end-of-file-fixer, check-yaml, auto-fixing). Explicit hook run before commit gives parseable output and handles auto-fixes cleanly. `--all-files` catches cross-file regressions. `--no-verify` on commit avoids double execution. |
+| Task quality gate | `uv run poe check` replacing `pre-commit` | `pre-commit run --all-files`; `poe check` | `uv run poe check` ensures the full project toolchain suite passes, catching errors that file-scoped hooks might miss. |
 | Retry configuration | Project default in `[tool.prothon].max_attempts` + per-task override in promise TOML | CLI flag; env var; promise metadata section | Two-level resolution (project + per-task) follows existing config patterns. Retry count doesn't warrant CLI flag or env var precedence levels. Per-task override lets the planning agent adjust for task complexity. |
 | Retry enforcement | Skill prompt reads `max_attempts` from promise file | Programmatic `attempt_task()` with file locking; hybrid skill + validation | Skill prompt already manages the retry loop. Reading `max_attempts` from the promise file is the minimal change. Programmatic enforcement can be added later if stricter guarantees are needed. |
 | PATTERNS.md content form | Signature-only code, natural language rationale | Allow full code examples; no code at all | Signatures communicate interface contracts without prescribing implementation. Full code examples drift from actual implementations and constrain developer judgment. No code at all loses the precision of typed signatures. |

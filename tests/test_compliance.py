@@ -10,6 +10,8 @@ from prothon.compliance import (
     ComplianceReport,
     Requirement,
     analyze_python_file,
+    check_doc_existence,
+    check_inheritance,
     check_patterns_doc,
 )
 
@@ -317,3 +319,86 @@ def test_compliance_report_score_hypothesis(passes, fails, skips):
     else:
         expected = (passes / (passes + fails)) * 100.0
         assert report.score == pytest.approx(expected)
+
+
+# --- check_doc_existence tests ---
+
+
+def test_check_doc_existence_all_present(tmp_path: Path):
+    """All three docs present should yield three PASS results."""
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    for name in ("SPEC.md", "DESIGN.md", "PATTERNS.md"):
+        (docs_dir / name).write_text("# Content")
+
+    results = check_doc_existence(tmp_path)
+
+    assert len(results) == 3
+    assert all(r.status == CheckStatus.PASS for r in results)
+
+
+def test_check_doc_existence_only_spec(tmp_path: Path):
+    """Only SPEC.md present: SPEC PASS, DESIGN and PATTERNS FAIL."""
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "SPEC.md").write_text("# Spec")
+
+    results = check_doc_existence(tmp_path)
+
+    assert len(results) == 3
+    spec, design, patterns = results
+    assert spec.status == CheckStatus.PASS
+    assert design.status == CheckStatus.FAIL
+    assert patterns.status == CheckStatus.FAIL
+
+
+def test_check_doc_existence_none_present(tmp_path: Path):
+    """No docs present should yield three FAIL results."""
+    # Don't even create the docs directory.
+    results = check_doc_existence(tmp_path)
+
+    assert len(results) == 3
+    assert all(r.status == CheckStatus.FAIL for r in results)
+
+
+# --- check_inheritance tests ---
+
+
+def test_check_inheritance_all_inherit(tmp_path: Path):
+    """All exceptions inheriting ProthonError should PASS."""
+    exc_dir = tmp_path / "src" / "prothon"
+    exc_dir.mkdir(parents=True)
+    (exc_dir / "exceptions.py").write_text(
+        "class ProthonError(Exception): pass\n"
+        "class ConfigError(ProthonError): pass\n"
+        "class ParseError(ProthonError): pass\n"
+    )
+
+    results = check_inheritance(tmp_path)
+
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.PASS
+
+
+def test_check_inheritance_violation(tmp_path: Path):
+    """An exception not inheriting ProthonError should FAIL with its name."""
+    exc_dir = tmp_path / "src" / "prothon"
+    exc_dir.mkdir(parents=True)
+    (exc_dir / "exceptions.py").write_text(
+        "class ProthonError(Exception): pass\n"
+        "class GoodError(ProthonError): pass\n"
+        "class BadError(ValueError): pass\n"
+    )
+
+    results = check_inheritance(tmp_path)
+
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.FAIL
+    assert "BadError" in results[0].rationale
+
+
+def test_check_inheritance_no_exceptions_file(tmp_path: Path):
+    """Missing exceptions.py should return empty results."""
+    results = check_inheritance(tmp_path)
+
+    assert results == []

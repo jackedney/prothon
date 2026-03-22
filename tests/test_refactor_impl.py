@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
-from prothon.refactor import DriftFinding, discover_drift, generate_refactor_promise
+from prothon.refactor import (
+    DriftFinding,
+    _check_large_files,
+    _check_missing_tests,
+    _check_patterns_compliance,
+    discover_drift,
+    generate_refactor_promise,
+)
 
 
 def test_discover_drift_missing_docs(tmp_path: Path):
@@ -82,3 +90,125 @@ def test_generate_refactor_promise(tmp_path: Path):
     assert task.title == "Test Finding"
     assert task.goal == "Test Rationale"
     assert "affected.py" in task.files_to_create  # Doesn't exist yet
+
+
+def test_check_patterns_compliance_no_violations(tmp_path: Path):
+    """Compliant PATTERNS.md produces no findings."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    # Natural-language-dominant doc with a signature-only code block
+    (docs / "PATTERNS.md").write_text(
+        "# Patterns\n\n"
+        "This document describes coding conventions for the project.\n\n"
+        "## Naming\n\n"
+        "Use descriptive names for all public functions.\n\n"
+        "```python\n"
+        "def my_function(arg: str) -> None:\n"
+        '    """Do something."""\n'
+        "```\n\n"
+        "## Error Handling\n\n"
+        "Always use domain-specific exceptions.\n"
+    )
+
+    findings = _check_patterns_compliance(tmp_path)
+    assert findings == []
+
+
+def test_check_patterns_compliance_with_violations(tmp_path: Path):
+    """PATTERNS.md with implementation code triggers drift findings."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    # Code-dominant doc with implementation logic (violates R25 and R26)
+    (docs / "PATTERNS.md").write_text(
+        "# P\n"
+        "```python\n"
+        "import os\n"
+        "x = 1 + 2\n"
+        "y = x * 3\n"
+        "z = y + x\n"
+        "a = z * 2\n"
+        "```\n"
+    )
+
+    findings = _check_patterns_compliance(tmp_path)
+    assert len(findings) > 0
+    titles = [f.title for f in findings]
+    # Should reference R25 or R26 in the title
+    assert any("PATTERNS.md drift" in t for t in titles)
+
+
+def test_check_patterns_compliance_missing_file(tmp_path: Path):
+    """Missing PATTERNS.md returns no findings."""
+    findings = _check_patterns_compliance(tmp_path)
+    assert findings == []
+
+
+def test_check_large_files_boundary_500_lines(tmp_path: Path):
+    """A file with exactly 500 lines should NOT be flagged."""
+    src = tmp_path / "src"
+    src.mkdir()
+    boundary_file = src / "boundary.py"
+    # 500 lines: "line\n" * 500 gives 500 lines via splitlines()
+    boundary_file.write_text("line\n" * 500)
+
+    findings = _check_large_files(tmp_path)
+    titles = [f.title for f in findings]
+    assert "Large file: boundary.py" not in titles
+
+
+def test_check_large_files_no_src_dir(tmp_path: Path):
+    """No src/ directory returns no findings."""
+    findings = _check_large_files(tmp_path)
+    assert findings == []
+
+
+def test_check_missing_tests_skips_init(tmp_path: Path):
+    """__init__.py files should be skipped when checking for missing tests."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    tests = tmp_path / "tests"
+    tests.mkdir()
+
+    (src / "__init__.py").write_text("")
+
+    findings = _check_missing_tests(tmp_path)
+    titles = [f.title for f in findings]
+    assert "Missing tests for __init__.py" not in titles
+
+
+def test_generate_refactor_promise_git_error_fallback(tmp_path: Path):
+    """When rev_parse_head raises, base_commit falls back to 'HEAD'."""
+    finding = DriftFinding(
+        title="Test",
+        rationale="Rationale",
+    )
+
+    with patch("prothon.refactor.rev_parse_head", side_effect=RuntimeError("no git")):
+        promise = generate_refactor_promise(tmp_path, [finding])
+
+    assert promise.metadata.base_commit == "HEAD"
+
+
+def test_discover_drift_fully_compliant(tmp_path: Path):
+    """A fully compliant project returns no drift findings."""
+    # Create all required docs
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "SPEC.md").write_text("# Spec\n\nRequirements go here.\n")
+    (docs / "DESIGN.md").write_text("# Design\n\nArchitecture goes here.\n")
+    (docs / "PATTERNS.md").write_text(
+        "# Patterns\n\n"
+        "Natural language describing conventions for the project.\n\n"
+        "More text to ensure code is not dominant.\n"
+    )
+
+    # Create a small source file with a corresponding test
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "module.py").write_text("def hello(): pass\n")
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_module.py").write_text("def test_hello(): pass\n")
+
+    findings = discover_drift(tmp_path)
+    assert findings == []

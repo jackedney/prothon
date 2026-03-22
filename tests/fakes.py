@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 
 class FakeAssistantBackend:
@@ -43,14 +44,14 @@ class Recorder:
 
     def __init__(
         self,
-        return_value: object = None,
-        side_effect: object = None,
+        return_value: Any = None,
+        side_effect: Any = None,
     ):
         self.calls: list[tuple[tuple, dict]] = []
         self.return_value = return_value
         self.side_effect = side_effect
 
-    def __call__(self, *args: object, **kwargs: object) -> object:
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
         self.calls.append((args, kwargs))
         if self.side_effect is not None:
             if isinstance(self.side_effect, BaseException):

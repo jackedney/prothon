@@ -22,7 +22,7 @@ from prothon.config import (
 )
 from prothon.exceptions import ProthonError
 from prothon.project import find_project_root
-from prothon.scaffold import generate, init_existing
+from prothon import scaffold_cli
 from prothon.ui import (
     console,
     render_check_report,
@@ -229,61 +229,13 @@ def new(
     ),
 ) -> None:
     """Generate a new Python project with docs-first AI workflow."""
-    dest = Path(destination).resolve()
-    project_name = dest.name
-
-    module_name = typer.prompt(
-        "Module name",
-        default=project_name.lower().replace("-", "_").replace(" ", "_"),
-    )
-    description = typer.prompt("Description", default="A Python project")
-    author_name = typer.prompt("Author name", default="")
-    author_email = typer.prompt("Author email", default="")
-    while author_email and "@" not in author_email:
-        typer.echo("Must be a valid email address (e.g. user@example.com)")
-        author_email = typer.prompt("Author email", default="")
-
-    python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
-    while python_version not in ("3.11", "3.12", "3.13"):
-        typer.echo("Must be 3.11, 3.12, or 3.13")
-        python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
-
-    license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
-    while license_choice not in ("MIT", "Apache-2.0", "None"):
-        typer.echo("Must be MIT, Apache-2.0, or None")
-        license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
-
-    data = {
-        "project_name": project_name,
-        "module_name": module_name,
-        "description": description,
-        "author_name": author_name,
-        "author_email": author_email,
-        "python_version": python_version,
-        "license": license_choice,
-    }
-
-    generate(dest, data)
-    typer.echo(f"\nProject created at {dest}")
-    typer.echo("Next steps:")
-    typer.echo(f"  cd {dest.name}")
-    typer.echo("  uv sync")
-    typer.echo("  uvx prothon spec       # Write requirements")
-    typer.echo("  uvx prothon design     # Choose architecture")
-    typer.echo("  uvx prothon patterns   # Define conventions")
+    scaffold_cli.new_project(destination)
 
 
 @app.command()
 def init() -> None:
     """Adopt an existing project into the docs-first workflow."""
-    try:
-        created = init_existing()
-        for path in created:
-            typer.echo(f"  created {path}")
-        typer.echo("\nNext step: uvx prothon spec")
-    except ProthonError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+    scaffold_cli.init_project()
 
 
 @app.command()

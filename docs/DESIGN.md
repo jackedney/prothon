@@ -4,15 +4,19 @@
 
 ### Module Structure
 
-Flat module layout with all domain modules at one level under `src/prothon/`. CLI definitions live in `cli.py` alongside domain modules — no separate CLI subpackage.
+Flat module layout with all domain modules at one level under `src/prothon/`. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
 
 ```
 src/prothon/
     __init__.py
-    cli.py              # Typer app, command definitions, output formatting
-    scaffold.py         # Template rendering, copier answers, git init, project adoption
+    cli.py              # Typer app and command definitions
+    ui.py               # Rich-based terminal UI, tables, and status reporting
+    config.py           # Multi-level configuration resolution (CLI, env, toml)
+    scaffold.py         # Template rendering, copier answers, project adoption
+    scaffold_cli.py     # Scaffolding-specific CLI commands and interactive prompts
     skills.py           # Skill discovery, symlink management
-    promise.py          # Promise data model, TOML I/O, git diff verification
+    promise.py          # Promise data model, TOML I/O, lifecycle management
+    promise_verify.py   # Git diff analysis and task verification logic
     versioning.py       # Semantic version detection, bumping, git tagging
     project.py          # Project root detection, shared project context
     git.py              # Thin typed wrapper around git CLI via subprocess
@@ -25,15 +29,23 @@ src/prothon/
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one module. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
+This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
 
 ### Module Dependencies
 
 ```
 cli.py
-  ├── scaffold.generate(), init_existing()
+  ├── config.resolve_agent(), resolve_model()
+  ├── ui.render_table(), render_status()
+  ├── scaffold_cli.new_project(), init_project()
   ├── assistant.get_backend(), launch()
-  └── promise.load_promise(), plan(), check_task(), status(), complete_task(), record_attempt(), cleanup()
+  └── promise.load_promise(), plan(), status(), complete_task(), record_attempt(), cleanup()
+
+scaffold_cli.py
+  └── scaffold.generate(), init_existing()
+
+promise.py
+  └── promise_verify.check_task()
 
 assistant.py
   └── skills.sync_skills(target)
@@ -41,11 +53,7 @@ assistant.py
 versioning.py
   ├── git.* (for tag operations)
   └── tomlkit (for version file updates)
-
-cli.py (agent resolution — per-command --agent option)
-  ├── typer Option + envvar for --agent / PROTHON_AGENT (on each session command)
-  ├── project.find_project_root() → pyproject.toml [tool.prothon].agent
-  └── ~/.config/prothon/config.toml → agent
+```
 
 All modules
   ├── project.find_project_root()
@@ -66,7 +74,7 @@ Two non-Python asset directories are bundled with the project:
 
 ### Assistant Abstraction
 
-Each assistant backend encapsulates its binary name, invocation flags, skill sync target, environment overrides, and command construction. A shared launch lifecycle handles: binary detection, skill syncing, environment merging, subprocess execution, and return code checking.
+Each assistant backend encapsulates its binary name, invocation flags, skill sync target, environment overrides, and command construction. A shared launch lifecycle handles: binary detection, skill syncing, environment merging, subprocess execution, and return code checking. Gemini CLI is configured to run in YOLO mode by default to ensure automated execution of suggested actions during autonomous workflows.
 
 AI coding CLIs fall into two structural categories based on how they receive skill instructions:
 
@@ -77,7 +85,7 @@ A registry maps assistant names to backend classes. Claude Code, opencode, Gemin
 
 ### Promise Verification
 
-The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) to represent the change contract declared in `docs/change_promise.toml`. Verification logic lives in a standalone `check_task()` function that accepts a `GitDiffProvider` protocol, enabling subprocess-free testing with a fake implementation.
+The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) to represent the change contract declared in `docs/change_promise.toml`. Verification logic lives in `promise_verify.py` via a standalone `check_task()` function that accepts a `GitDiffProvider` protocol, enabling subprocess-free testing with a fake implementation.
 
 Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers. This serves requirements 27-33 (execution verification) and 34-37 (compliance verification).
 
@@ -184,8 +192,8 @@ All commands that launch an assistant session (`spec`, `design`, `patterns`, `ex
 
 | Command | Input | Output | Subsystem |
 |---------|-------|--------|-----------|
-| `prothon new` | Interactive prompts: module name, description, author name, email, Python version, license | Scaffolded project directory with git repo | scaffold.py |
-| `prothon init` | None (validates cwd) | `docs/` scaffolds, `AGENTS.md`, agent symlinks, `.agents/skills/` | scaffold.py |
+| `prothon new` | Interactive prompts: module name, description, author name, email, Python version, license | Scaffolded project directory with git repo | scaffold_cli.py |
+| `prothon init` | None (validates cwd) | `docs/` scaffolds, `AGENTS.md`, agent symlinks, `.agents/skills/` | scaffold_cli.py |
 | `prothon spec` | None (launches interactive session) | Populated `docs/SPEC.md` | cli.py → assistant.py (skill subprocess) |
 | `prothon design` | None (launches interactive session) | Populated `docs/DESIGN.md` + generated reference skills | cli.py → assistant.py (skill subprocess) |
 | `prothon patterns` | None (launches interactive session) | Populated `docs/PATTERNS.md` | cli.py → assistant.py (skill subprocess) |
@@ -240,7 +248,7 @@ Every assistant backend must satisfy the `AssistantBackend` protocol (structural
 - `name` — human-readable name for error messages (e.g. "Claude Code", "opencode")
 - `cli_command` — binary name to look up on PATH (e.g. "claude", "opencode")
 - `install_hint` — installation URL or command for actionable error messages when the binary is missing
-- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name via slash commands. Claude Code uses `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`; opencode uses `["opencode", "--prompt", "/prothon-spec-writer"]` with the `--prompt` flag. When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
+- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name via slash commands. Claude Code uses `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`; opencode uses `["opencode", "--prompt", "/prothon-spec-writer"]` with the `--prompt` flag; and Gemini CLI uses `["gemini", "--yolo", "/prothon-spec-writer"]` to enable non-interactive execution of suggested commands. When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
 - `sync_skills()` — installs/symlinks bundled skills to the assistant's discovery location. Category A backends call `skills.sync_skills(target=...)` with their specific directory. Category B backends may be a no-op.
 - `env_overrides()` — returns a dict of extra environment variables needed for non-interactive execution (e.g. `{"GOOSE_MODE": "auto"}`). Returns an empty dict if none are needed.
 - `subagent_type_map` — returns a dict mapping canonical agent type names (used in skills) to backend-specific names. Skills reference canonical names; the backend translates at invocation time.
@@ -277,7 +285,7 @@ The user selects their preferred agent via a 5-level precedence chain. The first
 | 4 | Global config | `~/.config/prothon/config.toml` (respects `$XDG_CONFIG_HOME`) | `agent = "opencode"` |
 | 5 (lowest) | Default | Hardcoded | `"claude-code"` |
 
-Resolution is implemented as a `resolve_agent(cli_value)` function in `cli.py` (~20 lines). Each subcommand passes its `--agent` value (which Typer resolves from CLI flag or env var) as `cli_value`. Levels 3-4 are resolved by reading TOML files with `tomlkit` (already a dependency).
+Resolution is implemented as a `resolve_agent(cli_value)` function in `config.py` (~20 lines). Each subcommand passes its `--agent` value (which Typer resolves from CLI flag or env var) as `cli_value`. Levels 3-4 are resolved by reading TOML files with `tomlkit` (already a dependency).
 
 The `--agent` option is per-command, defined on each command that launches an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) via a shared `AgentOption` annotated type. This allows natural usage like `prothon patterns --agent opencode`. Commands that don't launch a session (`new`, `init`, `promise *`) don't have the option. The `PROTHON_AGENT` environment variable is handled via Typer's `envvar=` parameter on the shared option definition.
 
@@ -332,7 +340,7 @@ When the resolved agent is `opencode`, the user can configure which model and pr
 - If only one of model or provider resolves to a value (and the model value does not contain `/`), prothon exits with an error: `--provider requires --model (and vice versa). Use provider/model format or set both.`
 - If neither resolves to a value, opencode is invoked without `--model`, deferring to opencode's own configuration and defaults.
 - When the resolved agent is `claude-code`, both options are silently ignored — Claude Code does not support model selection via prothon.
-- Resolution is implemented as a `resolve_model(cli_model, cli_provider)` function in `cli.py`, following the same pattern as `resolve_agent()`. Environment variables are handled via Typer's `envvar=` parameter on each option definition.
+- Resolution is implemented as a `resolve_model(cli_model, cli_provider)` function in `config.py`, following the same pattern as `resolve_agent()`. Environment variables are handled via Typer's `envvar=` parameter on each option definition.
 
 ### Documentation Safety Contract
 

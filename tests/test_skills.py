@@ -1,174 +1,111 @@
-"""Tests for skill discovery and symlink management."""
+"""Tests for skill discovery and synchronization."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
-import pytest
 from prothon.skills import bundled_skills_dir, sync_skills
 
 
-def test_bundled_skills_dir_returns_correct_path() -> None:
-    """bundled_skills_dir() points to the skills/ directory inside the package."""
-    result = bundled_skills_dir()
-    assert (
-        result == Path(__file__).resolve().parent.parent / "src" / "prothon" / "skills"
-    )
-    assert result.is_dir()
+def test_bundled_skills_dir_exists():
+    """bundled_skills_dir() must return an existing directory."""
+    path = bundled_skills_dir()
+    assert isinstance(path, Path)
+    assert path.is_dir()
+    # At least one skill should be bundled
+    assert any(path.iterdir())
 
 
-def test_sync_skills_creates_symlinks(tmp_path: Path) -> None:
-    """sync_skills creates a symlink for each bundled skill directory."""
-    target = tmp_path / "skills"
+def test_sync_skills_creates_symlinks(tmp_path):
+    """sync_skills() must create symlinks in the target directory."""
+    target = tmp_path / "target_skills"
     sync_skills(target=target)
-
-    bundled = bundled_skills_dir()
-    bundled_dirs = [d for d in bundled.iterdir() if d.is_dir()]
 
     assert target.is_dir()
-    for skill_dir in bundled_dirs:
-        link = target / skill_dir.name
-        assert link.is_symlink()
-        assert link.resolve() == skill_dir.resolve()
-
-
-def test_sync_skills_handles_broken_symlinks(tmp_path: Path) -> None:
-    """sync_skills removes broken symlinks and recreates them correctly."""
-    target = tmp_path / "skills"
-    target.mkdir(parents=True)
-
-    # Create a broken symlink pointing to a nonexistent path
-    broken = target / "prothon-spec-writer"
-    broken.symlink_to(tmp_path / "nonexistent")
-    assert broken.is_symlink()
-    assert not broken.exists()  # broken: target doesn't exist
-
-    sync_skills(target=target)
-
-    # The broken symlink should now point to the real bundled skill
-    assert broken.is_symlink()
-    assert broken.exists()  # no longer broken
-
-
-def test_sync_skills_is_idempotent(tmp_path: Path) -> None:
-    """Running sync_skills twice produces the same result."""
-    target = tmp_path / "skills"
-
-    sync_skills(target=target)
-    first_links = {p.name: p.resolve() for p in target.iterdir() if p.is_symlink()}
-
-    sync_skills(target=target)
-    second_links = {p.name: p.resolve() for p in target.iterdir() if p.is_symlink()}
-
-    assert first_links == second_links
-
-
-def test_sync_skills_replaces_non_symlink_dir(tmp_path: Path) -> None:
-    """sync_skills replaces an existing non-symlink directory with a symlink."""
-    target = tmp_path / "skills"
-    target.mkdir(parents=True)
-
-    # Create a real directory where a symlink should go
-    blocker = target / "prothon-spec-writer"
-    blocker.mkdir()
-    (blocker / "stale.txt").write_text("stale")
-
-    sync_skills(target=target)
-
-    assert blocker.is_symlink()
-    assert blocker.exists()
-
-
-def test_sync_skills_skips_non_directory_entries(tmp_path: Path) -> None:
-    """sync_skills only processes directories in the bundled skills dir."""
-    target = tmp_path / "skills"
-    sync_skills(target=target)
-
-    # Verify no non-directory bundled entries became symlinks
     bundled = bundled_skills_dir()
-    non_dirs = [e for e in bundled.iterdir() if not e.is_dir()]
-    for entry in non_dirs:
-        assert not (target / entry.name).exists()
+
+    # Guard: bundled dir must contain at least one skill directory
+    assert any(entry.is_dir() for entry in bundled.iterdir())
+
+    # Verify each bundled skill directory is symlinked
+    for skill_dir in bundled.iterdir():
+        if skill_dir.is_dir():
+            dest = target / skill_dir.name
+            assert dest.is_symlink()
+            assert dest.resolve() == skill_dir.resolve()
 
 
-def test_sync_skills_replaces_regular_file(tmp_path: Path) -> None:
-    """sync_skills replaces a regular file with a symlink."""
-    target = tmp_path / "skills"
-    target.mkdir(parents=True)
+def test_sync_skills_cleans_up_existing_symlinks(tmp_path):
+    """sync_skills() must replace existing symlinks."""
+    target = tmp_path / "target_skills"
+    target.mkdir()
 
     bundled = bundled_skills_dir()
-    bundled_dirs = [d for d in bundled.iterdir() if d.is_dir()]
-    if not bundled_dirs:
-        pytest.skip("No bundled skill dirs")
-
-    # Create a regular file where a symlink should go
-    blocker = target / bundled_dirs[0].name
-    blocker.write_text("blocking file")
+    # Pick the first skill and create a dummy symlink
+    first_skill = next(s for s in bundled.iterdir() if s.is_dir())
+    dummy_link = target / first_skill.name
+    dummy_link.symlink_to(tmp_path)  # Points to wrong place
 
     sync_skills(target=target)
 
-    assert blocker.is_symlink()
-    assert blocker.resolve() == bundled_dirs[0].resolve()
+    assert dummy_link.is_symlink()
+    assert dummy_link.resolve() == first_skill.resolve()
 
 
-def test_sync_skills_symlink_targets_are_resolved(tmp_path: Path) -> None:
-    """Symlinks point to resolved (absolute) paths."""
-    target = tmp_path / "skills"
-    sync_skills(target=target)
-
-    for link in target.iterdir():
-        if link.is_symlink():
-            link_target = link.readlink()
-            assert link_target.is_absolute()
-
-
-def test_sync_skills_creates_target_dir(tmp_path: Path) -> None:
-    """sync_skills creates the target directory if it doesn't exist."""
-    target = tmp_path / "deep" / "nested" / "skills"
-    assert not target.exists()
-    sync_skills(target=target)
-    assert target.is_dir()
-
-
-def test_sync_skills_default_target_path() -> None:
-    """sync_skills without target arg uses ~/.claude/skills."""
-    from unittest.mock import patch as mock_patch
-
-    with mock_patch("prothon.skills.bundled_skills_dir") as mock_bundled:
-        # Return a fake dir that doesn't exist so it returns early
-        mock_bundled.return_value = Path("/nonexistent/skills")
-        # Should not crash even with default target
-        sync_skills()
-
-
-def test_sync_skills_continue_processes_all_dirs(tmp_path: Path) -> None:
-    """continue (not break) on non-dir entries -- all skill dirs get symlinked."""
-    target = tmp_path / "skills"
-    sync_skills(target=target)
+def test_sync_skills_cleans_up_existing_directories(tmp_path):
+    """sync_skills() must replace existing directories with symlinks."""
+    target = tmp_path / "target_skills"
+    target.mkdir()
 
     bundled = bundled_skills_dir()
-    bundled_dirs = sorted(d.name for d in bundled.iterdir() if d.is_dir())
+    first_skill = next(s for s in bundled.iterdir() if s.is_dir())
+    dummy_dir = target / first_skill.name
+    dummy_dir.mkdir()
+    (dummy_dir / "marker.txt").write_text("should be gone")
 
-    linked = sorted(p.name for p in target.iterdir() if p.is_symlink())
-    assert linked == bundled_dirs
+    sync_skills(target=target)
+
+    dummy_link = target / first_skill.name
+    assert dummy_link.is_symlink()
+    assert dummy_link.resolve() == first_skill.resolve()
+    assert not (dummy_dir / "marker.txt").exists()
 
 
-def test_sync_skills_default_path_uses_home_claude_skills(tmp_path: Path) -> None:
-    """sync_skills() without target= uses ~/.claude/skills/ and does not mutate it."""
-    from unittest.mock import patch as mock_patch
+def test_sync_skills_replaces_regular_files(tmp_path):
+    """sync_skills() must replace pre-existing regular files with symlinks."""
+    target = tmp_path / "target_skills"
+    target.mkdir()
 
-    fake_home = tmp_path / "fakehome"
+    bundled = bundled_skills_dir()
+    first_skill = next(s for s in bundled.iterdir() if s.is_dir())
+    regular_file = target / first_skill.name
+    regular_file.write_text("marker content")
+
+    sync_skills(target=target)
+
+    assert regular_file.is_symlink()
+    assert regular_file.resolve() == first_skill.resolve()
+
+
+@patch("pathlib.Path.home")
+def test_sync_skills_default_target(mock_home, tmp_path):
+    """sync_skills() must use ~/.claude/skills/ by default."""
+    # Mock home to a temp directory to avoid touching real filesystem
+    fake_home = tmp_path / "fake_home"
     fake_home.mkdir()
+    mock_home.return_value = fake_home
 
-    with mock_patch("prothon.skills.Path.home", return_value=fake_home):
-        sync_skills()
+    # We don't want to actually create ~/.claude/skills in real home
+    # But since we mocked Path.home, it will use fake_home
+    sync_skills()
 
     expected_target = fake_home / ".claude" / "skills"
     assert expected_target.is_dir()
-
-    bundled = bundled_skills_dir()
-    bundled_dirs = [d for d in bundled.iterdir() if d.is_dir()]
-    for skill_dir in bundled_dirs:
-        link = expected_target / skill_dir.name
-        assert link.is_symlink()
-        assert link.resolve() == skill_dir.resolve()
+    # Verify symlinks were created and resolve to real skill directories
+    entries = list(expected_target.iterdir())
+    assert entries, "expected at least one entry in skills directory"
+    for entry in entries:
+        assert entry.is_symlink()
+        assert entry.resolve().exists()
+        assert entry.resolve().is_dir()

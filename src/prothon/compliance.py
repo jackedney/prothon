@@ -385,3 +385,123 @@ def _is_func_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
             continue
         return False
     return True
+
+
+def run_static_checks(root: Path) -> ComplianceReport:
+    """Run all deterministic static compliance checks."""
+    report = ComplianceReport()
+
+    # R25, R26: PATTERNS.md code blocks
+    patterns_path = root / "docs" / "PATTERNS.md"
+    report.results.extend(check_patterns_doc(patterns_path))
+
+    report.results.extend(check_doc_existence(root))
+    report.results.extend(check_inheritance(root))
+    report.results.extend(check_agent_files(root))
+
+    for res in report.results:
+        res.check_type = CheckType.STATIC
+
+    return report
+
+
+def check_doc_existence(root: Path) -> list[CheckResult]:
+    """Verify SPEC.md, DESIGN.md, and PATTERNS.md exist."""
+    results = []
+    doc_reqs = [
+        ("SPEC.md", "R18", "SPEC"),
+        ("DESIGN.md", "R20", "SPEC"),
+        ("PATTERNS.md", "R20", "SPEC"),
+    ]
+    for doc, req_id, source in doc_reqs:
+        req = Requirement(
+            source=source,
+            requirement_id=req_id,
+            statement=f"Prerequisite document {doc} must exist.",
+        )
+        doc_path = root / "docs" / doc
+        if doc_path.is_file():
+            results.append(CheckResult(req, CheckStatus.PASS, evidence=str(doc_path)))
+        else:
+            results.append(
+                CheckResult(
+                    req,
+                    CheckStatus.FAIL,
+                    evidence=f"docs/{doc}",
+                    rationale="Required document is missing.",
+                )
+            )
+    return results
+
+
+def check_inheritance(root: Path) -> list[CheckResult]:
+    """Verify all custom exceptions inherit from ProthonError."""
+    results = []
+    exc_path = root / "src" / "prothon" / "exceptions.py"
+    if not exc_path.is_file():
+        return results
+
+    req = Requirement(
+        source="DESIGN",
+        statement="All domain exceptions must inherit from ProthonError.",
+    )
+    analysis = analyze_python_file(exc_path)
+    violations = [
+        name
+        for name, bases in analysis.get("base_classes", {}).items()
+        if name != "ProthonError" and "ProthonError" not in bases
+    ]
+
+    if not violations:
+        results.append(CheckResult(req, CheckStatus.PASS, evidence=str(exc_path)))
+    else:
+        results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence=f"{exc_path}:1",
+                rationale=f"Exceptions not inheriting from ProthonError: {', '.join(violations)}",
+            )
+        )
+    return results
+
+
+def check_agent_files(root: Path) -> list[CheckResult]:
+    """Verify AGENTS.md and its expected symlinks."""
+    results = []
+    for filename in ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "AGENT.md"]:
+        req = Requirement(
+            source="DESIGN",
+            requirement_id="R4",
+            statement=f"Project must have {filename}.",
+        )
+        file_path = root / filename
+        if not file_path.exists():
+            results.append(CheckResult(req, CheckStatus.FAIL, evidence=filename))
+            continue
+
+        if filename != "AGENTS.md":
+            if not file_path.is_symlink():
+                results.append(
+                    CheckResult(
+                        req,
+                        CheckStatus.FAIL,
+                        evidence=filename,
+                        rationale=f"{filename} must be a symlink to AGENTS.md.",
+                    )
+                )
+                continue
+            target = file_path.resolve()
+            expected = (root / "AGENTS.md").resolve()
+            if target != expected:
+                results.append(
+                    CheckResult(
+                        req,
+                        CheckStatus.FAIL,
+                        evidence=filename,
+                        rationale=f"{filename} symlink points to {target}, expected {expected}.",
+                    )
+                )
+                continue
+        results.append(CheckResult(req, CheckStatus.PASS, evidence=str(file_path)))
+    return results

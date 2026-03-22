@@ -138,7 +138,7 @@ class GeminiCLIBackend:
         self, skill_name: str, cwd: Path, model: str | None = None
     ) -> list[str]:
         """Return subprocess argv for a Gemini CLI session with *skill_name*."""
-        cmd = [self.cli_command, "-i", f"Use the {skill_name} skill."]
+        cmd = [self.cli_command, "--yolo", f"/{skill_name}"]
         if model is not None:
             cmd.extend(["--model", model])
         return cmd

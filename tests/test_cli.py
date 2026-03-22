@@ -8,7 +8,12 @@ import pytest
 from tests.fakes import FakeAssistantBackend, Recorder
 from prothon.cli import (
     app,
+)
+from prothon.config import (
     resolve_agent,
+    resolve_model,
+    _resolve_model_value,
+    _resolve_provider_value,
 )
 from prothon.exceptions import AssistantNotFoundError, GitError, ProthonError
 from prothon.git import rev_parse_head, run_git
@@ -480,7 +485,6 @@ def test_resolve_model_both_none_returns_none(tmp_path, monkeypatch):
     xdg = tmp_path / "xdg_config"
     xdg.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    from prothon.cli import resolve_model
 
     assert resolve_model(None, None) is None
 
@@ -488,7 +492,6 @@ def test_resolve_model_both_none_returns_none(tmp_path, monkeypatch):
 def test_resolve_model_model_with_slash_passthrough(tmp_path, monkeypatch):
     """Model contains '/' with matching provider -> accepts."""
     monkeypatch.chdir(tmp_path)
-    from prothon.cli import resolve_model
 
     result = resolve_model("z-ai/glm-5", "z-ai")
     assert result == "z-ai/glm-5"
@@ -497,7 +500,6 @@ def test_resolve_model_model_with_slash_passthrough(tmp_path, monkeypatch):
 def test_resolve_model_model_with_slash_provider_none(tmp_path, monkeypatch):
     """Model contains '/' with provider=None -> passthrough."""
     monkeypatch.chdir(tmp_path)
-    from prothon.cli import resolve_model
 
     result = resolve_model("z-ai/glm-5", None)
     assert result == "z-ai/glm-5"
@@ -511,7 +513,6 @@ def test_resolve_model_joins_provider_and_model(tmp_path, monkeypatch):
     xdg = tmp_path / "xdg_config"
     xdg.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    from prothon.cli import resolve_model
 
     result = resolve_model("glm-5", "z-ai")
     assert result == "z-ai/glm-5"
@@ -525,7 +526,6 @@ def test_resolve_model_only_model_raises(tmp_path, monkeypatch):
     xdg = tmp_path / "xdg_config"
     xdg.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    from prothon.cli import resolve_model
 
     with pytest.raises(ProthonError, match="--provider requires --model"):
         resolve_model("glm-5", None)
@@ -539,7 +539,6 @@ def test_resolve_model_only_provider_raises(tmp_path, monkeypatch):
     xdg = tmp_path / "xdg_config"
     xdg.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    from prothon.cli import resolve_model
 
     with pytest.raises(ProthonError, match="--provider requires --model"):
         resolve_model(None, "z-ai")
@@ -548,7 +547,6 @@ def test_resolve_model_only_provider_raises(tmp_path, monkeypatch):
 def test_resolve_model_qualified_with_matching_provider(tmp_path, monkeypatch):
     """Qualified model with matching provider -> accepts."""
     monkeypatch.chdir(tmp_path)
-    from prothon.cli import resolve_model
 
     result = resolve_model("z-ai/glm-5", "z-ai")
     assert result == "z-ai/glm-5"
@@ -557,7 +555,6 @@ def test_resolve_model_qualified_with_matching_provider(tmp_path, monkeypatch):
 def test_resolve_model_qualified_with_conflicting_provider(tmp_path, monkeypatch):
     """Qualified model with conflicting provider -> raises ProthonError."""
     monkeypatch.chdir(tmp_path)
-    from prothon.cli import resolve_model
 
     with pytest.raises(ProthonError, match="conflicting providers"):
         resolve_model("providerA/modelX", "providerB")
@@ -573,7 +570,6 @@ def test_resolve_model_value_returns_none_by_default(tmp_path, monkeypatch):
     xdg = tmp_path / "xdg_config"
     xdg.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    from prothon.cli import _resolve_model_value
 
     assert _resolve_model_value(None) is None
 
@@ -582,7 +578,6 @@ def test_resolve_model_value_cli_takes_priority(tmp_path, monkeypatch):
     """Level 1: CLI value overrides all other sources."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PROTHON_MODEL", "env-model")
-    from prothon.cli import _resolve_model_value
 
     assert _resolve_model_value("cli-model") == "cli-model"
 
@@ -599,7 +594,6 @@ def test_resolve_model_value_env_overrides_pyproject(tmp_path, monkeypatch):
     xdg = tmp_path / "xdg_config"
     xdg.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    from prothon.cli import _resolve_model_value
 
     assert _resolve_model_value(None) == "env-model"
 
@@ -617,7 +611,6 @@ def test_resolve_model_value_pyproject_overrides_global(tmp_path, monkeypatch):
     (xdg / "prothon").mkdir(parents=True)
     (xdg / "prothon" / "config.toml").write_text('model = "global-model"\n')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    from prothon.cli import _resolve_model_value
 
     assert _resolve_model_value(None) == "pyproject-model"
 
@@ -630,7 +623,6 @@ def test_resolve_model_value_global_config_used(tmp_path, monkeypatch):
     (xdg / "prothon").mkdir(parents=True)
     (xdg / "prothon" / "config.toml").write_text('model = "global-model"\n')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    from prothon.cli import _resolve_model_value
 
     assert _resolve_model_value(None) == "global-model"
 
@@ -645,7 +637,6 @@ def test_resolve_provider_value_returns_none_by_default(tmp_path, monkeypatch):
     xdg = tmp_path / "xdg_config"
     xdg.mkdir()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    from prothon.cli import _resolve_provider_value
 
     assert _resolve_provider_value(None) is None
 
@@ -654,7 +645,6 @@ def test_resolve_provider_value_cli_takes_priority(tmp_path, monkeypatch):
     """Level 1: CLI value overrides all other sources."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PROTHON_PROVIDER", "env-provider")
-    from prothon.cli import _resolve_provider_value
 
     assert _resolve_provider_value("cli-provider") == "cli-provider"
 
@@ -672,7 +662,6 @@ def test_resolve_provider_value_pyproject_overrides_global(tmp_path, monkeypatch
     (xdg / "prothon").mkdir(parents=True)
     (xdg / "prothon" / "config.toml").write_text('provider = "global-provider"\n')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-    from prothon.cli import _resolve_provider_value
 
     assert _resolve_provider_value(None) == "pyproject-provider"
 

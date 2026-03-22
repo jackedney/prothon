@@ -10,20 +10,13 @@ from hypothesis import strategies as st
 from prothon.exceptions import PromiseError
 from prothon.git import DiffStat
 from prothon.promise import (
-    CheckResult,
-    CheckStatus,
     Metadata,
     Promise,
     Task,
-    TaskCheckReport,
-    _check_line_count,
-    _check_line_counts,
     _format_task_plan,
     _metadata_from_dict,
     _task_from_dict,
     _task_to_dict,
-    _within_tolerance,
-    check_task,
     cleanup,
     complete_task,
     load_promise,
@@ -31,6 +24,15 @@ from prothon.promise import (
     record_attempt,
     save_promise,
     status,
+)
+from prothon.promise_verify import (
+    CheckResult,
+    CheckStatus,
+    TaskCheckReport,
+    _check_line_count,
+    _check_line_counts,
+    _within_tolerance,
+    check_task,
 )
 
 from tests.conftest import FakeGitDiff, make_task
@@ -1504,7 +1506,7 @@ def test_check_task_default_diff_is_subprocess(tmp_path: Path):
     mock_instance = mock_cls.return_value
     mock_instance.diff_names.return_value = set()
     mock_instance.diff_numstat.return_value = {}
-    with mock_patch("prothon.promise.SubprocessGitDiff", mock_cls):
+    with mock_patch("prothon.promise_verify.SubprocessGitDiff", mock_cls):
         check_task(0, path=path)
     mock_cls.assert_called_once()
 

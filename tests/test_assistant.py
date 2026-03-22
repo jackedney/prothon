@@ -243,7 +243,24 @@ def test_gemini_cli_backend_build_command() -> None:
 
     backend = GeminiCLIBackend()
     result = backend.build_command("prothon-spec-writer", Path("/tmp"))
-    assert result == ["gemini", "-i", "Use the prothon-spec-writer skill."]
+    assert result == ["gemini", "--yolo", "/prothon-spec-writer"]
+
+
+def test_gemini_cli_backend_build_command_with_model() -> None:
+    """build_command constructs the expected argv with a model specified."""
+    from prothon.assistant import GeminiCLIBackend
+
+    backend = GeminiCLIBackend()
+    result = backend.build_command(
+        "prothon-spec-writer", Path("/tmp"), model="gemini-2.0-flash"
+    )
+    assert result == [
+        "gemini",
+        "--yolo",
+        "/prothon-spec-writer",
+        "--model",
+        "gemini-2.0-flash",
+    ]
 
 
 def test_gemini_cli_backend_env_overrides() -> None:

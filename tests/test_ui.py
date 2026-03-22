@@ -137,7 +137,6 @@ class TestRenderPlan:
 
     def test_unknown_base_commit(self) -> None:
         p = _make_promise(base_commit="")
-        p.metadata.base_commit = ""
         text = _render_to_str(render_plan(p))
         assert "unknown" in text
 

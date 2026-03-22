@@ -140,7 +140,7 @@ class TestNestedGet:
     def test_no_keys_returns_str_of_doc(self):
         """Zero keys returns str(doc) since current == doc and it's not None."""
         result = nested_get({"a": 1})
-        assert result is not None  # returns str representation of the dict
+        assert result == "{'a': 1}"
 
     def test_numeric_value_converted_to_str(self):
         assert nested_get({"a": 42}, "a") == "42"

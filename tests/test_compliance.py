@@ -7,12 +7,15 @@ from hypothesis import given, strategies as st
 from prothon.compliance import (
     CheckResult,
     CheckStatus,
+    CheckType,
     ComplianceReport,
     Requirement,
     analyze_python_file,
+    check_agent_files,
     check_doc_existence,
     check_inheritance,
     check_patterns_doc,
+    run_static_checks,
 )
 
 
@@ -402,3 +405,110 @@ def test_check_inheritance_no_exceptions_file(tmp_path: Path):
     results = check_inheritance(tmp_path)
 
     assert results == []
+
+
+# --- check_agent_files tests ---
+
+
+def test_check_agent_files_all_valid(tmp_path: Path):
+    """AGENTS.md present with valid symlinks for CLAUDE/GEMINI/AGENT → all PASS."""
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Agents")
+
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        (tmp_path / name).symlink_to(agents)
+
+    results = check_agent_files(tmp_path)
+
+    assert len(results) == 4
+    assert all(r.status == CheckStatus.PASS for r in results)
+
+
+def test_check_agent_files_agents_md_missing(tmp_path: Path):
+    """Missing AGENTS.md means all four checks FAIL (symlinks also broken)."""
+    results = check_agent_files(tmp_path)
+
+    assert len(results) == 4
+    assert all(r.status == CheckStatus.FAIL for r in results)
+
+
+def test_check_agent_files_regular_files_not_symlinks(tmp_path: Path):
+    """Symlink files that are regular files (not symlinks) should FAIL."""
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Agents")
+
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        (tmp_path / name).write_text("# Not a symlink")
+
+    results = check_agent_files(tmp_path)
+
+    assert len(results) == 4
+    # AGENTS.md itself should PASS
+    agents_result = results[0]
+    assert agents_result.status == CheckStatus.PASS
+
+    # The three symlink files should FAIL with "must be a symlink" rationale
+    for r in results[1:]:
+        assert r.status == CheckStatus.FAIL
+        assert "must be a symlink" in r.rationale
+
+
+def test_check_agent_files_wrong_symlink_target(tmp_path: Path):
+    """Symlinks pointing to wrong target should FAIL."""
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Agents")
+
+    wrong_target = tmp_path / "OTHER.md"
+    wrong_target.write_text("# Wrong")
+
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        (tmp_path / name).symlink_to(wrong_target)
+
+    results = check_agent_files(tmp_path)
+
+    assert len(results) == 4
+    assert results[0].status == CheckStatus.PASS  # AGENTS.md itself
+
+    for r in results[1:]:
+        assert r.status == CheckStatus.FAIL
+        assert "symlink points to" in r.rationale
+
+
+# --- run_static_checks tests ---
+
+
+def test_run_static_checks_minimal_compliant(tmp_path: Path):
+    """A minimal compliant project should return a ComplianceReport with all STATIC."""
+    # docs with SPEC, DESIGN, PATTERNS
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "SPEC.md").write_text("# Spec\n\nRequirements here.")
+    (docs_dir / "DESIGN.md").write_text("# Design\n\nArchitecture here.")
+    patterns_content = (
+        "# Patterns\n\n"
+        "Rationale text that is longer than the code block content.\n"
+        "More rationale to ensure text dominates over code.\n\n"
+        "```python\n"
+        "def example():\n"
+        '    """Docstring only."""\n'
+        "    ...\n"
+        "```\n"
+    )
+    (docs_dir / "PATTERNS.md").write_text(patterns_content)
+
+    # exceptions.py with ProthonError
+    exc_dir = tmp_path / "src" / "prothon"
+    exc_dir.mkdir(parents=True)
+    (exc_dir / "exceptions.py").write_text("class ProthonError(Exception): pass\n")
+
+    # AGENTS.md + symlinks
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Agents")
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        (tmp_path / name).symlink_to(agents)
+
+    report = run_static_checks(tmp_path)
+
+    assert isinstance(report, ComplianceReport)
+    assert len(report.results) > 0
+    assert all(r.check_type == CheckType.STATIC for r in report.results)

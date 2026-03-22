@@ -46,10 +46,11 @@ STOP and wait.
 
 **Step 2.** Launch parallel research agents. Each must write to a unique temp file (e.g., `/tmp/decision-1.md`). Use `run_in_background: true`.
 
-**Step 3.** Walk through decisions one-by-one.
+**Step 3.** Walk through decisions one-by-one (Brainstorming).
    a. Read the corresponding temp file.
-   b. Present options, pros/cons, and recommendation.
-   c. **STOP** and wait for user decision.
+   b. Explore alternatives: propose 2-3 different approaches with trade-offs. Present options conversationally with your recommendation and reasoning. Lead with your recommended option.
+   c. Present the design section incrementally (200-300 words).
+   d. **STOP** and wait for user validation and decision. Be ready to go back and clarify if something doesn't make sense.
 
 **Step 4.** Present a summary table for final confirmation.
 

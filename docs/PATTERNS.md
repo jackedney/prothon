@@ -4,18 +4,18 @@
 
 ### Module Layout
 
-Flat structure — one module per subsystem, as defined in DESIGN.md. Each module owns its public API at the top level. No re-exports through `__init__.py` beyond the version string.
+Flat structure — one module per subsystem, as defined in DESIGN.md. CLI logic is distributed: `cli.py` (Typer app/commands), `ui.py` (Rich-based terminal rendering), `config.py` (configuration resolution), and `scaffold_cli.py` (interactive scaffolding). Domain modules remain plain Python, independent of the CLI framework.
 
 ### Naming Conventions
 
 | Element | Convention | Example |
 |---------|-----------|---------|
-| Files | lowercase, singular nouns | `promise.py`, `scaffold.py`, `assistant.py` |
-| Functions | `verb_noun` | `check_task()`, `find_project_root()`, `sync_skills()` |
+| Files | lowercase, singular nouns | `promise.py`, `ui.py`, `config.py` |
+| Functions | `verb_noun` | `resolve_agent()`, `render_compliance_report()` |
 | Private helpers | `_verb_noun` | `_git_diff_names()`, `_within_tolerance()` |
 | Classes | PascalCase, no suffix noise | `CheckResult`, `Promise`, `Task` |
+| Backend Classes | `<Name>Backend` | `ClaudeBackend`, `GeminiBackend` |
 | Constants | `UPPER_SNAKE` at module level | `PROMISE_PATH`, `DEFAULT_TOLERANCE` |
-| Inline content | `_UPPER_SNAKE` private constant | `_SPEC_SCAFFOLD`, `_AGENTS_CONTENT` |
 | Type aliases | PascalCase | `DiffStat = dict[str, tuple[int, int]]` |
 
 ### Import Order
@@ -24,47 +24,24 @@ Four groups, separated by blank lines, each group alphabetical: (1) `from __futu
 
 ### Module API Surface
 
-Each module exposes a small public API. Internal helpers use the `_` prefix. No `__all__` — the underscore convention is sufficient at this scale. Public signatures per module:
+Each module exposes a minimal public API. Internal helpers use the `_` prefix.
 
-**promise.py:**
+**cli.py:**
 ```python
-def load_promise(path: Path = PROMISE_PATH) -> Promise: ...
-def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None: ...
-def complete_task(task_index: int, *, diff: GitDiffProvider | None = None, path: Path = PROMISE_PATH) -> None: ...
-def record_attempt(task_index: int, *, path: Path = PROMISE_PATH) -> None: ...
-def status(path: Path = PROMISE_PATH) -> str: ...
-def plan(path: Path = PROMISE_PATH) -> str: ...
-def cleanup(path: Path = PROMISE_PATH) -> None: ...
+def _launch_skill(skill_name: str, cwd: Path, agent: str | None = None, model: str | None = None, provider: str | None = None) -> None: ...
 ```
 
-**promise_verify.py:**
+**ui.py:**
 ```python
-def check_task(task_index: int, *, diff: GitDiffProvider | None = None, path: Path = PROMISE_PATH) -> TaskCheckReport: ...
+def render_compliance_report(report: ComplianceReport) -> Table: ...
+def render_plan(promise: Promise) -> Panel: ...
+def render_status(promise: Promise) -> Table: ...
 ```
 
-**scaffold.py:**
+**config.py:**
 ```python
-def generate(dest: Path, data: dict | None = None) -> None: ...
-def init_existing(cwd: Path | None = None) -> list[Path]: ...
-```
-
-**project.py:**
-```python
-def find_project_root(start: Path | None = None) -> Path: ...
-```
-
-**git.py:**
-```python
-def run_git(*args: str, cwd: Path | None = None) -> str: ...
-def rev_parse_head(cwd: Path | None = None) -> str: ...
-def is_dirty(path: Path, cwd: Path | None = None) -> bool: ...
-def commit_file(path: Path, message: str, cwd: Path | None = None) -> None: ...
-```
-
-**skills.py:**
-```python
-def bundled_skills_dir() -> Path: ...
-def sync_skills(target: Path | None = None) -> None: ...
+def resolve_agent(agent: str | None = None) -> str: ...
+def resolve_model(model: str | None = None, provider: str | None = None) -> str | None: ...
 ```
 
 **assistant.py:**
@@ -74,144 +51,62 @@ def get_backend(name: str = "claude-code") -> AssistantBackend: ...
 def launch(backend: AssistantBackend, skill_name: str, cwd: Path, model: str | None = None) -> int: ...
 ```
 
-**versioning.py:**
+**compliance.py:**
 ```python
-def parse_version(v: str) -> tuple[int, int, int]: ...
-def bump_major(v: str) -> str: ...
-def bump_minor(v: str) -> str: ...
-def bump_patch(v: str) -> str: ...
-def update_pyproject_version(path: Path, new_version: str) -> None: ...
-def update_init_version(path: Path, new_version: str) -> None: ...
-def create_tag(version: str, cwd: Path | None = None) -> None: ...
-def detect_bump_type(before_sha: str, after_sha: str, cwd: Path | None = None) -> str | None: ...
+def run_static_checks(root: Path) -> ComplianceReport: ...
+def run_semantic_checks(root: Path, agent: str, model: str | None = None) -> ComplianceReport: ...
+```
+
+**refactor.py:**
+```python
+def discover_drift(root: Path) -> list[DriftFinding]: ...
+def generate_refactor_promise(findings: list[DriftFinding]) -> Promise: ...
 ```
 
 ## Design Patterns
 
-### Functions First, Classes When Needed
+### Assistant Backend Category Pattern
+Assistant tools are categorized by how they ingest skills. **Category A** (native skills) uses filesystem symlinks and direct tool calls. **Category B** (prompt injection) requires injecting skill content directly into the assistant's instruction context. The shared `launch()` lifecycle handles common environment setup while delegating skill delivery to specific backend strategies.
 
-Most modules are plain functions with typed signatures. Reserve classes for two cases: **data carriers** (dataclasses) and **behavioral contracts** (protocols). If a piece of logic doesn't need state between calls, it's a function.
+### Tiered Compliance Evidence Pattern
+Compliance verification uses a hybrid strategy to map requirements to source code. **Static Analysis** (Regex/AST) performs fast, deterministic checks for structural rules and doc formats. **Semantic Analysis** (LLM-based) handles high-level functional requirements. Both feed into **Evidence Mapping**, where every result is paired with a `file:line` citation and a brief rationale.
 
-### Dataclasses for Structured Data
-
-Use `@dataclass` with `field(default_factory=...)` for mutable defaults. Dataclasses carry data and may expose computed properties, but should not contain complex business logic. The promise system uses this for `Task`, `Metadata`, `Promise`, `CheckResult`, `FileCheckDetail`, and `TaskCheckReport`.
-
-### Protocols for Dependency Injection
-
-Use `typing.Protocol` where a module needs a swappable capability — primarily for testing. Protocols provide structural typing without inheritance. Implementations satisfy the contract structurally without inheriting from the protocol.
-
-### Registry for Backend Lookup
-
-A module-level dict maps string names to backend classes. A `register_backend()` function provides a public extension hook for programmatic use and testing. `get_backend()` instantiates by name, listing all registered backends in the error message when the name is unknown.
-
-### Shared Lifecycle as Standalone Function
-
-The `launch()` function accepts anything satisfying `AssistantBackend` and runs the shared lifecycle: binary existence check, skill syncing, environment merging, subprocess execution, and return code reporting.
-
-### File Locking and Atomic Persistence
-
-When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates. `save_promise()` writes atomically via temporary files and `os.replace`.
-
-The lock implementation is cross-platform: `fcntl.flock` on Unix, `msvcrt.locking` on Windows. The lock uses a sibling `.toml.lock` file.
-
-### Guard-Clause Preconditions
-
-Domain functions that require specific environmental conditions validate them upfront and raise domain exceptions. Guards come first, happy path follows. No nested `if/else` trees.
-
-### Hybrid Verification Pattern
-
-Used by the compliance checker. It combines deterministic static analysis (regex or AST) for structural requirements and documentation form rules with semantic LLM-based analysis for high-level functional requirements.
-
-### Evidence-Based Verification
-
-All verification and compliance reports must map findings to source code evidence. Every PASS/FAIL status must include a `file:line` citation and a brief rationale explaining how the implementation satisfies or fails the documented intent.
-
-### Advisory-First Refactoring
-
-The refactoring workflow is split into two distinct phases. The **Discovery Phase** is purely advisory and read-only; it scans for drift and presents findings to the user. The **Execution Phase** only begins after the user selects specific improvements, triggering the generation of a change promise and subsequent implementation tasks.
+### Progressive Disclosure Skill Pattern
+To maintain context efficiency for AI assistants, generated reference skills follow a three-level hierarchy. **Level 1** (YAML frontmatter) provides trigger phrases for discovery. **Level 2** (`SKILL.md` body) contains core instructions. **Level 3** (`references/` subdirectory) holds detailed API specs and heavy examples, loaded only when needed.
 
 ### Refactor Wave Pattern
+Changes must flow top-down through the documentation hierarchy: **DESIGN -> PATTERNS -> CODE**. Architectural shifts or convention changes are documented and approved first. Implementation tasks then reference the specific documentation heading they are aligning with.
 
-Changes flow top-down through the documentation hierarchy: **DESIGN -> PATTERNS -> CODE**. Architectural shifts or convention changes must be documented and approved before any source code is modified. Implementation tasks must reference the specific documentation heading they are aligning with.
+### AST Pattern Mining (Adoption)
+During `prothon init`, the system uses Python's `ast` module to scan for high-signal structural elements in existing code. It satisfies the "signature-only" constraint by using `ast.unparse()` on discovered nodes after clearing their implementation bodies.
 
-### Hierarchical Conflict Resolution
-
-When the `doc-harmonizer` detects contradictions, it presents them as "Before/After" diffs based on the authority hierarchy (SPEC > DESIGN > PATTERNS). Higher-level documents are never amended by the harmonizer; only lower-authority documents are updated after explicit user approval.
-
-### Self-Correcting Subagent Loop
-
-Orchestrated tasks follow an iterative **Plan -> Act -> Validate** cycle. Each task executes in a fresh subagent context, followed by a quality gate (pre-commit hooks) and a verification check (promise check). If either fails, the task is retried up to `max_attempts`.
-
-### Default Arguments for Production, Parameters for Testing
-
-Functions use production defaults but accept overrides so tests never touch real state and never need monkeypatching.
-
-### UI Formatting Separation
-
-The visual representation of data is decoupled from the command logic. Domain objects (e.g., `Promise`, `TaskCheckReport`) are passed to specialized rendering helpers in `ui.py` (`render_plan`, `render_status`, `render_check_report`) that return `rich` objects (Tables, Panels, etc.). Command functions orchestrate logic and use `console.print()` to display these pre-rendered objects, ensuring consistency and testability of the UI layer.
-
-### Unified Configuration Resolution
-
-Configuration values (agent, model, provider) are resolved through a centralized 5-level precedence chain: CLI flag > environment variable > `pyproject.toml` > global config > default. This resolution respects `$XDG_CONFIG_HOME` (defaulting to `~/.config/prothon/config.toml`) and is encapsulated in helper functions within `config.py` (`resolve_agent()`, `resolve_model()`) to ensure all commands follow the same priority rules.
-
-## Skill Authoring Patterns
-
-### Frontmatter Conventions
-
-All bundled skills live in `src/prothon/skills/` as directories containing a `SKILL.md`. Frontmatter fields include `name`, `description`, and optional assistant-specific fields like `model` or `context`.
-
-### Multi-File Skill Layout (Progressive Disclosure)
-
-Generated reference skills follow a hierarchical structure to maintain context efficiency. `SKILL.md` contains the core instructions and concise usage patterns (< 500 words). Detailed API specifications, heavy documentation, or large examples (> 100 lines) are moved to a `references/` subdirectory.
-
-### Canonical Subagent Portability
-
-Skills must use **canonical agent type names** (`general-purpose`, `explore`, `plan`) when requesting subagent spawns. Each assistant backend's `subagent_type_map` translates these canonical names into tool-specific invocations, ensuring skills are portable across different AI assistants.
-
-### Conversational Cadence
-
-User-facing doc-writer skills enforce a one-message-then-wait cadence. This prevents context dumping and ensures incremental user control over design and requirements decisions.
-
-### Documentation Safety in Skills
-
-Non-doc agents explicitly declare `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` as read-only. Skills authorized to write to docs must perform a local git commit immediately after writing to prevent state loss.
+### File Locking and Atomic Persistence
+When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates, using a sibling `.toml.lock` file.
 
 ## Error Handling
 
 ### Centralized CLI Error Boundary
-
-The `cli.py` module acts as the single catch-all boundary for `ProthonError` and its domain-specific subclasses. Library modules and domain logic are responsible only for raising these exceptions. The CLI catches them at the command function entry point, presents a cleanly formatted error message to the user, and terminates the process with a non-zero exit code. This prevents terminal-specific formatting logic from leaking into core domain code.
+The `cli.py` module acts as the single catch-all boundary for `ProthonError` and its subclasses. Library modules raise exceptions; the CLI catches them, presents a formatted message, and terminates with a non-zero exit code.
 
 ### Terminal Failure Pattern
+When a subagent reaches `max_attempts` for a task without passing verification and quality gates, it reports a terminal failure. The orchestrator records the failure and asks the user for a decision (skip, retry, or abort) to prevent infinite loops.
 
-When a subagent reaches `max_attempts` for a task without passing verification and quality gates, it reports a terminal failure. The orchestrator records the failure and the full attempt log, then asks the user for a decision (skip, retry, or abort).
+### Data-Driven Doc Consistency Failures
+Contradictions found by the `doc-harmonizer` are treated as data, not exceptions. They are presented as a structured report of `Conflict` objects, enabling interactive resolution and approval before any documents are amended.
 
-### Doc Consistency Failures
-
-Contradictions found by the `doc-harmonizer` are treated as data rather than exceptions. They are presented as a structured report of `Conflict` objects, enabling interactive resolution and approval before any documents are amended.
-
-### Compliance Failure Pattern
-
-Compliance checking produces a report of `CheckResult` objects with `CheckStatus.FAIL` for unmet requirements. These are not treated as flow-control exceptions unless specifically running in a CI environment where a non-zero exit code is required for failure.
+### Model/Provider Resolution Errors
+Configuration resolution for `opencode` enforces that both model and provider must be present if one is provided. Violations raise a `ConfigurationError` explaining the required format, ensuring early failure.
 
 ## Testing Patterns
 
-### Test Layout
-
-The `tests/` directory mirrors the `src/prothon/` layout. Shared fixtures and factories are centralized in `conftest.py`.
-
 ### Protocol Fakes Over Mocks
-
-Test dependencies are managed using simple fake implementations that satisfy protocols. This ensures tests break when interfaces change, providing better safety than standard mocks.
+Test dependencies are managed using simple fake implementations that satisfy protocols (e.g., `FakeGitDiff` for `GitDiffProvider`). This ensures tests break when interfaces change and avoids fragile standard mocks.
 
 ### Subagent Mocking Pattern
-
-Use a `FakeAssistantBackend` that simulates subagent responses, return codes, and file modifications. This enables testing complex orchestration logic (like the Refactor Wave or Task Lifecycle) without invoking real AI models.
+Orchestration logic is tested using a `FakeAssistantBackend` that simulates subagent responses, return codes, and file modifications. This enables exhaustive testing of retry loops and decision-making without hitting real APIs.
 
 ### Conflict Injection Pattern
-
-Verify the `doc-harmonizer` by injecting known contradictions between SPEC, DESIGN, and PATTERNS. Tests confirm that the harmonizer detects the conflict, identifies the correct higher-authority document, and proposes the appropriate resolution text.
+The `doc-harmonizer` is verified by injecting known contradictions between SPEC, DESIGN, and PATTERNS. Tests confirm the harmonizer detects the conflict, identifies the higher-authority document, and proposes the correct resolution.
 
 ### Concurrency Stress Testing
-
-Verify the `.toml.lock` exclusive locking mechanism by using multiprocessing to simulate concurrent subagents attempting to mark tasks complete simultaneously. Tests ensure that all updates are serialized and no data is lost.
+The `.toml.lock` exclusive locking mechanism is verified using multiprocessing to simulate concurrent subagents. Tests ensure all updates are serialized and no data is lost.

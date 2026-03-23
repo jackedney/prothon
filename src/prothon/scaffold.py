@@ -7,6 +7,7 @@ from pathlib import Path
 
 import tomlkit
 
+from prothon.ast_miner import ASTPatternMiner
 from prothon.exceptions import GitError, ProjectAlreadyInitError
 from prothon.git import run_git
 
@@ -692,10 +693,15 @@ def init_existing(
     docs_dir = root / "docs"
     docs_dir.mkdir(parents=True, exist_ok=True)
 
+    signatures = ASTPatternMiner().scan_directory(root)
+    patterns_content = _PATTERNS_SCAFFOLD
+    if signatures:
+        patterns_content += f"\n\n## Discovered Patterns\n\n{signatures}\n"
+
     scaffolds = {
         "SPEC.md": _SPEC_SCAFFOLD,
         "DESIGN.md": _DESIGN_SCAFFOLD,
-        "PATTERNS.md": _PATTERNS_SCAFFOLD,
+        "PATTERNS.md": patterns_content,
     }
     for filename, content in scaffolds.items():
         path = docs_dir / filename

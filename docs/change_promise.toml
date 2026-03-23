@@ -1,0 +1,105 @@
+[metadata]
+base_commit = "05d1bdf4df98b13ced0295fb26260264a8415d14"
+created_at = "2026-03-23T14:30:00Z"
+
+[[tasks]]
+title = "Complete Trigger Follow-ups"
+goal = "Update trigger_follow_ups in src/prothon/commands.py to include all required triggers from DESIGN.md."
+success_criteria = "trigger_follow_ups handles DESIGN_WRITER (harmonizer+researcher), PATTERNS_WRITER (harmonizer), and EXECUTE (compliance)."
+files_to_create = []
+files_to_modify = ["src/prothon/commands.py"]
+files_to_remove = []
+expected_lines_added = 20
+expected_lines_removed = 5
+context_files = ["src/prothon/commands.py", "src/prothon/skills/prothon-doc-harmonizer/SKILL.md"]
+doc_sections = ["DESIGN.md#Trigger-Follow-ups"]
+reference_skills = ["style-python"]
+dependencies = []
+completed = true
+attempts = 1
+task_id = "95d9c34f"
+
+[[tasks]]
+title = "Complete Enforce Commit"
+goal = "Update enforce_commit and SKILL_DOC_MAP in src/prothon/commands.py to include REFACTOR and DOC_HARMONIZER."
+success_criteria = "enforce_commit handles REFACTOR and DOC_HARMONIZER according to DESIGN.md."
+files_to_create = []
+files_to_modify = ["src/prothon/commands.py"]
+files_to_remove = []
+expected_lines_added = 15
+expected_lines_removed = 2
+context_files = ["src/prothon/commands.py"]
+doc_sections = ["DESIGN.md#Enforce-Commit"]
+reference_skills = ["style-python"]
+dependencies = [0]
+completed = true
+attempts = 1
+task_id = "9a877790"
+
+[[tasks]]
+title = "Implement Tech-Researcher static check"
+goal = "Add check_tech_researcher to src/prothon/static_checks.py to verify R43-46 compliance."
+success_criteria = "run_static_checks includes check_tech_researcher and it correctly identifies prothon-tech-researcher skill existence."
+files_to_create = []
+files_to_modify = ["src/prothon/static_checks.py"]
+files_to_remove = []
+expected_lines_added = 15
+expected_lines_removed = 0
+context_files = ["src/prothon/static_checks.py"]
+doc_sections = ["SPEC.md#Tech-Research"]
+reference_skills = ["style-python"]
+dependencies = [1]
+completed = true
+attempts = 1
+task_id = "3e1a4b0d"
+
+[[tasks]]
+title = "Implement Doc-Harmonizer static check"
+goal = "Add check_doc_harmonizer to src/prothon/static_checks.py to verify R24 compliance."
+success_criteria = "run_static_checks includes check_doc_harmonizer and it correctly identifies prothon-doc-harmonizer skill existence."
+files_to_create = []
+files_to_modify = ["src/prothon/static_checks.py"]
+files_to_remove = []
+expected_lines_added = 151
+expected_lines_removed = 0
+context_files = ["src/prothon/static_checks.py"]
+doc_sections = ["SPEC.md#Doc-Harmonizer"]
+reference_skills = ["style-python"]
+dependencies = [2]
+completed = true
+attempts = 1
+task_id = "fb623117"
+
+[[tasks]]
+title = "Implement SemVer static check"
+goal = "Add check_semantic_versioning to src/prothon/static_checks.py to verify R47-55 compliance."
+success_criteria = "run_static_checks includes check_semantic_versioning and it verifies existence of version-bump CI templates."
+files_to_create = []
+files_to_modify = ["src/prothon/static_checks.py"]
+files_to_remove = []
+expected_lines_added = 20
+expected_lines_removed = 0
+context_files = ["src/prothon/static_checks.py"]
+doc_sections = ["SPEC.md#Semantic-Versioning"]
+reference_skills = ["style-python"]
+dependencies = [3]
+completed = false
+attempts = 0
+task_id = "34c31680"
+
+[[tasks]]
+title = "Verify Alignment Compliance"
+goal = "Run prothon compliance to verify the new checks and overall project health."
+success_criteria = "prothon compliance runs successfully and shows PASS for the new checks."
+files_to_create = []
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 0
+expected_lines_removed = 0
+context_files = ["src/prothon/commands.py", "src/prothon/static_checks.py"]
+doc_sections = ["SPEC.md#Compliance-Verification"]
+reference_skills = ["style-python"]
+dependencies = [4]
+completed = false
+attempts = 0
+task_id = "e0591ada"

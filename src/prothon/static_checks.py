@@ -212,6 +212,7 @@ def run_static_checks(root: Path) -> ComplianceReport:
     report.results.extend(check_execute_logic(root))
     report.results.extend(check_refactor_logic(root))
     report.results.extend(check_tech_researcher(root))
+    report.results.extend(check_doc_harmonizer(root))
 
     for res in report.results:
         res.check_type = CheckType.STATIC
@@ -773,4 +774,36 @@ def check_tech_researcher(root: Path) -> list[CheckResult]:
     results.append(_check_tech_researcher_skill_existence(root, r43))
     results.extend(_check_reference_skills_storage(root, r45))
 
+    return results
+
+
+def check_doc_harmonizer(root: Path) -> list[CheckResult]:
+    """Verify Doc-Harmonizer implementation (SPEC R24)."""
+    results = []
+    req = Requirement(
+        source="SPEC",
+        requirement_id="R24",
+        statement="The doc-harmonizer must detect conflicts between documentation levels and suggest amendments to the lower-authority document, requiring user approval before making changes.",
+    )
+
+    skill_path = (
+        root / "src" / "prothon" / "skills" / "prothon-doc-harmonizer" / "SKILL.md"
+    )
+    if skill_path.exists():
+        results.append(
+            CheckResult(
+                requirement=req,
+                status=CheckStatus.PASS,
+                evidence=str(skill_path),
+            )
+        )
+    else:
+        results.append(
+            CheckResult(
+                requirement=req,
+                status=CheckStatus.FAIL,
+                evidence=str(skill_path),
+                rationale="Missing prothon-doc-harmonizer skill.",
+            )
+        )
     return results

@@ -7,14 +7,14 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from prothon import promise
 from prothon.compliance import ComplianceReport
+from prothon.models import Promise
 from prothon.promise_verify import CheckStatus, TaskCheckReport
 
 console = Console()
 
 
-def render_plan(p: promise.Promise) -> Table:
+def render_plan(p: Promise) -> Table:
     """Build a Rich table for the promise plan."""
     base = p.metadata.base_commit or "unknown"
     task_word = "task" if len(p.tasks) == 1 else "tasks"
@@ -55,7 +55,7 @@ def render_plan(p: promise.Promise) -> Table:
     return table
 
 
-def render_status(p: promise.Promise) -> Table:
+def render_status(p: Promise) -> Table:
     """Build a Rich table for task completion status."""
     done = sum(1 for t in p.tasks if t.completed)
     table = Table(title=f"Status: {done}/{len(p.tasks)} completed")

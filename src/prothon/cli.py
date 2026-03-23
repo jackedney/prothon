@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 
 from prothon import promise, promise_verify, versioning
+from prothon.models import PROMISE_PATH
 from prothon.assistant import _BACKENDS, get_backend, launch
 from prothon.compliance import run_static_checks
 from prothon.config import (
@@ -98,7 +99,7 @@ def _require_doc(root: Path, doc_name: str) -> None:
 
 def _require_promise_file(root: Path) -> Path:
     """Resolve promise path against project root, or exit if missing."""
-    promise_path = root / promise.PROMISE_PATH
+    promise_path = root / PROMISE_PATH
     if not promise_path.exists():
         typer.echo(f"No promise file found at {promise_path}")
         raise typer.Exit(1)
@@ -298,14 +299,17 @@ def compliance(
 
     # Step 2: Semantic Analysis (LLM)
     # Ensure any previous semantic results are cleared
-    results_path = root / ".prothon" / "compliance_semantic.json"
+    prothon_dir = root / ".prothon"
+    prothon_dir.mkdir(parents=True, exist_ok=True)
+    results_path = prothon_dir / "compliance_semantic.json"
     if results_path.exists():
         results_path.unlink()
-    else:
-        results_path.parent.mkdir(parents=True, exist_ok=True)
 
     typer.echo("Launching semantic compliance checks (LLM)...")
-    _launch_skill(Skill.COMPLIANCE, root, agent, model, provider)
+    try:
+        _launch_skill(Skill.COMPLIANCE, root, agent, model, provider)
+    except ProthonError as exc:
+        typer.echo(f"Warning: Semantic checks failed to launch: {exc}")
 
     # Step 3: Merge and display unified report
     if results_path.exists():
@@ -313,8 +317,13 @@ def compliance(
             with open(results_path, encoding="utf-8") as f:
                 findings = json.load(f)
             report.add_from_dicts(findings)
-        except (OSError, json.JSONDecodeError):
-            typer.echo("Warning: Failed to load semantic compliance results.")
+        except (OSError, json.JSONDecodeError) as exc:
+            typer.echo(f"Warning: Failed to load semantic compliance results: {exc}")
+    else:
+        typer.echo(
+            "Warning: No semantic results found. The assistant session might have "
+            "exited without producing a report or was cancelled."
+        )
 
     console.print("\n", render_compliance_report(report))
     typer.echo("\n" + report.format_summary())

@@ -398,11 +398,113 @@ def run_static_checks(root: Path) -> ComplianceReport:
     report.results.extend(check_doc_existence(root))
     report.results.extend(check_inheritance(root))
     report.results.extend(check_agent_files(root))
+    report.results.extend(check_package_structure(root))
+    report.results.extend(check_pre_commit(root))
+    report.results.extend(check_skills_dir(root))
 
     for res in report.results:
         res.check_type = CheckType.STATIC
 
     return report
+
+
+def check_package_structure(root: Path) -> list[CheckResult]:
+    """Verify src/ layout and py.typed existence (SPEC R3)."""
+    results = []
+    req = Requirement(
+        source="SPEC",
+        requirement_id="R3",
+        statement="Project must use src/ layout with a typed package (py.typed).",
+    )
+
+    src_dir = root / "src"
+    if not src_dir.is_dir():
+        results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence="src/",
+                rationale="Missing src/ directory.",
+            )
+        )
+        return results
+
+    # Try to find a package directory with py.typed
+    packages = [
+        p for p in src_dir.iterdir() if p.is_dir() and (p / "__init__.py").exists()
+    ]
+    if not packages:
+        results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence="src/",
+                rationale="No Python packages found in src/.",
+            )
+        )
+        return results
+
+    for pkg in packages:
+        py_typed = pkg / "py.typed"
+        if py_typed.exists():
+            results.append(CheckResult(req, CheckStatus.PASS, evidence=str(py_typed)))
+            return results
+
+    results.append(
+        CheckResult(
+            req,
+            CheckStatus.FAIL,
+            evidence=str(packages[0]),
+            rationale=f"Missing py.typed marker in {packages[0].name} package.",
+        )
+    )
+    return results
+
+
+def check_pre_commit(root: Path) -> list[CheckResult]:
+    """Verify pre-commit hooks existence (SPEC R5)."""
+    results = []
+    req = Requirement(
+        source="SPEC",
+        requirement_id="R5",
+        statement="Project must include pre-commit hooks configuration.",
+    )
+    pc_path = root / ".pre-commit-config.yaml"
+    if pc_path.is_file():
+        results.append(CheckResult(req, CheckStatus.PASS, evidence=str(pc_path)))
+    else:
+        results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence=".pre-commit-config.yaml",
+                rationale="Missing pre-commit config.",
+            )
+        )
+    return results
+
+
+def check_skills_dir(root: Path) -> list[CheckResult]:
+    """Verify project-specific skills directory existence (SPEC R15)."""
+    results = []
+    req = Requirement(
+        source="SPEC",
+        requirement_id="R15",
+        statement="Project must have a .agents/skills/ directory for project-specific reference skills.",
+    )
+    skills_dir = root / ".agents" / "skills"
+    if skills_dir.is_dir():
+        results.append(CheckResult(req, CheckStatus.PASS, evidence=str(skills_dir)))
+    else:
+        results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence=".agents/skills/",
+                rationale="Missing project skills directory.",
+            )
+        )
+    return results
 
 
 def check_doc_existence(root: Path) -> list[CheckResult]:

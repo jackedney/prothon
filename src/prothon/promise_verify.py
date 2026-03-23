@@ -5,13 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from prothon.exceptions import PromiseError
 from prothon.git import GitDiffProvider, SubprocessGitDiff
-
-if TYPE_CHECKING:
-    from prothon.promise import Promise, Task
+from prothon.models import Promise, Task
 
 DEFAULT_TOLERANCE = 30
 
@@ -141,11 +138,11 @@ def _validate_params(
     promise: Promise | None,
 ) -> tuple[GitDiffProvider, Promise]:
     """Validate and resolve parameters for check_task."""
-    from prothon.promise import PROMISE_PATH, load_promise
-
     resolved_diff = diff if diff is not None else SubprocessGitDiff()
 
     if promise is None:
+        from prothon.promise import PROMISE_PATH, load_promise
+
         promise_path = path if path is not None else PROMISE_PATH
         promise = load_promise(promise_path)
 
@@ -167,11 +164,15 @@ def check_task(
     promise: Promise | None = None,
 ) -> TaskCheckReport:
     """Check a single task's promises against git reality."""
-    from prothon.promise import PROMISE_PATH
-
     diff, promise = _validate_params(task_index, diff, path, promise)
 
-    promise_path = path if path is not None else PROMISE_PATH
+    if path is not None:
+        promise_path = path
+    else:
+        from prothon.promise import PROMISE_PATH
+
+        promise_path = PROMISE_PATH
+
     base_path = (
         promise_path.parent.parent
         if promise_path.parent.name == "docs"

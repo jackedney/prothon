@@ -18,7 +18,7 @@ def test_analyze_python_file_imports_and_classes(tmp_path: Path):
     py_path.write_text("""
 import os
 from pathlib import Path
-from prothon.promise import Task
+from prothon.models import Task
 
 class MyTask(Task):
     pass
@@ -30,7 +30,7 @@ class SimpleClass:
     analysis = analyze_python_file(py_path)
     assert "os" in analysis["imports"]
     assert "pathlib" in analysis["imports"]
-    assert "prothon.promise" in analysis["imports"]
+    assert "prothon.models" in analysis["imports"]
 
     assert analysis["base_classes"]["MyTask"] == ["Task"]
     assert analysis["base_classes"]["SimpleClass"] == []

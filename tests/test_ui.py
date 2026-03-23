@@ -13,7 +13,7 @@ from prothon.compliance import (
     ComplianceReport,
     Requirement,
 )
-from prothon.promise import Metadata, Promise, Task
+from prothon.models import Metadata, Promise, Task
 from prothon.promise_verify import CheckResult, CheckStatus, TaskCheckReport
 from prothon.ui import (
     render_check_report,

@@ -9,10 +9,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 from prothon.exceptions import PromiseError
 from prothon.git import DiffStat
+from prothon.models import Metadata, Promise, Task
 from prothon.promise import (
-    Metadata,
-    Promise,
-    Task,
     _format_task_plan,
     _metadata_from_dict,
     _task_from_dict,

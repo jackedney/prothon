@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from prothon.exceptions import PromiseError
-from prothon.promise import Metadata, Promise, Task, save_promise
+from prothon.models import Metadata, Promise, Task
+from prothon.promise import save_promise
 from prothon.promise_verify import (
     CheckStatus,
     _check_files_to_create,

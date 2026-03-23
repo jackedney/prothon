@@ -8,7 +8,7 @@ from pathlib import Path
 
 from prothon import promise, promise_verify, versioning
 from prothon.assistant import get_backend, launch
-from prothon.compliance import run_static_checks
+from prothon.static_checks import run_static_checks
 from prothon.config import (
     file_hash,
     find_init_path,

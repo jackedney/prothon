@@ -10,6 +10,8 @@ from prothon.compliance import (
     CheckType,
     ComplianceReport,
     Requirement,
+)
+from prothon.static_checks import (
     analyze_python_file,
     check_agent_files,
     check_doc_existence,

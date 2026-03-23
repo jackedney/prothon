@@ -9,8 +9,7 @@ from typing import Annotated
 
 import typer
 
-from prothon import promise, promise_verify, versioning
-from prothon.models import PROMISE_PATH
+from prothon import promise, promise_verify, scaffold_cli, versioning
 from prothon.assistant import _BACKENDS, get_backend, launch
 from prothon.compliance import run_static_checks
 from prothon.config import (
@@ -22,8 +21,8 @@ from prothon.config import (
     resolve_model,
 )
 from prothon.exceptions import GitError, ProthonError
+from prothon.models import PROMISE_PATH
 from prothon.project import find_project_root
-from prothon import scaffold_cli
 from prothon.ui import (
     console,
     render_check_report,

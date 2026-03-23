@@ -134,8 +134,21 @@ The doc-harmonizer maintains internal consistency across the documentation hiera
 The tech-researcher refreshes project-specific reference skills based on the technology choices in DESIGN.md (serves R43-46).
 
 - **Sourcing:** Combines local inspection (`uv pip show`, `inspect`) with direct web fetching (`web_fetch` on official doc URLs) to ensure version accuracy and up-to-date idiomatic knowledge.
-- **Multi-File Skills:** Generates skills as directories in `.agents/skills/` following Anthropic's multi-file structure (`SKILL.md`, `reference.md`, `conventions.md`, `examples/`).
-- **Progressive Disclosure:** Leverages the assistant's ability to load only the necessary context, keeping the core `SKILL.md` concise.
+- **Progressive Disclosure:** Skills use a three-level system to minimize token usage:
+  - **Level 1 (YAML frontmatter):** Includes name, description, and trigger phrases in `SKILL.md`. Loaded into the system prompt for discovery.
+  - **Level 2 (SKILL.md body):** Core instructions, best practices, and "When to use" guidance (max 500 words).
+  - **Level 3 (Linked files):** Deep technical references, API guides, and complex examples moved to a `references/` directory.
+- **Multi-File Skills:** Generates skills as directories in `.agents/skills/` using standard naming: `SKILL.md` (case-sensitive) and kebab-case folder names.
+- **Discovery:** Leverages the assistant's ability to load only the necessary context, keeping the core `SKILL.md` concise.
+
+### Adoption Intelligence (R13)
+
+During `prothon init`, the system uses static analysis to pre-populate `PATTERNS.md` with existing conventions.
+
+- **AST Pattern Miner:** Uses Python's built-in `ast` module to scan for high-signal structural elements (base classes, protocols, common decorators).
+- **Idiom Matcher:** Includes pre-defined signatures for popular libraries (FastAPI, Typer, Pydantic).
+- **Signature-Only Extraction:** Uses `ast.unparse()` on discovered nodes after clearing their bodies to satisfy R25-R26 compliance automatically.
+- **Local Execution:** Runs entirely offline and locally during the adoption workflow.
 
 ### Mutation Testing CI (R6)
 
@@ -611,5 +624,6 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 | Refactor Orchestration | 3-layer Wave (DESIGN -> PATTERNS -> CODE) | Code-first refactor | Maintains documentation as the source of truth for architectural shifts and proactive optimization. |
 | Harmonization Mechanism | Semantic LLM Cross-Referencing | Keyword matching; manual audit | Essential for natural language documentation consistency. |
 | Tech-Researcher Sourcing | uv + Direct Web Fetch | Context7/MCP; Training data only | Version accuracy and cost efficiency without usage limits. |
-| Tech-Researcher Structure | Multi-file Skill Directories | Single SKILL.md | Improves context efficiency via progressive disclosure. |
+| Tech-Researcher Structure | Three-level Progressive Disclosure (`SKILL.md` + `references/`) | Single large `SKILL.md` | Follows Anthropic best practices for context efficiency. Level 1 discovery via frontmatter, Level 2 core instructions, Level 3 deep references. |
+| Adoption Strategy | AST Pattern Miner + Idiom Matcher | Empty scaffold; LLM-based discovery | AST Miner is fast, local, and zero-cost while pre-populating PATTERNS.md with compliant signatures (R25-R26). |
 | Mutation Testing CI | Non-blocking Asynchronous Audit | Blocking CI gate | Provides feedback without impeding development speed. |

@@ -275,7 +275,7 @@ class TestInitProject:
                 "prothon.scaffold_cli._collect_project_details",
                 return_value=mock_details,
             ) as mock_collect,
-            patch("prothon.scaffold_cli.scaffold.init_existing", mock_init),
+            patch("prothon.scaffold_cli.adoption.init_existing", mock_init),
             patch("prothon.scaffold_cli.typer.echo"),
         ):
             init_project(cwd=tmp_path)
@@ -294,7 +294,7 @@ class TestInitProject:
             patch(
                 "prothon.scaffold_cli._collect_project_details",
             ) as mock_collect,
-            patch("prothon.scaffold_cli.scaffold.init_existing", mock_init),
+            patch("prothon.scaffold_cli.adoption.init_existing", mock_init),
             patch("prothon.scaffold_cli.typer.echo"),
         ):
             init_project(cwd=tmp_path)
@@ -303,13 +303,13 @@ class TestInitProject:
         mock_init.assert_called_once_with(tmp_path, data=None)
 
     def test_prothon_error_from_init_existing(self, tmp_path: Path) -> None:
-        """ProthonError from scaffold.init_existing is caught and exits."""
+        """ProthonError from adoption.init_existing is caught and exits."""
         (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n")
 
         with (
             patch("prothon.git.run_git"),
             patch(
-                "prothon.scaffold_cli.scaffold.init_existing",
+                "prothon.scaffold_cli.adoption.init_existing",
                 side_effect=ProthonError("boom"),
             ),
             patch("prothon.scaffold_cli.typer.echo") as mock_echo,
@@ -333,7 +333,7 @@ class TestInitProject:
 
         with (
             patch("prothon.git.run_git"),
-            patch("prothon.scaffold_cli.scaffold.init_existing", mock_init),
+            patch("prothon.scaffold_cli.adoption.init_existing", mock_init),
             patch(
                 "prothon.scaffold_cli.typer.echo",
                 side_effect=lambda msg, **kw: echo_calls.append(msg),

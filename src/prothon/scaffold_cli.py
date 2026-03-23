@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from prothon import scaffold
+from prothon import adoption, scaffold
 from prothon.exceptions import GitError, ProthonError
 
 
@@ -83,7 +83,7 @@ def init_project(cwd: Path | None = None) -> None:
         data = _collect_project_details()
 
     try:
-        created = scaffold.init_existing(root, data=data)
+        created = adoption.init_existing(root, data=data)
         for path in created:
             typer.echo(f"  created {path}")
         typer.echo("\nNext step: uvx prothon spec")

@@ -7,18 +7,20 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from prothon.exceptions import GitError, ProjectAlreadyInitError, ProthonError
-from prothon.git import run_git
-from prothon.scaffold import (
+from prothon.adoption import (
     _DESIGN_SCAFFOLD,
     _GITLAB_VERSION_BUMP,
     _PATTERNS_SCAFFOLD,
     _SPEC_SCAFFOLD,
     _VERSION_BUMP_WORKFLOW,
     _VERSION_TAG_WORKFLOW,
-    _template_dir,
-    generate,
     init_existing,
+)
+from prothon.exceptions import GitError, ProjectAlreadyInitError, ProthonError
+from prothon.git import run_git
+from prothon.scaffold import (
+    generate,
+    get_template_dir,
 )
 
 
@@ -38,7 +40,7 @@ def context() -> dict[str, str]:
 
 def test_template_dir_exists() -> None:
     """The bundled copier template must exist at the project root."""
-    path = _template_dir()
+    path = get_template_dir()
     assert path.exists()
     assert (path / "copier.yml").exists()
 
@@ -281,7 +283,7 @@ def test_init_existing_path_a_calls_copier(tmp_path: Path) -> None:
 
     mock_run_copy.assert_called_once()
     args = mock_run_copy.call_args.args
-    assert args[0] == str(_template_dir())
+    assert args[0] == str(get_template_dir())
     assert args[1] == str(tmp_path)
     kw = mock_run_copy.call_args.kwargs
     assert kw["data"]["module_name"] == "testmod"

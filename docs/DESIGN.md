@@ -186,6 +186,10 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 | tomlkit (>=0.13,<1.0) | TOML read/write with comment and formatting preservation | R27-R28: change promise contract | tomllib+tomli-w, toml |
 | rich (via typer) | Table rendering for promise plans, status, and compliance reports | R35: compliance report with PASS/FAIL/SKIP status | tabulate, click echo/style |
 | subprocess (stdlib) | Git CLI interaction via thin typed wrapper | R7: git init, R31: promise verification | GitPython, pygit2, dulwich |
+| claude-code | AI assistant backend | R57: Claude Code support | opencode, gemini, ob1 |
+| opencode | AI assistant backend | R57-R58, R61: opencode support | claude-code, gemini, ob1 |
+| gemini-cli | AI assistant backend | R57: Gemini CLI support | claude-code, opencode, ob1 |
+| ob1 | AI assistant backend | R57: OB1 support (pluggable) | claude-code, opencode, gemini |
 
 ### Rationale
 
@@ -279,14 +283,15 @@ Registered backends:
 | `claude-code` | Claude Code | `claude` | `~/.claude/skills/` | A (native skills) |
 | `opencode` | opencode | `opencode` | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) | A (native skills) |
 | `gemini` | Gemini CLI | `gemini` | `~/.gemini/skills/` | A (native skills) |
+| `ob1` | OB1 | `ob1` | `~/.ob1/skills/` | B (prompt injection) |
 
 Canonical-to-backend subagent type mapping:
 
-| Canonical name | Claude Code | opencode | Gemini CLI |
-|---------------|-------------|----------|------------|
-| `general-purpose` | `general-purpose` | `general` | `generalist` |
-| `explore` | `Explore` | `explore` | `codebase_investigator` |
-| `plan` | `Plan` | `plan` | `generalist` |
+| Canonical name | Claude Code | opencode | Gemini CLI | OB1 |
+|---------------|-------------|----------|------------|-----|
+| `general-purpose` | `general-purpose` | `general` | `generalist` | `general` |
+| `explore` | `Explore` | `explore` | `codebase_investigator` | `explore` |
+| `plan` | `Plan` | `plan` | `generalist` | `plan` |
 
 A shared launch lifecycle handles: binary existence check (via `shutil.which()`), skill syncing, environment merging (`os.environ` + `env_overrides()`), subprocess execution, and return code reporting. When the binary is missing, the error message includes the backend's `install_hint`.
 

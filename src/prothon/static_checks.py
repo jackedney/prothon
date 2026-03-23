@@ -213,6 +213,7 @@ def run_static_checks(root: Path) -> ComplianceReport:
     report.results.extend(check_refactor_logic(root))
     report.results.extend(check_tech_researcher(root))
     report.results.extend(check_doc_harmonizer(root))
+    report.results.extend(check_semantic_versioning(root))
 
     for res in report.results:
         res.check_type = CheckType.STATIC
@@ -806,4 +807,45 @@ def check_doc_harmonizer(root: Path) -> list[CheckResult]:
                 rationale="Missing prothon-doc-harmonizer skill.",
             )
         )
+    return results
+
+
+def check_semantic_versioning(root: Path) -> list[CheckResult]:
+    """Verify Semantic Versioning CI workflows (SPEC R53, R55)."""
+    results = []
+
+    r53 = Requirement(
+        source="SPEC",
+        requirement_id="R53",
+        statement="Scaffolded projects (prothon new) must include CI workflows that detect change types and perform version bumps.",
+    )
+    r55 = Requirement(
+        source="SPEC",
+        requirement_id="R55",
+        statement="The version bump CI workflow must be included for both GitHub Actions and GitLab CI/CD.",
+    )
+
+    templates = [
+        (
+            root / "template" / ".github" / "workflows" / "version-bump.yml.jinja",
+            "GitHub Actions version bump",
+        ),
+        (
+            root / "template" / ".github" / "workflows" / "version-tag.yml.jinja",
+            "GitHub Actions version tag",
+        ),
+        (root / "template" / ".gitlab-ci.yml.jinja", "GitLab CI/CD version bump"),
+    ]
+
+    missing = [str(p) for p, _ in templates if not p.exists()]
+    evidence = ", ".join(str(p) for p, _ in templates if p.exists())
+
+    if missing:
+        rationale = f"Missing CI workflow templates: {', '.join(missing)}"
+        results.append(CheckResult(r53, CheckStatus.FAIL, rationale=rationale))
+        results.append(CheckResult(r55, CheckStatus.FAIL, rationale=rationale))
+    else:
+        results.append(CheckResult(r53, CheckStatus.PASS, evidence=evidence))
+        results.append(CheckResult(r55, CheckStatus.PASS, evidence=evidence))
+
     return results

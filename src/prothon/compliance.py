@@ -401,11 +401,78 @@ def run_static_checks(root: Path) -> ComplianceReport:
     report.results.extend(check_package_structure(root))
     report.results.extend(check_pre_commit(root))
     report.results.extend(check_skills_dir(root))
+    report.results.extend(check_adoption_intelligence(root))
 
     for res in report.results:
         res.check_type = CheckType.STATIC
 
     return report
+
+
+def check_adoption_intelligence(root: Path) -> list[CheckResult]:
+    """Verify Adoption Intelligence implementation (SPEC R13)."""
+    results = []
+    req = Requirement(
+        source="SPEC",
+        requirement_id="R13",
+        statement="Project adoption must use AST analysis to pre-populate PATTERNS.md.",
+    )
+
+    miner_path = root / "src" / "prothon" / "ast_miner.py"
+    scaffold_path = root / "src" / "prothon" / "scaffold.py"
+
+    if not miner_path.exists():
+        results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence="src/prothon/ast_miner.py",
+                rationale="Missing ASTPatternMiner implementation.",
+            )
+        )
+        return results
+
+    if not scaffold_path.exists():
+        results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence="src/prothon/scaffold.py",
+                rationale="Missing scaffold.py to integrate ASTPatternMiner.",
+            )
+        )
+        return results
+
+    analysis = analyze_python_file(scaffold_path)
+    imports = analysis.get("imports", set())
+
+    # Check for direct or from-import
+    if "prothon.ast_miner" not in imports and "ast_miner" not in imports:
+        results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence=str(scaffold_path),
+                rationale="scaffold.py does not import ASTPatternMiner.",
+            )
+        )
+        return results
+
+    # Check for usage in the file
+    content = scaffold_path.read_text()
+    if "ASTPatternMiner()" not in content:
+        results.append(
+            CheckResult(
+                req,
+                CheckStatus.FAIL,
+                evidence=str(scaffold_path),
+                rationale="scaffold.py imports but does not appear to use ASTPatternMiner.",
+            )
+        )
+        return results
+
+    results.append(CheckResult(req, CheckStatus.PASS, evidence=str(scaffold_path)))
+    return results
 
 
 def check_package_structure(root: Path) -> list[CheckResult]:

@@ -61,13 +61,13 @@ All modules
   └── exceptions.*
 ```
 
-`cli.py` is the only module that depends on Typer for command definitions. Domain modules (`scaffold.py`, `promise.py`, `versioning.py`, etc.) are plain Python and independently testable without invoking the CLI framework. This separation serves requirement 51 (all workflows invocable via CLI) while keeping domain logic framework-independent.
+`cli.py` is the only module that depends on Typer for command definitions. Domain modules (`scaffold.py`, `promise.py`, `versioning.py`, etc.) are plain Python and independently testable without invoking the CLI framework. This separation serves requirement 56 (all workflows invocable via CLI) while keeping domain logic framework-independent.
 
 ### Bundled Assets
 
 Two non-Python asset directories are bundled with the project:
 
-- `skills/` — 8 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 54 (skills bundled with package) and 22 (dedicated interactive agents).
+- `skills/` — 8 bundled skill directories inside the package, each containing a `SKILL.md`. Discovered at runtime via `Path(__file__).parent / "skills"`. Serves requirements 59 (skills bundled with package) and 22 (dedicated interactive agents).
 - `template/` — Copier project template at the repository root (not inside the package), with `copier.yml`, Jinja2-templated files, and post-generation tasks. Serves requirements 1-9 (project scaffolding).
 
 `skills/` is included automatically as part of the `src/prothon` package. `template/` is included via `[tool.hatch.build.targets.wheel.force-include]` since it lives outside the package root.
@@ -89,7 +89,7 @@ The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) t
 
 Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers.
 
-**Flexible Scope:** Verification allows the agent to modify files not explicitly declared in the task's `files_to_modify` if those changes are necessary to satisfy the `uv run poe check` quality gate. This serves requirements 27-33 (execution verification) and 34-37 (compliance verification).
+**Flexible Scope:** Verification allows the agent to modify files not explicitly declared in the task's `files_to_modify` if those changes are necessary to satisfy the quality gate (R32). This serves requirements 27-33 (execution verification) and 34-37 (compliance verification).
 
 ### Task Lifecycle
 
@@ -98,8 +98,8 @@ Each task in the execute workflow follows this lifecycle:
 1. **Dependency check** — wait for all tasks in `dependencies` to be marked complete.
 2. **Read context** — read `doc_sections`, `reference_skills`, and `context_files`.
 3. **Implement** — create, modify, or remove files per the plan.
-4. **Quality gate (R32)** — run `uv run poe check`. The agent must fix all reported errors and warnings project-wide (including pre-existing ones) before proceeding.
-5. **Commit** — `git add . && git commit --no-verify`. This stages all changes, including any global health fixes performed in step 4. `--no-verify` avoids double execution of hooks that were just satisfied by `poe check`.
+4. **Quality gate (R32)** — run `pre-commit run --all-files`. The agent must fix all reported errors and warnings project-wide (including pre-existing ones) before proceeding.
+5. **Commit** — `git add . && git commit --no-verify`. This stages all changes, including any global health fixes performed in step 4. `--no-verify` avoids double execution of hooks that were just satisfied by the quality gate.
 6. **Plan verification (R31)** — run `check_task()` which uses `git diff <base_commit>`.
 7. **Completion** — mark the task complete via `complete_task()`.
 
@@ -179,9 +179,9 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 
 | Package | Purpose | Serves Requirement | Alternatives Considered |
 |---------|---------|-------------------|------------------------|
-| typer (>=0.15) | CLI framework with type-hint-driven parameter inference | R51: CLI-invocable workflows | click, argparse |
+| typer (>=0.15) | CLI framework with type-hint-driven parameter inference | R56: CLI-invocable workflows | click, argparse |
 | uv (>=0.1) | Package management and project environment isolation | R4: fixed dev toolchain | pip, poetry, conda |
-| poethepoet (>=0.25) | Task runner for project-wide quality checks (`poe check`) | R32: quality gate | make, invoke, just |
+| poethepoet (>=0.25) | Task runner for project-wide quality checks (`poe check`) | R4: fixed dev toolchain | make, invoke, just |
 | copier (>=9.0) | Project templating with native `copier update` support | R1-R9: project scaffolding, R10-R17: project adoption | cookiecutter, custom Jinja2 |
 | tomlkit (>=0.13,<1.0) | TOML read/write with comment and formatting preservation | R27-R28: change promise contract | tomllib+tomli-w, toml |
 | rich (via typer) | Table rendering for promise plans, status, and compliance reports | R35: compliance report with PASS/FAIL/SKIP status | tabulate, click echo/style |
@@ -477,7 +477,7 @@ Examples of **forbidden** content:
 
 1. Verifies the current directory is a git repository (exits with error if not).
 2. Verifies `docs/SPEC.md` does not exist (exits with error if it does, directing the user to `prothon new` or manual setup).
-3. Creates `docs/` directory with empty scaffolds: `SPEC.md`, `DESIGN.md`, `PATTERNS.md` — each containing only markdown section headers, inlined in `scaffold.py`.
+3. Creates `docs/` directory with scaffolds for SPEC.md, DESIGN.md, and PATTERNS.md. For existing projects, the command must use static analysis (AST) to intelligently pre-populate PATTERNS.md with discovered code signatures and conventions, satisfying the "signature-only" constraint (R25-R26).
 4. Creates `AGENTS.md` at the project root with agent instruction content (inlined in `scaffold.py`), plus symlinks: `CLAUDE.md → AGENTS.md`, `GEMINI.md → AGENTS.md`, `AGENT.md → AGENTS.md`.
 5. Creates `.agents/skills/` directory for project-specific reference skills.
 6. Adds version-bump CI workflow files (GitHub Actions and/or GitLab CI/CD) if not already present.
@@ -595,11 +595,11 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 |----------|--------|-------------|-----------|
 | Module structure | Flat modules, one per subsystem | Nested packages by subsystem; hybrid flat core + CLI package | 6 subsystems map cleanly to 6 flat modules at 2-5 KLOC. Minimal refactor. Any module can be promoted to a subpackage later without changing caller imports. |
 | CLI framework | Typer | Click, argparse | Already in use and working. Lowest boilerplate. Type-hint inference. Switching would be a rewrite with zero functional benefit. |
-| Execution Quality Gate | `uv run poe check` | `pre-commit` | Mandatory project-wide health check (lint, type, test, etc.) for every task completion. Ensures 100% project health. |
+| Execution Quality Gate | `pre-commit run --all-files` | `uv run poe check` | Mandatory project-wide health check (lint, type, test, etc.) for every task completion. Ensures 100% project health. Matches requirement R32. |
 | Fix Mandate | **Global Health Enforcement** | Surgical updates only | Agent must fix all errors/warnings project-wide (including pre-existing) before a task is verified. Prevents accumulation of tech debt. |
 | Templating engine | Copier | Cookiecutter, custom Jinja2 | Template updating (`copier update` with 3-way merge) is the decisive factor. Neither alternative provides it. Clean Python API for library embedding. |
 | TOML library | tomlkit | tomllib + tomli-w, toml (uiri) | Comment/formatting preservation on roundtrip is essential for human-authored promise files. Single library for read and write. Maintained by Poetry organization. |
-| Git interaction | subprocess wrapper | GitPython, pygit2, dulwich | All operations are single CLI commands with machine-readable flags. `--numstat` is trivial via subprocess but problematic with dulwich. Zero dependencies. GitPython is in maintenance mode with multiple CVEs. |
+| Git interaction | subprocess wrapper | GitPython, pygit2, dulwich | All operations are single CLI commands with machine-readable flags. `--numstat` is trivial via subprocess but problematic with dulwich. Zero dependencies. GitPython is in maintenance mode with multiple SEALs. |
 | Terminal output | Rich (via Typer dependency) | tabulate + print, Click echo/style | Already installed at zero marginal cost. Best-in-class tables. Adding tabulate would be a new dependency for worse output. |
 | Assistant invocation | Pluggable backends with shared launch lifecycle | Direct subprocess per-assistant, configuration-driven templates | Variation between assistants is structural (different CLIs, skill mechanisms, permissions), not parametric. A shared contract keeps callers backend-agnostic. Config templates break when assistants differ structurally. |
 | Promise verification | Typed dataclass models with `GitDiffProvider` protocol | Plain dict + subprocess, state machine | Protocol injection eliminates fragile mock patching in tests. Per-file `FileCheckDetail` enables structured error reporting. State machine overlaps with the execute skill's orchestrator. |
@@ -615,7 +615,7 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 | CI configurability | Basic toggle (`auto_version = true/false`) | No config; full branch/trigger configurability | "Minorly configurable" per SPEC. Single toggle lets users disable without deleting files. Branch/trigger customization belongs in the workflow YAML itself — users comfortable with CI can edit directly. |
 | Subagent invocation in skills | Canonical names with per-backend mapping | Tool-specific instructions per assistant; backend-specific skill variants | Single set of skills works across both backends. Canonical names are translated by each backend's `subagent_type_map`. Backend-specific variants would double maintenance. Tool-specific instructions (e.g., `Task tool, subagent_type:`) break when the other assistant has a different tool API. |
 | Skill frontmatter portability | Assistant-specific fields ignored by non-supporting backends | Require all backends to support all fields; strip unsupported fields at sync time | opencode silently ignores unknown frontmatter (`context: fork`, `model:`). Requiring support would block backend addition. Stripping adds complexity for zero benefit since unknown fields are already harmless. |
-| Task quality gate | `uv run poe check` replacing `pre-commit` | `pre-commit run --all-files`; `poe check` | `uv run poe check` ensures the full project toolchain suite passes, catching errors that file-scoped hooks might miss. |
+| Task quality gate | `pre-commit run --all-files` | `uv run poe check` | `pre-commit run --all-files` ensures the full project toolchain suite passes, catching errors that file-scoped hooks might miss. Matches requirement R32. |
 | Retry configuration | Project default in `[tool.prothon].max_attempts` + per-task override in promise TOML | CLI flag; env var; promise metadata section | Two-level resolution (project + per-task) follows existing config patterns. Retry count doesn't warrant CLI flag or env var precedence levels. Per-task override lets the planning agent adjust for task complexity. |
 | Retry enforcement | Skill prompt reads `max_attempts` from promise file | Programmatic `attempt_task()` with file locking; hybrid skill + validation | Skill prompt already manages the retry loop. Reading `max_attempts` from the promise file is the minimal change. Programmatic enforcement can be added later if stricter guarantees are needed. |
 | PATTERNS.md content form | Signature-only code, natural language rationale | Allow full code examples; no code at all | Signatures communicate interface contracts without prescribing implementation. Full code examples drift from actual implementations and constrain developer judgment. No code at all loses the precision of typed signatures. |

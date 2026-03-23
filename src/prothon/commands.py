@@ -8,7 +8,6 @@ from pathlib import Path
 
 from prothon import promise, promise_verify, versioning
 from prothon.assistant import get_backend, launch
-from prothon.static_checks import run_static_checks
 from prothon.config import (
     file_hash,
     find_init_path,
@@ -18,8 +17,10 @@ from prothon.config import (
     resolve_model,
 )
 from prothon.exceptions import GitError, ProthonError
+from prothon.git import commit_file, is_dirty
 from prothon.models import PROMISE_PATH
 from prothon.project import find_project_root
+from prothon.static_checks import run_static_checks
 from prothon.ui import (
     console,
     render_check_report,
@@ -43,9 +44,11 @@ class Skill(StrEnum):
 
 
 SKILL_DOC_MAP = {
-    Skill.SPEC_WRITER: Path("docs/SPEC.md"),
-    Skill.DESIGN_WRITER: Path("docs/DESIGN.md"),
-    Skill.PATTERNS_WRITER: Path("docs/PATTERNS.md"),
+    Skill.SPEC_WRITER: [Path("docs/SPEC.md")],
+    Skill.DESIGN_WRITER: [Path("docs/DESIGN.md")],
+    Skill.PATTERNS_WRITER: [Path("docs/PATTERNS.md")],
+    Skill.REFACTOR: [Path("docs/DESIGN.md"), Path("docs/PATTERNS.md")],
+    Skill.DOC_HARMONIZER: [Path("docs/DESIGN.md"), Path("docs/PATTERNS.md")],
 }
 
 
@@ -76,20 +79,19 @@ def enforce_commit(skill_name: str, root: Path) -> None:
     except ValueError:
         return
 
-    doc_path = SKILL_DOC_MAP.get(s)
-    if not doc_path:
+    doc_paths = SKILL_DOC_MAP.get(s, [])
+    if not doc_paths:
         return
 
-    full_path = root / doc_path
-    if not full_path.exists():
-        return
+    for doc_path in doc_paths:
+        full_path = root / doc_path
+        if not full_path.exists():
+            continue
 
-    from prothon.git import commit_file, is_dirty
-
-    if is_dirty(doc_path, cwd=root):
-        console.print(f"  Enforcing commit for {doc_path}...")
-        msg = f"docs: update {doc_path.name} via {skill_name}"
-        commit_file(doc_path, msg, cwd=root)
+        if is_dirty(doc_path, cwd=root):
+            console.print(f"  Enforcing commit for {doc_path}...")
+            msg = f"docs: update {doc_path.name} via {skill_name}"
+            commit_file(doc_path, msg, cwd=root)
 
 
 def trigger_follow_ups(
@@ -100,10 +102,32 @@ def trigger_follow_ups(
     provider: str | None = None,
 ) -> None:
     """Launch follow-up sessions based on the completed skill and file changes."""
-    if skill_name == Skill.SPEC_WRITER:
+    if skill_name in (Skill.SPEC_WRITER, Skill.DESIGN_WRITER, Skill.PATTERNS_WRITER):
         console.print("\n  Triggering doc-harmonizer...")
         launch_skill(
             Skill.DOC_HARMONIZER,
+            cwd,
+            agent,
+            model,
+            provider,
+            run_follow_ups=False,
+        )
+
+    if skill_name == Skill.DESIGN_WRITER:
+        console.print("\n  Triggering tech-researcher...")
+        launch_skill(
+            Skill.TECH_RESEARCHER,
+            cwd,
+            agent,
+            model,
+            provider,
+            run_follow_ups=False,
+        )
+
+    if skill_name == Skill.EXECUTE:
+        console.print("\n  Triggering compliance-checker...")
+        launch_skill(
+            Skill.COMPLIANCE,
             cwd,
             agent,
             model,
@@ -141,9 +165,10 @@ def launch_skill(
             style="yellow",
         )
 
-    if rc == 0 and run_follow_ups:
+    if rc == 0:
         enforce_commit(skill_name, cwd)
-        trigger_follow_ups(skill_name, cwd, agent, model, provider)
+        if run_follow_ups:
+            trigger_follow_ups(skill_name, cwd, agent, model, provider)
 
     return rc
 

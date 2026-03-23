@@ -986,8 +986,8 @@ def test_enforce_commit_dirty_doc_calls_commit(tmp_path, monkeypatch):
     doc.write_text("# Spec\n")
 
     fake_commit = Recorder()
-    monkeypatch.setattr("prothon.git.is_dirty", lambda path, cwd: True)
-    monkeypatch.setattr("prothon.git.commit_file", fake_commit)
+    monkeypatch.setattr("prothon.commands.is_dirty", lambda path, cwd: True)
+    monkeypatch.setattr("prothon.commands.commit_file", fake_commit)
 
     _enforce_commit("prothon-spec-writer", tmp_path)
 
@@ -1005,8 +1005,8 @@ def test_enforce_commit_clean_doc_no_commit(tmp_path, monkeypatch):
     doc.write_text("# Spec\n")
 
     fake_commit = Recorder()
-    monkeypatch.setattr("prothon.git.is_dirty", lambda path, cwd: False)
-    monkeypatch.setattr("prothon.git.commit_file", fake_commit)
+    monkeypatch.setattr("prothon.commands.is_dirty", lambda path, cwd: False)
+    monkeypatch.setattr("prothon.commands.commit_file", fake_commit)
 
     _enforce_commit("prothon-spec-writer", tmp_path)
 
@@ -1018,8 +1018,8 @@ def test_enforce_commit_non_doc_skill_no_commit(tmp_path, monkeypatch):
     from prothon.commands import enforce_commit as _enforce_commit
 
     fake_is_dirty = Recorder(return_value=False)
-    monkeypatch.setattr("prothon.git.is_dirty", fake_is_dirty)
-    monkeypatch.setattr("prothon.git.commit_file", Recorder())
+    monkeypatch.setattr("prothon.commands.is_dirty", fake_is_dirty)
+    monkeypatch.setattr("prothon.commands.commit_file", Recorder())
 
     _enforce_commit("prothon-execute", tmp_path)
 
@@ -1053,8 +1053,8 @@ def test_trigger_follow_ups_spec_writer_launches_harmonizer(tmp_path, monkeypatc
     assert fake_launch.last_kwargs.get("run_follow_ups") is False
 
 
-def test_trigger_follow_ups_design_writer_no_followup(tmp_path, monkeypatch):
-    """design-writer does not trigger any follow-up (harmonizer is in-skill)."""
+def test_trigger_follow_ups_design_writer_launches_followups(tmp_path, monkeypatch):
+    """design-writer triggers harmonizer and tech-researcher."""
     from prothon.commands import trigger_follow_ups as _trigger_follow_ups
 
     fake_launch = Recorder()
@@ -1062,11 +1062,28 @@ def test_trigger_follow_ups_design_writer_no_followup(tmp_path, monkeypatch):
 
     _trigger_follow_ups("prothon-design-writer", tmp_path)
 
-    assert fake_launch.call_count == 0
+    assert fake_launch.call_count == 2
+    # First call: doc-harmonizer
+    assert fake_launch.calls[0][0][0] == "prothon-doc-harmonizer"
+    # Second call: tech-researcher
+    assert fake_launch.calls[1][0][0] == "prothon-tech-researcher"
 
 
-def test_trigger_follow_ups_execute_no_followup(tmp_path, monkeypatch):
-    """execute does not trigger any follow-up."""
+def test_trigger_follow_ups_patterns_writer_launches_harmonizer(tmp_path, monkeypatch):
+    """patterns-writer triggers doc-harmonizer."""
+    from prothon.commands import trigger_follow_ups as _trigger_follow_ups
+
+    fake_launch = Recorder()
+    monkeypatch.setattr("prothon.commands.launch_skill", fake_launch)
+
+    _trigger_follow_ups("prothon-patterns-writer", tmp_path)
+
+    assert fake_launch.call_count == 1
+    assert fake_launch.last_args[0] == "prothon-doc-harmonizer"
+
+
+def test_trigger_follow_ups_execute_launches_compliance(tmp_path, monkeypatch):
+    """execute triggers compliance-checker."""
     from prothon.commands import trigger_follow_ups as _trigger_follow_ups
 
     fake_launch = Recorder()
@@ -1074,4 +1091,5 @@ def test_trigger_follow_ups_execute_no_followup(tmp_path, monkeypatch):
 
     _trigger_follow_ups("prothon-execute", tmp_path)
 
-    assert fake_launch.call_count == 0
+    assert fake_launch.call_count == 1
+    assert fake_launch.last_args[0] == "prothon-compliance-checker"

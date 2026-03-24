@@ -213,6 +213,7 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 | claude-code | AI assistant backend | R57: Claude Code support | opencode, gemini, ob1 |
 | opencode | AI assistant backend | R57-R58, R61: opencode support | claude-code, gemini, ob1 |
 | gemini-cli | AI assistant backend | R57: Gemini CLI support | claude-code, opencode, ob1 |
+| jinja2 (>=3.1) | Template rendering for adoption scaffolds (AGENTS.md, doc stubs) | R13-R16: project adoption | string.Template, mako |
 | ob1 | AI assistant backend | R57: OB1 support (pluggable) | claude-code, opencode, gemini |
 
 ### Rationale
@@ -230,6 +231,8 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 **Rich** — Already installed at zero marginal cost (Typer unconditionally depends on it). Best-in-class table rendering with per-cell styling, colored PASS/FAIL, and column alignment. Using it for promise plans, status, and compliance reports is free. Interactive prompts remain on `typer.prompt()`.
 
 **subprocess for git** — Every git operation prothon needs maps to a single CLI command with a machine-readable output flag (`--numstat`, `--name-only`, `--porcelain`). No operation benefits from in-process git access. Zero dependencies. `--numstat` (critical for promise verification) is trivial via subprocess but problematic with dulwich. List-form arguments with `GIT_TERMINAL_PROMPT=0` provide a minimal attack surface.
+
+**Jinja2** — Already a transitive dependency (Copier depends on it), so adding an explicit pin costs zero additional packages. Used directly in `adoption_templates.py` and `scaffold.py` for rendering AGENTS.md, doc stubs, and CI workflow files during `prothon init` and `prothon new`. `string.Template` lacks conditionals and loop constructs needed for scaffold logic. Mako is a heavier alternative with no advantage given Jinja2 is already present.
 
 ## Interfaces
 

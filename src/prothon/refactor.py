@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from prothon.compliance import CheckStatus as ComplianceStatus
-from prothon.static_checks import check_patterns_doc
+from prothon.checks import check_patterns_doc
 from prothon.git import rev_parse_head
 from prothon.models import Metadata, Promise, Task
 

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from prothon.compliance import CheckStatus
-from prothon.static_checks import check_doc_harmonizer
+from prothon.checks import check_doc_harmonizer
 
 
 def test_check_doc_harmonizer_pass(tmp_path: Path) -> None:

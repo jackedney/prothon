@@ -11,7 +11,7 @@ from prothon.compliance import (
     ComplianceReport,
     Requirement,
 )
-from prothon.static_checks import (
+from prothon.checks import (
     analyze_python_file,
     check_agent_files,
     check_doc_existence,
@@ -713,7 +713,7 @@ def test_compliance_report_add_from_dicts_appends():
 
 def test_check_package_structure_missing_src(tmp_path: Path):
     """Test check_package_structure when src/ is missing."""
-    from prothon.static_checks import check_package_structure
+    from prothon.checks import check_package_structure
 
     results = check_package_structure(tmp_path)
     assert len(results) == 1
@@ -723,7 +723,7 @@ def test_check_package_structure_missing_src(tmp_path: Path):
 
 def test_check_package_structure_no_package(tmp_path: Path):
     """Test check_package_structure when src/ exists but no package is found."""
-    from prothon.static_checks import check_package_structure
+    from prothon.checks import check_package_structure
 
     (tmp_path / "src").mkdir()
     results = check_package_structure(tmp_path)
@@ -734,7 +734,7 @@ def test_check_package_structure_no_package(tmp_path: Path):
 
 def test_check_package_structure_missing_py_typed(tmp_path: Path):
     """Test check_package_structure when py.typed is missing from the package."""
-    from prothon.static_checks import check_package_structure
+    from prothon.checks import check_package_structure
 
     pkg_dir = tmp_path / "src" / "my_pkg"
     pkg_dir.mkdir(parents=True)
@@ -748,7 +748,7 @@ def test_check_package_structure_missing_py_typed(tmp_path: Path):
 
 def test_check_package_structure_compliant(tmp_path: Path):
     """Test check_package_structure with a compliant layout."""
-    from prothon.static_checks import check_package_structure
+    from prothon.checks import check_package_structure
 
     pkg_dir = tmp_path / "src" / "my_pkg"
     pkg_dir.mkdir(parents=True)
@@ -765,7 +765,7 @@ def test_check_package_structure_compliant(tmp_path: Path):
 
 def test_check_pre_commit_missing(tmp_path: Path):
     """Test check_pre_commit when the config file is missing."""
-    from prothon.static_checks import check_pre_commit
+    from prothon.checks import check_pre_commit
 
     results = check_pre_commit(tmp_path)
     assert len(results) == 1
@@ -775,7 +775,7 @@ def test_check_pre_commit_missing(tmp_path: Path):
 
 def test_check_pre_commit_compliant(tmp_path: Path):
     """Test check_pre_commit when the config file exists."""
-    from prothon.static_checks import check_pre_commit
+    from prothon.checks import check_pre_commit
 
     (tmp_path / ".pre-commit-config.yaml").write_text("")
     results = check_pre_commit(tmp_path)
@@ -788,7 +788,7 @@ def test_check_pre_commit_compliant(tmp_path: Path):
 
 def test_check_skills_dir_missing(tmp_path: Path):
     """Test check_skills_dir when the directory is missing."""
-    from prothon.static_checks import check_skills_dir
+    from prothon.checks import check_skills_dir
 
     results = check_skills_dir(tmp_path)
     assert len(results) == 1
@@ -798,7 +798,7 @@ def test_check_skills_dir_missing(tmp_path: Path):
 
 def test_check_skills_dir_compliant(tmp_path: Path):
     """Test check_skills_dir when the directory exists."""
-    from prothon.static_checks import check_skills_dir
+    from prothon.checks import check_skills_dir
 
     (tmp_path / ".agents" / "skills").mkdir(parents=True)
     results = check_skills_dir(tmp_path)

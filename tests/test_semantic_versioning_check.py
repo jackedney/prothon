@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from prothon.compliance import CheckStatus
-from prothon.static_checks import check_semantic_versioning
+from prothon.checks import check_semantic_versioning
 
 
 def test_check_semantic_versioning_pass(tmp_path: Path) -> None:

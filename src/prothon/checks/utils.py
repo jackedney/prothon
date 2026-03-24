@@ -36,21 +36,30 @@ def analyze_python_file(path: Path) -> dict[str, Any]:
 
 def _collect_metadata(node: ast.AST, results: dict[str, Any]) -> None:
     """Helper to collect imports and base classes from an AST node."""
-    if isinstance(node, ast.Import):
-        for alias in node.names:
-            results["imports"].add(alias.name)
-    elif isinstance(node, ast.ImportFrom):
-        if node.module:
-            results["imports"].add(node.module)
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        _collect_imports(node, results["imports"])
     elif isinstance(node, ast.ClassDef):
-        bases = []
-        for base in node.bases:
-            try:
-                bases.append(ast.unparse(base))
-            except Exception:
-                if isinstance(base, ast.Name):
-                    bases.append(base.id)
-        results["base_classes"][node.name] = bases
+        results["base_classes"][node.name] = _extract_bases(node)
+
+
+def _collect_imports(node: ast.Import | ast.ImportFrom, imports: set[str]) -> None:
+    """Record module and alias names from an import node."""
+    if isinstance(node, ast.ImportFrom) and node.module:
+        imports.add(node.module)
+    for alias in node.names:
+        imports.add(alias.name)
+
+
+def _extract_bases(node: ast.ClassDef) -> list[str]:
+    """Return the base class names of a class definition."""
+    bases: list[str] = []
+    for base in node.bases:
+        try:
+            bases.append(ast.unparse(base))
+        except Exception:
+            if isinstance(base, ast.Name):
+                bases.append(base.id)
+    return bases
 
 
 def _is_signature_only(code: str) -> bool:

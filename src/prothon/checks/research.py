@@ -142,27 +142,37 @@ def check_semantic_versioning(root: Path) -> list[CheckResult]:
         statement="The version bump CI workflow must be included for both GitHub Actions and GitLab CI/CD.",
     )
 
-    templates = [
-        (
-            root / "template" / ".github" / "workflows" / "version-bump.yml.jinja",
-            "GitHub Actions version bump",
-        ),
+    tag_templates = [
         (
             root / "template" / ".github" / "workflows" / "version-tag.yml.jinja",
             "GitHub Actions version tag",
         ),
+    ]
+
+    bump_templates = [
+        (
+            root / "template" / ".github" / "workflows" / "version-bump.yml.jinja",
+            "GitHub Actions version bump",
+        ),
         (root / "template" / ".gitlab-ci.yml.jinja", "GitLab CI/CD version bump"),
     ]
 
-    missing = [str(p) for p, _ in templates if not p.exists()]
-    evidence = ", ".join(str(p) for p, _ in templates if p.exists())
+    tag_missing = [str(p) for p, _ in tag_templates if not p.exists()]
+    tag_evidence = ", ".join(str(p) for p, _ in tag_templates if p.exists())
 
-    if missing:
-        rationale = f"Missing CI workflow templates: {', '.join(missing)}"
+    if tag_missing:
+        rationale = f"Missing CI workflow templates: {', '.join(tag_missing)}"
         results.append(CheckResult(r53, CheckStatus.FAIL, rationale=rationale))
+    else:
+        results.append(CheckResult(r53, CheckStatus.PASS, evidence=tag_evidence))
+
+    bump_missing = [str(p) for p, _ in bump_templates if not p.exists()]
+    bump_evidence = ", ".join(str(p) for p, _ in bump_templates if p.exists())
+
+    if bump_missing:
+        rationale = f"Missing CI workflow templates: {', '.join(bump_missing)}"
         results.append(CheckResult(r55, CheckStatus.FAIL, rationale=rationale))
     else:
-        results.append(CheckResult(r53, CheckStatus.PASS, evidence=evidence))
-        results.append(CheckResult(r55, CheckStatus.PASS, evidence=evidence))
+        results.append(CheckResult(r55, CheckStatus.PASS, evidence=bump_evidence))
 
     return results

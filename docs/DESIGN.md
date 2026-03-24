@@ -6,7 +6,7 @@
 
 Mostly flat module layout under `src/prothon/`, with one subpackage (`checks/`) grouping static compliance checks. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
 
-```
+```text
 src/prothon/
     __init__.py
     adoption.py         # Project adoption: overlaying docs-first workflow onto existing projects
@@ -45,7 +45,7 @@ This layout is driven by the number of subsystems in the SPEC (scaffolding, adop
 
 ### Module Dependencies
 
-```
+```text
 cli.py
   ├── commands.*
   ├── scaffold_cli.new_project(), init_project()

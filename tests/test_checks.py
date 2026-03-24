@@ -441,9 +441,11 @@ def test_check_refactor_logic_all_present(tmp_path: Path) -> None:
 
 
 def test_check_refactor_logic_nothing_present(tmp_path: Path) -> None:
-    """Empty results when refactor.py and skill are missing."""
+    """FAIL for R38 when refactor.py and skill are missing."""
     results = check_refactor_logic(tmp_path)
-    assert results == []
+    assert len(results) == 1
+    assert results[0].requirement.requirement_id == "R38"
+    assert results[0].status == CheckStatus.FAIL
 
 
 def test_check_refactor_logic_only_module(tmp_path: Path) -> None:
@@ -670,6 +672,70 @@ def test_check_adoption_intelligence_falls_back_to_scaffold(
     (prothon / "ast_miner.py").write_text("class ASTPatternMiner: pass\n")
     (prothon / "scaffold.py").write_text(
         "from prothon.ast_miner import ASTPatternMiner\nm = ASTPatternMiner()\n"
+    )
+
+    results = check_adoption_intelligence(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.PASS
+
+
+def test_check_adoption_intelligence_from_import_attribute_call(
+    tmp_path: Path,
+) -> None:
+    """R13 PASS with `from prothon import ast_miner; ast_miner.ASTPatternMiner()`."""
+    prothon = tmp_path / "src" / "prothon"
+    prothon.mkdir(parents=True)
+    (prothon / "ast_miner.py").write_text("class ASTPatternMiner: pass\n")
+    (prothon / "adoption.py").write_text(
+        "from prothon import ast_miner\nm = ast_miner.ASTPatternMiner()\n"
+    )
+
+    results = check_adoption_intelligence(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.PASS
+
+
+def test_check_adoption_intelligence_aliased_module_call(
+    tmp_path: Path,
+) -> None:
+    """R13 PASS with `import prothon.ast_miner as am; am.ASTPatternMiner(x)`."""
+    prothon = tmp_path / "src" / "prothon"
+    prothon.mkdir(parents=True)
+    (prothon / "ast_miner.py").write_text("class ASTPatternMiner: pass\n")
+    (prothon / "adoption.py").write_text(
+        "import prothon.ast_miner as am\nm = am.ASTPatternMiner(42)\n"
+    )
+
+    results = check_adoption_intelligence(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.PASS
+
+
+def test_check_adoption_intelligence_direct_from_import(
+    tmp_path: Path,
+) -> None:
+    """R13 PASS with `from prothon.ast_miner import ASTPatternMiner; ASTPatternMiner()`."""
+    prothon = tmp_path / "src" / "prothon"
+    prothon.mkdir(parents=True)
+    (prothon / "ast_miner.py").write_text("class ASTPatternMiner: pass\n")
+    (prothon / "adoption.py").write_text(
+        "from prothon.ast_miner import ASTPatternMiner\nm = ASTPatternMiner()\n"
+    )
+
+    results = check_adoption_intelligence(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.PASS
+
+
+def test_check_adoption_intelligence_aliased_class_call(
+    tmp_path: Path,
+) -> None:
+    """R13 PASS with `from prothon.ast_miner import ASTPatternMiner as Miner; Miner()`."""
+    prothon = tmp_path / "src" / "prothon"
+    prothon.mkdir(parents=True)
+    (prothon / "ast_miner.py").write_text("class ASTPatternMiner: pass\n")
+    (prothon / "adoption.py").write_text(
+        "from prothon.ast_miner import ASTPatternMiner as Miner\nm = Miner()\n"
     )
 
     results = check_adoption_intelligence(tmp_path)

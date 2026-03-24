@@ -160,6 +160,7 @@ def check_inheritance(root: Path) -> list[CheckResult]:
     req = Requirement(
         source="DESIGN",
         statement="All domain exceptions must inherit from ProthonError.",
+        requirement_id="D1",
     )
     analysis = analyze_python_file(exc_path)
     violations = [

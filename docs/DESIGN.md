@@ -48,8 +48,10 @@ cli.py
 commands.py
   ├── assistant.get_backend(), launch()
   ├── config.resolve_agent(), resolve_model(), file_hash(), find_init_path(), ...
+  ├── git.commit_file(), is_dirty()
   ├── models.PROMISE_PATH
   ├── promise.*, promise_verify.*, versioning.*
+  ├── project.find_project_root()
   ├── static_checks.run_static_checks()
   └── ui.render_check_report(), render_compliance_report(), render_plan(), render_status()
 

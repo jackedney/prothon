@@ -65,9 +65,6 @@ def generate_refactor_promise(findings: list[DriftFinding]) -> Promise: ...
 
 ## Design Patterns
 
-### Assistant Backend Category Pattern
-Assistant tools are categorized by how they ingest skills. **Category A** (native skills) uses filesystem symlinks and direct tool calls. **Category B** (prompt injection) requires injecting skill content directly into the assistant's instruction context. The shared `launch()` lifecycle handles common environment setup while delegating skill delivery to specific backend strategies.
-
 ### Tiered Compliance Evidence Pattern
 Compliance verification uses a hybrid strategy to map requirements to source code. **Static Analysis** (Regex/AST) performs fast, deterministic checks for structural rules and doc formats. **Semantic Analysis** (LLM-based) handles high-level functional requirements. Both feed into **Evidence Mapping**, where every result is paired with a `file:line` citation and a brief rationale.
 
@@ -76,9 +73,6 @@ To maintain context efficiency for AI assistants, generated reference skills fol
 
 ### Refactor Wave Pattern
 Changes must flow top-down through the documentation hierarchy: **DESIGN -> PATTERNS -> CODE**. Architectural shifts or convention changes are documented and approved first. Implementation tasks then reference the specific documentation heading they are aligning with.
-
-### AST Pattern Mining (Adoption)
-During `prothon init`, the system uses Python's `ast` module to scan for high-signal structural elements in existing code. It satisfies the "signature-only" constraint by using `ast.unparse()` on discovered nodes after clearing their implementation bodies.
 
 ### File Locking and Atomic Persistence
 When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates, using a sibling `.toml.lock` file.

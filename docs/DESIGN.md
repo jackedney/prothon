@@ -98,9 +98,9 @@ Two non-Python asset directories are bundled with the project:
 
 ### Assistant Abstraction
 
-Each assistant backend encapsulates its binary name, invocation flags, skill sync target, environment overrides, and command construction. A shared launch lifecycle handles: binary detection, skill syncing, environment merging, subprocess execution, and return code checking. Gemini CLI is configured to run in YOLO mode by default to ensure automated execution of suggested actions during autonomous workflows.
+Each assistant backend encapsulates its binary name, invocation flags, skill sync target, environment overrides, and command construction. A shared `launch()` lifecycle handles common environment setup (binary detection, skill syncing, environment merging, subprocess execution, and return code checking) while delegating skill delivery to category-specific backend strategies. Gemini CLI is configured to run in YOLO mode by default to ensure automated execution of suggested actions during autonomous workflows.
 
-AI coding CLIs fall into two structural categories based on how they receive skill instructions:
+AI coding CLIs fall into two structural categories based on how they ingest skills:
 
 - **Category A (native skill directories)** — Claude Code, opencode, and Gemini CLI have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
 - **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. These are out of scope per the SPEC but the abstraction accommodates them for future expansion.
@@ -167,11 +167,11 @@ The tech-researcher refreshes project-specific reference skills based on the tec
 
 ### Adoption Intelligence (R13)
 
-During `prothon init`, the system uses static analysis to pre-populate `PATTERNS.md` with existing conventions.
+During `prothon init`, the system uses Python's `ast` module to scan for high-signal structural elements in existing code, pre-populating `PATTERNS.md` with existing conventions.
 
 - **AST Pattern Miner:** Uses Python's built-in `ast` module to scan for high-signal structural elements (base classes, protocols, common decorators).
 - **Idiom Matcher:** Includes pre-defined signatures for popular libraries (FastAPI, Typer, Pydantic).
-- **Signature-Only Extraction:** Uses `ast.unparse()` on discovered nodes after clearing their bodies to satisfy R25-R26 compliance automatically.
+- **Signature-Only Extraction:** Satisfies the "signature-only" constraint (R25-R26) by using `ast.unparse()` on discovered nodes after clearing their implementation bodies.
 - **Local Execution:** Runs entirely offline and locally during the adoption workflow.
 
 ### Mutation Testing CI (R6)

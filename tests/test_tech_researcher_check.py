@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from prothon.compliance import CheckStatus
-from prothon.static_checks import check_tech_researcher
+from prothon.checks import check_tech_researcher
 
 
 def test_check_tech_researcher_all_present_and_compliant(tmp_path: Path):

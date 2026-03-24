@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from prothon.compliance import CheckStatus
-from prothon.static_checks import check_semantic_versioning
+from prothon.checks import check_semantic_versioning
 
 
 def test_check_semantic_versioning_pass(tmp_path: Path) -> None:
@@ -29,7 +29,7 @@ def test_check_semantic_versioning_fail_missing_some(tmp_path: Path) -> None:
     github_dir = template_dir / ".github" / "workflows"
     github_dir.mkdir(parents=True)
 
-    # Missing gitlab and version-tag
+    # Missing gitlab-ci and version-tag; version-bump present
     (github_dir / "version-bump.yml.jinja").write_text("")
 
     results = check_semantic_versioning(tmp_path)
@@ -38,11 +38,13 @@ def test_check_semantic_versioning_fail_missing_some(tmp_path: Path) -> None:
     r53_res = next(r for r in results if r.requirement.requirement_id == "R53")
     r55_res = next(r for r in results if r.requirement.requirement_id == "R55")
 
+    # R53 checks tag template only
     assert r53_res.status == CheckStatus.FAIL
-    assert r55_res.status == CheckStatus.FAIL
-
     assert "version-tag.yml.jinja" in str(r53_res.rationale)
-    assert ".gitlab-ci.yml.jinja" in str(r53_res.rationale)
+
+    # R55 checks bump templates (version-bump present, gitlab-ci missing)
+    assert r55_res.status == CheckStatus.FAIL
+    assert ".gitlab-ci.yml.jinja" in str(r55_res.rationale)
 
 
 def test_check_semantic_versioning_fail_missing_all(tmp_path: Path) -> None:

@@ -4,47 +4,78 @@
 
 ### Module Structure
 
-Flat module layout with all domain modules at one level under `src/prothon/`. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
+Mostly flat module layout under `src/prothon/`, with one subpackage (`checks/`) grouping static compliance checks. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
 
-```
+```text
 src/prothon/
     __init__.py
+    adoption.py         # Project adoption: overlaying docs-first workflow onto existing projects
+    adoption_templates.py  # Templates and scaffolds used during project adoption
+    ast_miner.py        # AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
     cli.py              # Typer app and command definitions
+    commands.py         # Implementation logic for CLI commands (delegates to domain modules)
     ui.py               # Rich-based terminal UI, tables, and status reporting
     config.py           # Multi-level configuration resolution (CLI, env, toml)
+    checks/             # Static compliance checks subpackage (split from static_checks.py)
+        __init__.py     # Re-exports run_static_checks and all public check functions
+        utils.py        # AST analysis, signature helpers
+        docs.py         # Document-related checks (R24-R26)
+        structure.py    # Package structure checks (R3-R5, R15)
+        workflows.py    # Execute/refactor workflow checks (R27-R42)
+        research.py     # Tech researcher and versioning checks (R43-R55)
+        adoption.py     # Adoption intelligence check (R13)
+    compliance.py       # Compliance data types (CheckResult, CheckStatus, ComplianceReport)
+    exceptions.py       # Custom exception hierarchy
+    git.py              # Thin typed wrapper around git CLI via subprocess
+    models.py           # Shared data models (Task, Metadata, Promise) for the promise system
+    promise.py          # Promise TOML I/O and lifecycle management
+    promise_verify.py   # Git diff analysis and task verification logic
+    project.py          # Project root detection, shared project context
+    refactor.py         # Drift discovery and refactor promise generation
     scaffold.py         # Template rendering, copier answers, project adoption
     scaffold_cli.py     # Scaffolding-specific CLI commands and interactive prompts
     skills.py           # Skill discovery, symlink management
-    promise.py          # Promise data model, TOML I/O, lifecycle management
-    promise_verify.py   # Git diff analysis and task verification logic
     versioning.py       # Semantic version detection, bumping, git tagging
-    project.py          # Project root detection, shared project context
-    git.py              # Thin typed wrapper around git CLI via subprocess
-    assistant.py        # Abstract assistant interface and backend registry
-    compliance.py       # Static AST checks and semantic compliance verification
-    refactor.py         # Drift discovery and refactor promise generation
-    exceptions.py       # Custom exception hierarchy
     skills/             # Bundled skill assets (non-Python, 8 directories)
 
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
+This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. The `checks/` subpackage is the single exception to the flat layout — it groups 28+ static check functions that would otherwise form an 850+ line monolith.
 
 ### Module Dependencies
 
-```
+```text
 cli.py
-  ├── config.resolve_agent(), resolve_model()
-  ├── ui.render_table(), render_status()
+  ├── commands.*
   ├── scaffold_cli.new_project(), init_project()
+  ├── assistant._BACKENDS
+  └── project.find_project_root()
+
+commands.py
   ├── assistant.get_backend(), launch()
-  └── promise.load_promise(), plan(), status(), complete_task(), record_attempt(), cleanup()
+  ├── config.resolve_agent(), resolve_model(), file_hash(), find_init_path(), ...
+  ├── git.commit_file(), is_dirty()
+  ├── models.PROMISE_PATH
+  ├── promise.*, promise_verify.*, versioning.*
+  ├── project.find_project_root()
+  ├── checks.run_static_checks()
+  └── ui.render_check_report(), render_compliance_report(), render_plan(), render_status()
+
+adoption.py
+  ├── adoption_templates.* (scaffold strings)
+  ├── ast_miner.ASTPatternMiner
+  ├── scaffold.get_template_dir()
+  └── git.run_git()
+
+checks.*
+  └── compliance.CheckResult, CheckStatus, CheckType, ComplianceReport, Requirement
 
 scaffold_cli.py
   └── scaffold.generate(), init_existing()
 
 promise.py
+  ├── models.Task, Metadata, Promise, PROMISE_PATH
   └── promise_verify.check_task()
 
 assistant.py
@@ -74,9 +105,9 @@ Two non-Python asset directories are bundled with the project:
 
 ### Assistant Abstraction
 
-Each assistant backend encapsulates its binary name, invocation flags, skill sync target, environment overrides, and command construction. A shared launch lifecycle handles: binary detection, skill syncing, environment merging, subprocess execution, and return code checking. Gemini CLI is configured to run in YOLO mode by default to ensure automated execution of suggested actions during autonomous workflows.
+Each assistant backend encapsulates its binary name, invocation flags, skill sync target, environment overrides, and command construction. A shared `launch()` lifecycle handles common environment setup (binary detection, skill syncing, environment merging, subprocess execution, and return code checking) while delegating skill delivery to category-specific backend strategies. Gemini CLI is configured to run in YOLO mode by default to ensure automated execution of suggested actions during autonomous workflows.
 
-AI coding CLIs fall into two structural categories based on how they receive skill instructions:
+AI coding CLIs fall into two structural categories based on how they ingest skills:
 
 - **Category A (native skill directories)** — Claude Code, opencode, and Gemini CLI have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
 - **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. These are out of scope per the SPEC but the abstraction accommodates them for future expansion.
@@ -143,11 +174,11 @@ The tech-researcher refreshes project-specific reference skills based on the tec
 
 ### Adoption Intelligence (R13)
 
-During `prothon init`, the system uses static analysis to pre-populate `PATTERNS.md` with existing conventions.
+During `prothon init`, the system uses Python's `ast` module to scan for high-signal structural elements in existing code, pre-populating `PATTERNS.md` with existing conventions.
 
 - **AST Pattern Miner:** Uses Python's built-in `ast` module to scan for high-signal structural elements (base classes, protocols, common decorators).
 - **Idiom Matcher:** Includes pre-defined signatures for popular libraries (FastAPI, Typer, Pydantic).
-- **Signature-Only Extraction:** Uses `ast.unparse()` on discovered nodes after clearing their bodies to satisfy R25-R26 compliance automatically.
+- **Signature-Only Extraction:** Satisfies the "signature-only" constraint (R25-R26) by using `ast.unparse()` on discovered nodes after clearing their implementation bodies.
 - **Local Execution:** Runs entirely offline and locally during the adoption workflow.
 
 ### Mutation Testing CI (R6)
@@ -189,6 +220,7 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 | claude-code | AI assistant backend | R57: Claude Code support | opencode, gemini, ob1 |
 | opencode | AI assistant backend | R57-R58, R61: opencode support | claude-code, gemini, ob1 |
 | gemini-cli | AI assistant backend | R57: Gemini CLI support | claude-code, opencode, ob1 |
+| jinja2 (>=3.1) | Template rendering for adoption scaffolds (AGENTS.md, doc stubs) | R13-R16: project adoption | string.Template, mako |
 | ob1 | AI assistant backend | R57: OB1 support (pluggable) | claude-code, opencode, gemini |
 
 ### Rationale
@@ -206,6 +238,8 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 **Rich** — Already installed at zero marginal cost (Typer unconditionally depends on it). Best-in-class table rendering with per-cell styling, colored PASS/FAIL, and column alignment. Using it for promise plans, status, and compliance reports is free. Interactive prompts remain on `typer.prompt()`.
 
 **subprocess for git** — Every git operation prothon needs maps to a single CLI command with a machine-readable output flag (`--numstat`, `--name-only`, `--porcelain`). No operation benefits from in-process git access. Zero dependencies. `--numstat` (critical for promise verification) is trivial via subprocess but problematic with dulwich. List-form arguments with `GIT_TERMINAL_PROMPT=0` provide a minimal attack surface.
+
+**Jinja2** — Already a transitive dependency (Copier depends on it), so adding an explicit pin costs zero additional packages. Used directly in `adoption_templates.py` and `scaffold.py` for rendering AGENTS.md, doc stubs, and CI workflow files during `prothon init` and `prothon new`. `string.Template` lacks conditionals and loop constructs needed for scaffold logic. Mako is a heavier alternative with no advantage given Jinja2 is already present.
 
 ## Interfaces
 
@@ -600,7 +634,7 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 |----------|--------|-------------|-----------|
 | Module structure | Flat modules, one per subsystem | Nested packages by subsystem; hybrid flat core + CLI package | 6 subsystems map cleanly to 6 flat modules at 2-5 KLOC. Minimal refactor. Any module can be promoted to a subpackage later without changing caller imports. |
 | CLI framework | Typer | Click, argparse | Already in use and working. Lowest boilerplate. Type-hint inference. Switching would be a rewrite with zero functional benefit. |
-| Execution Quality Gate | `pre-commit run --all-files` | `uv run poe check` | Mandatory project-wide health check (lint, type, test, etc.) for every task completion. Ensures 100% project health. Matches requirement R32. |
+| Task quality gate | `pre-commit run --all-files` | `uv run poe check` | Mandatory project-wide health check (lint, type, test, etc.) run after every task implementation. Consistent with the Task Lifecycle step 4. Ensures 100% project health. Matches requirement R32. |
 | Fix Mandate | **Global Health Enforcement** | Surgical updates only | Agent must fix all errors/warnings project-wide (including pre-existing) before a task is verified. Prevents accumulation of tech debt. |
 | Templating engine | Copier | Cookiecutter, custom Jinja2 | Template updating (`copier update` with 3-way merge) is the decisive factor. Neither alternative provides it. Clean Python API for library embedding. |
 | TOML library | tomlkit | tomllib + tomli-w, toml (uiri) | Comment/formatting preservation on roundtrip is essential for human-authored promise files. Single library for read and write. Maintained by Poetry organization. |
@@ -620,7 +654,6 @@ Both `prothon new` and `prothon init` generate version-bump CI workflows for the
 | CI configurability | Basic toggle (`auto_version = true/false`) | No config; full branch/trigger configurability | "Minorly configurable" per SPEC. Single toggle lets users disable without deleting files. Branch/trigger customization belongs in the workflow YAML itself — users comfortable with CI can edit directly. |
 | Subagent invocation in skills | Canonical names with per-backend mapping | Tool-specific instructions per assistant; backend-specific skill variants | Single set of skills works across both backends. Canonical names are translated by each backend's `subagent_type_map`. Backend-specific variants would double maintenance. Tool-specific instructions (e.g., `Task tool, subagent_type:`) break when the other assistant has a different tool API. |
 | Skill frontmatter portability | Assistant-specific fields ignored by non-supporting backends | Require all backends to support all fields; strip unsupported fields at sync time | opencode silently ignores unknown frontmatter (`context: fork`, `model:`). Requiring support would block backend addition. Stripping adds complexity for zero benefit since unknown fields are already harmless. |
-| Task quality gate | `pre-commit run --all-files` | `uv run poe check` | `pre-commit run --all-files` ensures the full project toolchain suite passes, catching errors that file-scoped hooks might miss. Matches requirement R32. |
 | Retry configuration | Project default in `[tool.prothon].max_attempts` + per-task override in promise TOML | CLI flag; env var; promise metadata section | Two-level resolution (project + per-task) follows existing config patterns. Retry count doesn't warrant CLI flag or env var precedence levels. Per-task override lets the planning agent adjust for task complexity. |
 | Retry enforcement | Skill prompt reads `max_attempts` from promise file | Programmatic `attempt_task()` with file locking; hybrid skill + validation | Skill prompt already manages the retry loop. Reading `max_attempts` from the promise file is the minimal change. Programmatic enforcement can be added later if stricter guarantees are needed. |
 | PATTERNS.md content form | Signature-only code, natural language rationale | Allow full code examples; no code at all | Signatures communicate interface contracts without prescribing implementation. Full code examples drift from actual implementations and constrain developer judgment. No code at all loses the precision of typed signatures. |

@@ -20,7 +20,7 @@ from prothon.exceptions import GitError, ProthonError
 from prothon.git import commit_file, is_dirty
 from prothon.models import PROMISE_PATH
 from prothon.project import find_project_root
-from prothon.static_checks import run_static_checks
+from prothon.checks import run_static_checks
 from prothon.ui import (
     console,
     render_check_report,

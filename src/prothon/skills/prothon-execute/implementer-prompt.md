@@ -28,7 +28,7 @@ If you have questions about the requirements, approach, or anything unclear in t
 Once you're clear on requirements:
 1. Implement exactly what the task specifies (DRY, YAGNI, TDD).
 2. Write tests that provide value — skip trivial tests (getters, setters, pass-throughs, language features). Focus on business logic, edge cases, and integration points.
-3. Keep tests lightweight and fast: use fakes/stubs over real services, in-memory structures over filesystem, mock at boundaries. Each test should run in milliseconds.
+3. By default, keep unit tests lightweight and fast: use fakes/stubs over real services, in-memory structures over filesystem, and mock at boundaries. Aim for millisecond execution for unit tests. Exceptions are permitted for explicitly marked slow/integration tests per docs/PATTERNS.md.
 4. Stage selectively by explicit path:
    - Stage modified files: `git add {files_to_modify}`
    - Stage new files: `git add {files_to_create}`

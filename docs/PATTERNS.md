@@ -4,7 +4,7 @@
 
 ### Module Layout
 
-Flat structure — one module per subsystem, as defined in DESIGN.md. CLI logic is distributed: `cli.py` (Typer app/commands), `ui.py` (Rich-based terminal rendering), `config.py` (configuration resolution), and `scaffold_cli.py` (interactive scaffolding). Domain modules remain plain Python, independent of the CLI framework.
+Flat structure — one module per subsystem. The concrete list of modules and their responsibilities is maintained in DESIGN.md. Domain modules remain plain Python, independent of the CLI framework.
 
 ### Naming Conventions
 

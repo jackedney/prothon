@@ -9,21 +9,26 @@ Flat module layout with all domain modules at one level under `src/prothon/`. CL
 ```
 src/prothon/
     __init__.py
+    adoption.py         # Project adoption: overlaying docs-first workflow onto existing projects
+    adoption_templates.py  # Templates and scaffolds used during project adoption
+    ast_miner.py        # AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
     cli.py              # Typer app and command definitions
+    commands.py         # Implementation logic for CLI commands (delegates to domain modules)
     ui.py               # Rich-based terminal UI, tables, and status reporting
     config.py           # Multi-level configuration resolution (CLI, env, toml)
+    compliance.py       # Static AST checks and semantic compliance verification
+    exceptions.py       # Custom exception hierarchy
+    git.py              # Thin typed wrapper around git CLI via subprocess
+    models.py           # Shared data models (Task, Metadata, Promise) for the promise system
+    promise.py          # Promise TOML I/O and lifecycle management
+    promise_verify.py   # Git diff analysis and task verification logic
+    project.py          # Project root detection, shared project context
+    refactor.py         # Drift discovery and refactor promise generation
     scaffold.py         # Template rendering, copier answers, project adoption
     scaffold_cli.py     # Scaffolding-specific CLI commands and interactive prompts
     skills.py           # Skill discovery, symlink management
-    promise.py          # Promise data model, TOML I/O, lifecycle management
-    promise_verify.py   # Git diff analysis and task verification logic
+    static_checks.py    # Static analysis runner for compliance checks against documentation
     versioning.py       # Semantic version detection, bumping, git tagging
-    project.py          # Project root detection, shared project context
-    git.py              # Thin typed wrapper around git CLI via subprocess
-    assistant.py        # Abstract assistant interface and backend registry
-    compliance.py       # Static AST checks and semantic compliance verification
-    refactor.py         # Drift discovery and refactor promise generation
-    exceptions.py       # Custom exception hierarchy
     skills/             # Bundled skill assets (non-Python, 8 directories)
 
 template/               # Bundled Copier project template (Jinja2), at project root
@@ -35,16 +40,33 @@ This layout is driven by the number of subsystems in the SPEC (scaffolding, adop
 
 ```
 cli.py
-  ├── config.resolve_agent(), resolve_model()
-  ├── ui.render_table(), render_status()
+  ├── commands.*
   ├── scaffold_cli.new_project(), init_project()
+  ├── assistant._BACKENDS
+  └── project.find_project_root()
+
+commands.py
   ├── assistant.get_backend(), launch()
-  └── promise.load_promise(), plan(), status(), complete_task(), record_attempt(), cleanup()
+  ├── config.resolve_agent(), resolve_model(), file_hash(), find_init_path(), ...
+  ├── models.PROMISE_PATH
+  ├── promise.*, promise_verify.*, versioning.*
+  ├── static_checks.run_static_checks()
+  └── ui.render_check_report(), render_compliance_report(), render_plan(), render_status()
+
+adoption.py
+  ├── adoption_templates.* (scaffold strings)
+  ├── ast_miner.ASTPatternMiner
+  ├── scaffold.get_template_dir()
+  └── git.run_git()
+
+static_checks.py
+  └── compliance.CheckResult, CheckStatus, CheckType, ComplianceReport, Requirement
 
 scaffold_cli.py
   └── scaffold.generate(), init_existing()
 
 promise.py
+  ├── models.Task, Metadata, Promise, PROMISE_PATH
   └── promise_verify.check_task()
 
 assistant.py

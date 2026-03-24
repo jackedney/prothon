@@ -54,14 +54,15 @@ def test_discover_drift_large_files(tmp_path: Path):
 
 
 def test_discover_drift_missing_tests(tmp_path: Path):
-    """Test identification of source files missing tests."""
+    """Test identification of source files with testable logic missing tests."""
     src = tmp_path / "src" / "prothon"
     src.mkdir(parents=True)
     tests = tmp_path / "tests"
     tests.mkdir()
 
+    # Module with actual logic (not trivial)
     module = src / "new_feature.py"
-    module.write_text("def feat(): pass")
+    module.write_text("def feat(x):\n    return x * 2\n")
 
     findings = discover_drift(tmp_path)
     titles = [f.title for f in findings]
@@ -72,6 +73,24 @@ def test_discover_drift_missing_tests(tmp_path: Path):
     findings = discover_drift(tmp_path)
     titles = [f.title for f in findings]
     assert "Missing tests for new_feature.py" not in titles
+
+
+def test_discover_drift_trivial_module_no_test_needed(tmp_path: Path):
+    """Trivial modules (only pass/return None) should not trigger missing test findings."""
+    src = tmp_path / "src" / "prothon"
+    src.mkdir(parents=True)
+    tests = tmp_path / "tests"
+    tests.mkdir()
+
+    # Module with only trivial functions - no test needed
+    module = src / "trivial.py"
+    module.write_text(
+        "def pass_through(x):\n    return x\n\ndef do_nothing():\n    pass\n"
+    )
+
+    findings = discover_drift(tmp_path)
+    titles = [f.title for f in findings]
+    assert "Missing tests for trivial.py" not in titles
 
 
 def test_generate_refactor_promise(tmp_path: Path):

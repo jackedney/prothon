@@ -36,6 +36,7 @@ You are stateless between invocations. Determine "what to do next" by inspecting
    - Document exactly which files to touch for each task.
    - Embed complete code concepts or context rather than vague descriptions ("add validation").
    - DRY. YAGNI. TDD. Every `[[tasks]]` entry MUST include all fields.
+   - **Test files are optional.** Only include a test file in `files_to_create` when the task introduces testable business logic. Trivial modules (constants, type definitions, pass-throughs) don't need tests.
 
 ```toml
 [metadata]

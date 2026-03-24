@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -127,7 +128,12 @@ def _check_large_files(root: Path) -> list[DriftFinding]:
 
 
 def _check_missing_tests(root: Path) -> list[DriftFinding]:
-    """Check for source modules that are missing corresponding test files."""
+    """Check for source modules with testable logic that lack corresponding tests.
+
+    Only flags modules that contain functions/classes with actual logic (not just
+    constants, type definitions, or trivial pass-throughs). Trivial modules don't
+    require tests.
+    """
     src_dir = root / "src"
     tests_dir = root / "tests"
     if not src_dir.exists():
@@ -137,17 +143,106 @@ def _check_missing_tests(root: Path) -> list[DriftFinding]:
     for py_file in src_dir.rglob("*.py"):
         if py_file.name == "__init__.py":
             continue
+
+        # Check if the module has testable logic
+        if not _has_testable_logic(py_file):
+            continue
+
         test_file = tests_dir / f"test_{py_file.stem}.py"
         if not test_file.exists():
             rel = py_file.relative_to(root)
             findings.append(
                 DriftFinding(
                     title=f"Missing tests for {py_file.name}",
-                    rationale=f"No corresponding test file found for {rel}.",
+                    rationale=f"No corresponding test file found for {rel}. "
+                    "This module contains functions/classes with logic that should be tested.",
                     files_affected=[test_file],
                 )
             )
     return findings
+
+
+def _has_testable_logic(py_file: Path) -> bool:
+    """Check if a Python file contains testable logic.
+
+    Returns False for modules that only contain:
+    - Constants and type aliases
+    - Data classes with no methods
+    - Single-line pass-through functions
+    - Abstract base classes / protocols (tested via implementations)
+    """
+    try:
+        source = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            if _is_testable_function(node):
+                return True
+        if isinstance(node, ast.ClassDef) and _is_testable_class(node):
+            return True
+    return False
+
+
+def _is_testable_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Check if a function has testable logic."""
+    # Skip private helpers (but allow dunder methods)
+    if node.name.startswith("_") and not node.name.endswith("_"):
+        return False
+    # Skip common trivial dunder methods
+    if node.name in ("__init__", "__str__", "__repr__", "__len__"):
+        if _is_trivial_function(node):
+            return False
+    return not _is_trivial_function(node)
+
+
+def _is_testable_class(node: ast.ClassDef) -> bool:
+    """Check if a class has methods with testable logic."""
+    bases = {ast.unparse(base) for base in node.bases}
+    if "ABC" in bases or "Protocol" in bases:
+        return False
+    return any(
+        isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
+        and _is_testable_function(item)
+        for item in node.body
+    )
+
+
+def _is_trivial_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Check if a function body is trivial (just pass, return None, or single expression)."""
+    body = node.body
+
+    if len(body) == 1:
+        return _is_single_trivial_stmt(body[0])
+
+    if len(body) == 2 and _is_docstring_stmt(body[0]):
+        return _is_single_trivial_stmt(body[1])
+
+    return False
+
+
+def _is_single_trivial_stmt(stmt: ast.stmt) -> bool:
+    """Check if a single statement is trivial."""
+    if isinstance(stmt, ast.Pass):
+        return True
+    if isinstance(stmt, ast.Return):
+        return stmt.value is None or isinstance(stmt.value, ast.Attribute | ast.Name)
+    if isinstance(stmt, ast.Raise):
+        return True
+    if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
+        return stmt.value.value is ...
+    return False
+
+
+def _is_docstring_stmt(stmt: ast.stmt) -> bool:
+    """Check if a statement is a docstring."""
+    return (
+        isinstance(stmt, ast.Expr)
+        and isinstance(stmt.value, ast.Constant)
+        and isinstance(stmt.value.value, str)
+    )
 
 
 def generate_refactor_promise(root: Path, findings: list[DriftFinding]) -> Promise:

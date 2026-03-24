@@ -4,7 +4,7 @@
 
 ### Module Structure
 
-Flat module layout with all domain modules at one level under `src/prothon/`. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
+Mostly flat module layout under `src/prothon/`, with one subpackage (`checks/`) grouping static compliance checks. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
 
 ```
 src/prothon/
@@ -16,7 +16,15 @@ src/prothon/
     commands.py         # Implementation logic for CLI commands (delegates to domain modules)
     ui.py               # Rich-based terminal UI, tables, and status reporting
     config.py           # Multi-level configuration resolution (CLI, env, toml)
-    compliance.py       # Static AST checks and semantic compliance verification
+    checks/             # Static compliance checks subpackage (split from static_checks.py)
+        __init__.py     # Re-exports run_static_checks and all public check functions
+        utils.py        # AST analysis, signature helpers
+        docs.py         # Document-related checks (R24-R26)
+        structure.py    # Package structure checks (R3-R5, R15)
+        workflows.py    # Execute/refactor workflow checks (R27-R42)
+        research.py     # Tech researcher and versioning checks (R43-R55)
+        adoption.py     # Adoption intelligence check (R13)
+    compliance.py       # Compliance data types (CheckResult, CheckStatus, ComplianceReport)
     exceptions.py       # Custom exception hierarchy
     git.py              # Thin typed wrapper around git CLI via subprocess
     models.py           # Shared data models (Task, Metadata, Promise) for the promise system
@@ -27,14 +35,13 @@ src/prothon/
     scaffold.py         # Template rendering, copier answers, project adoption
     scaffold_cli.py     # Scaffolding-specific CLI commands and interactive prompts
     skills.py           # Skill discovery, symlink management
-    static_checks.py    # Static analysis runner for compliance checks against documentation
     versioning.py       # Semantic version detection, bumping, git tagging
     skills/             # Bundled skill assets (non-Python, 8 directories)
 
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. At the expected scale of 2-5 KLOC, flat is navigable without namespace overhead.
+This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. The `checks/` subpackage is the single exception to the flat layout — it groups 28+ static check functions that would otherwise form an 850+ line monolith.
 
 ### Module Dependencies
 
@@ -52,7 +59,7 @@ commands.py
   ├── models.PROMISE_PATH
   ├── promise.*, promise_verify.*, versioning.*
   ├── project.find_project_root()
-  ├── static_checks.run_static_checks()
+  ├── checks.run_static_checks()
   └── ui.render_check_report(), render_compliance_report(), render_plan(), render_status()
 
 adoption.py
@@ -61,7 +68,7 @@ adoption.py
   ├── scaffold.get_template_dir()
   └── git.run_git()
 
-static_checks.py
+checks.*
   └── compliance.CheckResult, CheckStatus, CheckType, ComplianceReport, Requirement
 
 scaffold_cli.py

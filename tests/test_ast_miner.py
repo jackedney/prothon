@@ -225,3 +225,49 @@ def complex_default(x = some_function_call()):
     result = miner.extract_from_file(p)
 
     assert "def complex_default(x=...):" in result
+
+
+def test_class_decorators_are_filtered(miner: ASTPatternMiner, tmp_path: Path) -> None:
+    """Non-idiom class decorators must be stripped from output."""
+    code = """\
+@register("users")
+@dataclass
+class User:
+    name: str
+    def method(self):
+        return self.name
+"""
+    p = tmp_path / "test.py"
+    p.write_text(code)
+
+    result = miner.extract_from_file(p)
+
+    assert "@register" not in result
+    assert "@dataclass" in result
+    assert "return" not in result
+
+
+def test_class_field_defaults_are_sanitized(
+    miner: ASTPatternMiner, tmp_path: Path
+) -> None:
+    """Complex default values in data model fields must be replaced with Ellipsis."""
+    code = """\
+from pydantic import BaseModel
+from datetime import datetime
+
+class User(BaseModel):
+    name: str = "literal"
+    created_at: datetime = datetime.now()
+    tags: list[str] = list(range(10))
+"""
+    p = tmp_path / "test.py"
+    p.write_text(code)
+
+    result = miner.extract_from_file(p)
+
+    # Literal string default should be kept (safe expression)
+    assert "literal" in result
+    # datetime.now() is implementation logic — must be sanitized
+    assert "datetime.now()" not in result
+    # list(range(10)) is implementation logic — must be sanitized
+    assert "range" not in result

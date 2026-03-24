@@ -178,6 +178,13 @@ class ASTPatternMiner:
                 self.matcher.is_idiom_decorator(dec) for dec in node.decorator_list
             )
 
+            # Filter decorators (same as functions)
+            node.decorator_list = [
+                dec
+                for dec in node.decorator_list
+                if self.matcher.is_idiom_decorator(dec)
+            ]
+
             new_body: list[ast.stmt] = []
             for item in node.body:
                 if isinstance(
@@ -185,7 +192,8 @@ class ASTPatternMiner:
                 ):
                     new_body.append(self._strip_node(item))
                 elif is_idiom_class and isinstance(item, (ast.AnnAssign, ast.Assign)):
-                    # Keep fields for data models (Pydantic, dataclasses, etc.)
+                    # Keep fields for data models but sanitize defaults
+                    self._clean_field_default(item)
                     new_body.append(item)
 
             if not new_body:
@@ -195,6 +203,15 @@ class ASTPatternMiner:
             return node
 
         return node
+
+    def _clean_field_default(self, node: ast.AnnAssign | ast.Assign) -> None:
+        """Replace complex default values in class fields with Ellipsis."""
+        if isinstance(node, ast.AnnAssign) and node.value is not None:
+            if not self._is_safe_signature_expr(node.value):
+                node.value = ast.Constant(value=Ellipsis)
+        elif isinstance(node, ast.Assign) and node.value is not None:
+            if not self._is_safe_signature_expr(node.value):
+                node.value = ast.Constant(value=Ellipsis)
 
     def _clean_defaults(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         """Replaces complex default values with Ellipsis unless they are idioms."""

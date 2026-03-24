@@ -43,7 +43,7 @@ name: Version Bump
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, master]
     types: [opened, synchronize]
 
 concurrency:
@@ -128,7 +128,7 @@ name: Version Tag
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
 
 permissions:
   contents: write

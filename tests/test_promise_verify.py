@@ -167,9 +167,9 @@ class TestCheckFilesToModify:
 class TestCheckFilesToRemove:
     """Verify that declared removals no longer exist on disk."""
 
-    def test_empty_list_skipped(self) -> None:
+    def test_empty_list_skipped(self, tmp_path: Path) -> None:
         task = Task(title="t")
-        result = _check_files_to_remove(task)
+        result = _check_files_to_remove(task, tmp_path)
         assert result.status is CheckStatus.SKIPPED
 
     def test_all_removed_passed(self, tmp_path: Path) -> None:
@@ -181,7 +181,7 @@ class TestCheckFilesToRemove:
                 str(tmp_path / "gone2.py"),
             ],
         )
-        result = _check_files_to_remove(task)
+        result = _check_files_to_remove(task, tmp_path)
         assert result.status is CheckStatus.PASSED
         assert "2/2" in result.detail
 
@@ -195,7 +195,7 @@ class TestCheckFilesToRemove:
                 str(tmp_path / "gone.py"),
             ],
         )
-        result = _check_files_to_remove(task)
+        result = _check_files_to_remove(task, tmp_path)
         assert result.status is CheckStatus.FAILED
         assert "1/2" in result.detail
 
@@ -203,7 +203,7 @@ class TestCheckFilesToRemove:
         f = tmp_path / "exists.py"
         f.write_text("still here")
         task = Task(title="t", files_to_remove=[str(f)])
-        result = _check_files_to_remove(task)
+        result = _check_files_to_remove(task, tmp_path)
         assert result.status is CheckStatus.FAILED
         assert "0/1" in result.detail
 

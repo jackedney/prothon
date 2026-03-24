@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import tomlkit
@@ -148,7 +149,10 @@ def _create_agents_and_links(root: Path) -> list[Path]:
     for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
         link = root / name
         if not link.exists():
-            os.symlink("AGENTS.md", link)
+            try:
+                os.symlink("AGENTS.md", link)
+            except OSError:
+                shutil.copyfile(agents_path, link)
             created.append(link)
 
     skills_dir = root / ".agents" / "skills"

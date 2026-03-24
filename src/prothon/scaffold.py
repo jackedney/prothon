@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 from prothon.git import run_git
@@ -56,7 +57,10 @@ def _post_generate(dest: Path) -> None:
     for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
         link = dest / name
         if not link.exists():
-            os.symlink("AGENTS.md", link)
+            try:
+                os.symlink("AGENTS.md", link)
+            except OSError:
+                shutil.copyfile(dest / "AGENTS.md", link)
 
     # Create .agents/skills for project-specific reference skills
     (dest / ".agents" / "skills").mkdir(parents=True, exist_ok=True)

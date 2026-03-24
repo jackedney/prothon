@@ -71,7 +71,7 @@ def _require_project_root() -> Path:
     try:
         return find_project_root()
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -112,7 +112,7 @@ def spec(
         if rc != 0:
             raise typer.Exit(rc)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -129,7 +129,7 @@ def design(
         if rc != 0:
             raise typer.Exit(rc)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -146,7 +146,7 @@ def patterns(
         if rc != 0:
             raise typer.Exit(rc)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -163,7 +163,7 @@ def execute(
         if rc != 0:
             raise typer.Exit(rc)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -178,7 +178,7 @@ def compliance(
     try:
         commands.compliance_command(root, agent, model, provider)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -195,7 +195,7 @@ def refactor(
         if rc != 0:
             raise typer.Exit(rc)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -209,7 +209,7 @@ def promise_plan() -> None:
     try:
         commands.promise_plan_command(root)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -220,7 +220,7 @@ def promise_status() -> None:
     try:
         commands.promise_status_command(root)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -233,7 +233,7 @@ def promise_check(
     try:
         commands.promise_check_command(root, task_index)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -246,7 +246,7 @@ def promise_complete(
     try:
         commands.promise_complete_command(root, task_index)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -259,7 +259,7 @@ def promise_record_attempt(
     try:
         commands.promise_record_attempt_command(root, task_index)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -270,7 +270,7 @@ def promise_cleanup() -> None:
     try:
         commands.promise_cleanup_command(root)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -297,7 +297,7 @@ def ci_bump(
     try:
         commands.ci_bump_command(root, before_sha, after_sha, dry_run, no_tag)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 
@@ -315,7 +315,7 @@ def ci_detect(
     try:
         commands.ci_detect_command(root, before_sha, after_sha)
     except ProthonError as exc:
-        typer.echo(str(exc), err=False)
+        typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
 
 

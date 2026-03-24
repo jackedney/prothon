@@ -148,18 +148,44 @@ def _check_missing_tests(root: Path) -> list[DriftFinding]:
         if not _has_testable_logic(py_file):
             continue
 
-        test_file = tests_dir / f"test_{py_file.stem}.py"
-        if not test_file.exists():
+        if not _has_matching_test_file(py_file, tests_dir):
             rel = py_file.relative_to(root)
             findings.append(
                 DriftFinding(
                     title=f"Missing tests for {py_file.name}",
                     rationale=f"No corresponding test file found for {rel}. "
                     "This module contains functions/classes with logic that should be tested.",
-                    files_affected=[test_file],
+                    files_affected=[tests_dir],
                 )
             )
     return findings
+
+
+def _has_matching_test_file(py_file: Path, tests_dir: Path) -> bool:
+    """Check if any test file in tests_dir covers the given module.
+
+    Matches:
+    - test_<module>.py anywhere in tests_dir
+    - test_*_<module>.py (e.g., test_refactor_impl.py for refactor.py)
+    - *_<module>_test.py (e.g., refactor_impl_test.py)
+    """
+    if not tests_dir.exists():
+        return False
+
+    module_stem = py_file.stem
+    for test_file in tests_dir.rglob("test_*.py"):
+        test_stem = test_file.stem
+        # test_<module>.py or test_*_<module>.py
+        if test_stem == f"test_{module_stem}" or test_stem.endswith(f"_{module_stem}"):
+            return True
+
+    for test_file in tests_dir.rglob("*_test.py"):
+        test_stem = test_file.stem
+        # *_<module>_test.py
+        if test_stem == f"{module_stem}_test":
+            return True
+
+    return False
 
 
 def _has_testable_logic(py_file: Path) -> bool:
@@ -228,12 +254,42 @@ def _is_single_trivial_stmt(stmt: ast.stmt) -> bool:
     if isinstance(stmt, ast.Pass):
         return True
     if isinstance(stmt, ast.Return):
-        return stmt.value is None or isinstance(stmt.value, ast.Attribute | ast.Name)
-    if isinstance(stmt, ast.Raise):
-        return True
+        return _is_trivial_return(stmt)
     if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
         return stmt.value.value is ...
     return False
+
+
+def _is_trivial_return(stmt: ast.Return) -> bool:
+    """Check if a return statement is trivial.
+
+    Trivial returns include:
+    - return None (or bare return)
+    - return some_name
+    - return some.attr
+    - return delegate.call(...) where args/kwargs are simple names/attributes/constants
+    """
+    if stmt.value is None:
+        return True
+    if isinstance(stmt.value, ast.Name | ast.Attribute):
+        return True
+    if isinstance(stmt.value, ast.Call):
+        call = stmt.value
+        if not isinstance(call.func, ast.Name | ast.Attribute):
+            return False
+        return _all_args_simple(call)
+    return False
+
+
+def _all_args_simple(call: ast.Call) -> bool:
+    """Check if all arguments in a call are simple (names, attributes, constants)."""
+    for arg in call.args:
+        if not isinstance(arg, ast.Name | ast.Attribute | ast.Constant):
+            return False
+    for kw in call.keywords:
+        if not isinstance(kw.value, ast.Name | ast.Attribute | ast.Constant):
+            return False
+    return True
 
 
 def _is_docstring_stmt(stmt: ast.stmt) -> bool:

@@ -41,9 +41,16 @@ def _resolves_to_class(
         while isinstance(current, ast.Attribute):
             current = current.value
         if isinstance(current, ast.Name):
-            # If the root name is in alias_map, it was imported — the call
-            # resolves to <imported_module>.class_name which is a match.
-            return current.id in alias_map
+            resolved = alias_map.get(current.id)
+            if not resolved:
+                return False
+            if resolved.split(".")[-1] == class_name:
+                return True
+            snake = "".join(
+                f"_{c.lower()}" if c.isupper() else c for c in class_name
+            ).lstrip("_")
+            parts = snake.split("_")
+            return any(part in resolved for part in parts if len(part) > 2)
     return False
 
 

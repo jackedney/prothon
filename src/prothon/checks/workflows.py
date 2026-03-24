@@ -46,8 +46,28 @@ def check_execute_logic(root: Path) -> list[CheckResult]:
 
 def _check_execute_plan_model(promise_path: Path) -> list[CheckResult]:
     """Check R27 and R28 in promise.py."""
+    ev = str(promise_path)
     if not promise_path.exists():
-        return []
+        return [
+            CheckResult(
+                Requirement(
+                    "SPEC",
+                    "System must provide execute workflow generating a plan of tasks.",
+                    "R27",
+                ),
+                CheckStatus.SKIP,
+                evidence=ev,
+                rationale="promise.py not found.",
+            ),
+            CheckResult(
+                Requirement(
+                    "SPEC", "Tasks must declare files to touch and line counts.", "R28"
+                ),
+                CheckStatus.SKIP,
+                evidence=ev,
+                rationale="promise.py not found.",
+            ),
+        ]
 
     content = promise_path.read_text()
     ev = str(promise_path)

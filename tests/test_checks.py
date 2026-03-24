@@ -396,9 +396,11 @@ def test_check_execute_logic_all_present(tmp_path: Path) -> None:
 
 
 def test_check_execute_logic_nothing_present(tmp_path: Path) -> None:
-    """Empty results when none of the expected files exist."""
+    """SKIP results for promise.py checks when file missing; empty for others."""
     results = check_execute_logic(tmp_path)
-    assert results == []
+    assert len(results) == 2
+    assert all(r.status == CheckStatus.SKIP for r in results)
+    assert all("promise.py" in r.rationale for r in results)
 
 
 def test_check_execute_logic_partial(tmp_path: Path) -> None:

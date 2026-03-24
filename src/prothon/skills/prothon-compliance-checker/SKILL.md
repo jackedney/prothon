@@ -28,7 +28,22 @@ You are the Compliance Checker. Verify that source code implements the documenta
 1. **Read all docs** — Read SPEC.md, DESIGN.md, and PATTERNS.md in full. Extract all checkable statements.
 2. **Scan source code** — Read all files in `src/` and `tests/`. Understand the current implementation.
 3. **Cross-reference** — For each doc statement, determine whether the code satisfies it.
-4. **Report** — Produce a compliance report in this format:
+4. **Report** — Produce a compliance report in two formats:
+   - **Markdown:** A pretty-printed summary for the user (see format below).
+   - **JSON:** A machine-readable list of finding dictionaries written to `.prothon/compliance_semantic.json`. Each dictionary must follow this structure:
+     ```json
+     {
+       "requirement": {
+         "source": "SPEC",
+         "statement": "Requirement text",
+         "requirement_id": "R1"
+       },
+       "status": "PASS",
+       "check_type": "SEMANTIC",
+       "evidence": "file:line description",
+       "rationale": "Why it passed/failed"
+     }
+     ```
 
 ```
 ## Compliance Report
@@ -72,7 +87,6 @@ You are the Compliance Checker. Verify that source code implements the documenta
 - Each requirement should be testable — look for code that demonstrates the capability
 - A requirement is PASS if the code clearly implements it
 - A requirement is FAIL if no code addresses it or code contradicts it
-- A requirement is PARTIAL if some but not all aspects are implemented
 
 ### DESIGN.md Choices
 - Check that chosen packages are actually imported and used
@@ -93,4 +107,4 @@ You are the Compliance Checker. Verify that source code implements the documenta
 
 ## Output
 
-A compliance report with pass/fail status for every checkable statement, file:line evidence, and a prioritized list of action items for failures.
+A Markdown compliance report for the user and a machine-readable JSON list of results written to `.prothon/compliance_semantic.json`. Each result includes PASS/FAIL status for every checkable statement, file:line evidence, and a prioritized list of action items for failures.

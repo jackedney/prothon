@@ -5,13 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from prothon.exceptions import PromiseError
 from prothon.git import GitDiffProvider, SubprocessGitDiff
-
-if TYPE_CHECKING:
-    from prothon.promise import Promise, Task
+from prothon.models import Promise, Task
 
 DEFAULT_TOLERANCE = 30
 
@@ -141,11 +138,11 @@ def _validate_params(
     promise: Promise | None,
 ) -> tuple[GitDiffProvider, Promise]:
     """Validate and resolve parameters for check_task."""
-    from prothon.promise import PROMISE_PATH, load_promise
-
     resolved_diff = diff if diff is not None else SubprocessGitDiff()
 
     if promise is None:
+        from prothon.promise import PROMISE_PATH, load_promise
+
         promise_path = path if path is not None else PROMISE_PATH
         promise = load_promise(promise_path)
 
@@ -167,11 +164,15 @@ def check_task(
     promise: Promise | None = None,
 ) -> TaskCheckReport:
     """Check a single task's promises against git reality."""
-    from prothon.promise import PROMISE_PATH
-
     diff, promise = _validate_params(task_index, diff, path, promise)
 
-    promise_path = path if path is not None else PROMISE_PATH
+    if path is not None:
+        promise_path = path
+    else:
+        from prothon.promise import PROMISE_PATH
+
+        promise_path = PROMISE_PATH
+
     base_path = (
         promise_path.parent.parent
         if promise_path.parent.name == "docs"
@@ -187,7 +188,7 @@ def check_task(
     # Check files
     report.checks.append(_check_files_to_create(task, base_path))
     report.checks.append(_check_files_to_modify(task, diff, base_commit))
-    report.checks.append(_check_files_to_remove(task))
+    report.checks.append(_check_files_to_remove(task, base_path))
 
     # Check line counts
     report.checks.extend(_check_line_counts(task, diff, base_commit))
@@ -236,7 +237,7 @@ def _check_files_to_modify(
     )
 
 
-def _check_files_to_remove(task: Task) -> CheckResult:
+def _check_files_to_remove(task: Task, base_path: Path) -> CheckResult:
     """Verify that all files declared for removal no longer exist."""
     if not task.files_to_remove:
         return CheckResult(
@@ -244,7 +245,11 @@ def _check_files_to_remove(task: Task) -> CheckResult:
             status=CheckStatus.SKIPPED,
             detail="none declared",
         )
-    removed = [f for f in task.files_to_remove if not Path(f).exists()]
+    removed = [
+        f
+        for f in task.files_to_remove
+        if not (Path(f) if Path(f).is_absolute() else base_path / f).exists()
+    ]
     all_removed = len(removed) == len(task.files_to_remove)
     return CheckResult(
         name="files_to_remove",

@@ -23,7 +23,7 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 10. The system must adopt an existing Python project into the documentation-driven workflow via a single CLI command (`prothon init`).
 11. The command must verify the current directory is a git repository and exit with an error if it is not.
 12. The command must verify that `docs/SPEC.md` does not already exist and exit with an error if it does, directing the user to `prothon new` or manual setup.
-13. The command must create a `docs/` directory with empty scaffolds for SPEC.md, DESIGN.md, and PATTERNS.md, identical to those created by `prothon new`.
+13. The command must create a `docs/` directory with scaffolds for SPEC.md, DESIGN.md, and PATTERNS.md. For existing projects, the command must use static analysis (AST) to intelligently pre-populate PATTERNS.md with discovered code signatures and conventions, satisfying the "signature-only" constraint (R25-R26).
 14. The command must create AGENTS.md and symlinks (CLAUDE.md, GEMINI.md, AGENT.md) pointing to AGENTS.md.
 15. The command must create a `.agents/skills/` directory for project-specific reference skills.
 16. The command must print a summary of created files and suggest running `prothon spec` as the next step.
@@ -69,9 +69,9 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 ### Tech Research
 
 43. The system must automatically generate reference skills based on the technology choices made in DESIGN.md.
-44. Generated reference skills must be sourced from live documentation, not solely from the AI's training data.
-45. Reference skills must cover four categories: library usage, language style conventions, performance patterns, and domain knowledge.
-46. Generated reference skills must be stored in the project's local skills directory so they are available to all AI agents working on the project.
+44. Generated reference skills must follow a "Progressive Disclosure" structure: a concise `SKILL.md` (Level 2, max 500 words) with YAML frontmatter (Level 1) for triggering, and deep technical details moved to linked files in a `references/` directory (Level 3).
+45. Reference skills must be stored in the project's `.agents/skills/` directory using standard naming: `SKILL.md` (case-sensitive) and kebab-case folder names.
+46. Reference skills must cover four categories: library usage, language style conventions, performance patterns, and domain knowledge, sourced from live documentation.
 
 ### Semantic Versioning
 

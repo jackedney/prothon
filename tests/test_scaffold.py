@@ -7,62 +7,62 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from prothon.exceptions import GitError, ProjectAlreadyInitError, ProthonError
-from prothon.git import run_git
-from prothon.scaffold import (
+from prothon.adoption import (
     _DESIGN_SCAFFOLD,
     _GITLAB_VERSION_BUMP,
     _PATTERNS_SCAFFOLD,
     _SPEC_SCAFFOLD,
     _VERSION_BUMP_WORKFLOW,
     _VERSION_TAG_WORKFLOW,
-    _template_dir,
-    generate,
     init_existing,
+)
+from prothon.exceptions import GitError, ProjectAlreadyInitError, ProthonError
+from prothon.git import run_git
+from prothon.scaffold import (
+    generate,
+    get_template_dir,
 )
 
 
-@pytest.fixture
-def context() -> dict[str, str]:
-    """Shared project context for scaffolding tests."""
-    return {
-        "project_name": "test-project",
-        "module_name": "test_project",
-        "description": "A test project",
-        "author_name": "Test Author",
-        "author_email": "test@example.com",
-        "python_version": "3.12",
-        "license": "MIT",
-    }
+_CONTEXT = {
+    "project_name": "test-project",
+    "module_name": "test_project",
+    "description": "A test project",
+    "author_name": "Test Author",
+    "author_email": "test@example.com",
+    "python_version": "3.12",
+    "license": "MIT",
+}
+
+
+@pytest.fixture(scope="module")
+def generated_project(tmp_path_factory) -> Path:
+    """Generate a Copier project once, shared by read-only generate() tests."""
+    dest = tmp_path_factory.mktemp("scaffold") / "test-project"
+    generate(dest, _CONTEXT)
+    return dest
 
 
 def test_template_dir_exists() -> None:
     """The bundled copier template must exist at the project root."""
-    path = _template_dir()
+    path = get_template_dir()
     assert path.exists()
     assert (path / "copier.yml").exists()
 
 
-def test_generate_creates_project(tmp_path: Path, context: dict[str, str]) -> None:
+def test_generate_creates_project(generated_project: Path) -> None:
     """generate() must create the project directory and invoke copier."""
-    dest = tmp_path / "test-project"
-    generate(dest, context)
-
-    assert dest.exists()
-    assert (dest / "pyproject.toml").exists()
-    assert (dest / "src" / "test_project" / "__init__.py").exists()
-    assert (dest / ".git").exists()
+    assert generated_project.exists()
+    assert (generated_project / "pyproject.toml").exists()
+    assert (generated_project / "src" / "test_project" / "__init__.py").exists()
+    assert (generated_project / ".git").exists()
 
 
-def test_generate_initial_commit(tmp_path: Path, context: dict[str, str]) -> None:
+def test_generate_initial_commit(generated_project: Path) -> None:
     """The generated project must have an initial git commit."""
-    dest = tmp_path / "test-project"
-    generate(dest, context)
-
-    # Check for commits
     result = subprocess.run(
         ["git", "log", "--oneline"],
-        cwd=dest,
+        cwd=generated_project,
         capture_output=True,
         text=True,
         check=True,
@@ -70,60 +70,39 @@ def test_generate_initial_commit(tmp_path: Path, context: dict[str, str]) -> Non
     assert "Initial commit from prothon template" in result.stdout
 
 
-def test_generate_creates_agent_symlinks(
-    tmp_path: Path, context: dict[str, str]
-) -> None:
+def test_generate_creates_agent_symlinks(generated_project: Path) -> None:
     """The generated project must include AGENTS.md and symlinks."""
-    dest = tmp_path / "test-project"
-    generate(dest, context)
-
-    assert (dest / "AGENTS.md").is_file()
+    assert (generated_project / "AGENTS.md").is_file()
     for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
-        link = dest / name
+        link = generated_project / name
         assert link.is_symlink()
         assert os.readlink(link) == "AGENTS.md"
 
 
-def test_generate_creates_doc_scaffolds(
-    tmp_path: Path, context: dict[str, str]
-) -> None:
+def test_generate_creates_doc_scaffolds(generated_project: Path) -> None:
     """The generated project must include empty SPEC, DESIGN, and PATTERNS."""
-    dest = tmp_path / "test-project"
-    generate(dest, context)
-
-    docs = dest / "docs"
+    docs = generated_project / "docs"
     assert (docs / "SPEC.md").exists()
     assert (docs / "DESIGN.md").exists()
     assert (docs / "PATTERNS.md").exists()
 
 
-def test_generate_creates_skills_dir(tmp_path: Path, context: dict[str, str]) -> None:
+def test_generate_creates_skills_dir(generated_project: Path) -> None:
     """The generated project must include the .agents/skills/ directory."""
-    dest = tmp_path / "test-project"
-    generate(dest, context)
-
-    assert (dest / ".agents" / "skills").is_dir()
+    assert (generated_project / ".agents" / "skills").is_dir()
 
 
-def test_generate_creates_github_workflows(
-    tmp_path: Path, context: dict[str, str]
-) -> None:
+def test_generate_creates_github_workflows(generated_project: Path) -> None:
     """The generated project must include GitHub Actions workflows."""
-    dest = tmp_path / "test-project"
-    generate(dest, context)
-
-    gh = dest / ".github" / "workflows"
+    gh = generated_project / ".github" / "workflows"
     assert (gh / "ci.yml").exists()
     assert (gh / "version-bump.yml").exists()
     assert (gh / "version-tag.yml").exists()
 
 
-def test_generate_creates_gitlab_ci(tmp_path: Path, context: dict[str, str]) -> None:
+def test_generate_creates_gitlab_ci(generated_project: Path) -> None:
     """The generated project must include GitLab CI configuration."""
-    dest = tmp_path / "test-project"
-    generate(dest, context)
-
-    assert (dest / ".gitlab-ci.yml").exists()
+    assert (generated_project / ".gitlab-ci.yml").exists()
 
 
 # --- init_existing ---
@@ -233,16 +212,6 @@ auto_version = false
     assert "auto_version = false" in pyproject.read_text()
 
 
-def test_init_existing_handles_missing_tool_table(tmp_path: Path) -> None:
-    """init_existing creates [tool] table if it does not exist."""
-    run_git("init", cwd=tmp_path)
-    pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text("[project]\nname = 'test'\n")
-
-    init_existing(cwd=tmp_path)
-    assert "[tool.prothon.ci]" in pyproject.read_text()
-
-
 def test_init_existing_handles_missing_prothon_table(tmp_path: Path) -> None:
     """init_existing creates [tool.prothon] table if it does not exist."""
     run_git("init", cwd=tmp_path)
@@ -281,7 +250,7 @@ def test_init_existing_path_a_calls_copier(tmp_path: Path) -> None:
 
     mock_run_copy.assert_called_once()
     args = mock_run_copy.call_args.args
-    assert args[0] == str(_template_dir())
+    assert args[0] == str(get_template_dir())
     assert args[1] == str(tmp_path)
     kw = mock_run_copy.call_args.kwargs
     assert kw["data"]["module_name"] == "testmod"

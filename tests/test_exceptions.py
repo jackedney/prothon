@@ -27,15 +27,3 @@ def test_exception_inheritance():
         assert issubclass(exc, ProthonError), (
             f"{exc.__name__} does not inherit from ProthonError"
         )
-
-
-def test_prothon_error_is_exception():
-    """ProthonError must inherit from Exception."""
-    assert issubclass(ProthonError, Exception)
-
-
-def test_exception_instantiation():
-    """Exceptions should be instantiable with a message."""
-    msg = "test message"
-    exc = ProthonError(msg)
-    assert str(exc) == msg

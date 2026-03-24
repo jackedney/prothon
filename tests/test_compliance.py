@@ -7,10 +7,17 @@ from hypothesis import given, strategies as st
 from prothon.compliance import (
     CheckResult,
     CheckStatus,
+    CheckType,
     ComplianceReport,
     Requirement,
+)
+from prothon.static_checks import (
     analyze_python_file,
+    check_agent_files,
+    check_doc_existence,
+    check_inheritance,
     check_patterns_doc,
+    run_static_checks,
 )
 
 
@@ -317,3 +324,483 @@ def test_compliance_report_score_hypothesis(passes, fails, skips):
     else:
         expected = (passes / (passes + fails)) * 100.0
         assert report.score == pytest.approx(expected)
+
+
+# --- check_doc_existence tests ---
+
+
+def test_check_doc_existence_all_present(tmp_path: Path):
+    """All three docs present should yield three PASS results."""
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    for name in ("SPEC.md", "DESIGN.md", "PATTERNS.md"):
+        (docs_dir / name).write_text("# Content")
+
+    results = check_doc_existence(tmp_path)
+
+    assert len(results) == 3
+    assert all(r.status == CheckStatus.PASS for r in results)
+
+
+def test_check_doc_existence_only_spec(tmp_path: Path):
+    """Only SPEC.md present: SPEC PASS, DESIGN and PATTERNS FAIL."""
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "SPEC.md").write_text("# Spec")
+
+    results = check_doc_existence(tmp_path)
+
+    assert len(results) == 3
+    spec, design, patterns = results
+    assert spec.status == CheckStatus.PASS
+    assert design.status == CheckStatus.FAIL
+    assert patterns.status == CheckStatus.FAIL
+
+
+def test_check_doc_existence_none_present(tmp_path: Path):
+    """No docs present should yield three FAIL results."""
+    # Don't even create the docs directory.
+    results = check_doc_existence(tmp_path)
+
+    assert len(results) == 3
+    assert all(r.status == CheckStatus.FAIL for r in results)
+
+
+# --- check_inheritance tests ---
+
+
+def test_check_inheritance_all_inherit(tmp_path: Path):
+    """All exceptions inheriting ProthonError should PASS."""
+    exc_dir = tmp_path / "src" / "prothon"
+    exc_dir.mkdir(parents=True)
+    (exc_dir / "exceptions.py").write_text(
+        "class ProthonError(Exception): pass\n"
+        "class ConfigError(ProthonError): pass\n"
+        "class ParseError(ProthonError): pass\n"
+    )
+
+    results = check_inheritance(tmp_path)
+
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.PASS
+
+
+def test_check_inheritance_violation(tmp_path: Path):
+    """An exception not inheriting ProthonError should FAIL with its name."""
+    exc_dir = tmp_path / "src" / "prothon"
+    exc_dir.mkdir(parents=True)
+    (exc_dir / "exceptions.py").write_text(
+        "class ProthonError(Exception): pass\n"
+        "class GoodError(ProthonError): pass\n"
+        "class BadError(ValueError): pass\n"
+    )
+
+    results = check_inheritance(tmp_path)
+
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.FAIL
+    assert "BadError" in results[0].rationale
+
+
+def test_check_inheritance_no_exceptions_file(tmp_path: Path):
+    """Missing exceptions.py should return empty results."""
+    results = check_inheritance(tmp_path)
+
+    assert results == []
+
+
+# --- check_agent_files tests ---
+
+
+def test_check_agent_files_all_valid(tmp_path: Path):
+    """AGENTS.md present with valid symlinks for CLAUDE/GEMINI/AGENT → all PASS."""
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Agents")
+
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        (tmp_path / name).symlink_to(agents)
+
+    results = check_agent_files(tmp_path)
+
+    assert len(results) == 4
+    assert all(r.status == CheckStatus.PASS for r in results)
+
+
+def test_check_agent_files_agents_md_missing(tmp_path: Path):
+    """Missing AGENTS.md means all four checks FAIL (symlinks also broken)."""
+    results = check_agent_files(tmp_path)
+
+    assert len(results) == 4
+    assert all(r.status == CheckStatus.FAIL for r in results)
+
+
+def test_check_agent_files_regular_files_not_symlinks(tmp_path: Path):
+    """Symlink files that are regular files (not symlinks) should FAIL."""
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Agents")
+
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        (tmp_path / name).write_text("# Not a symlink")
+
+    results = check_agent_files(tmp_path)
+
+    assert len(results) == 4
+    # AGENTS.md itself should PASS
+    agents_result = results[0]
+    assert agents_result.status == CheckStatus.PASS
+
+    # The three symlink files should FAIL with "must be a symlink" rationale
+    for r in results[1:]:
+        assert r.status == CheckStatus.FAIL
+        assert "must be a symlink" in r.rationale
+
+
+def test_check_agent_files_wrong_symlink_target(tmp_path: Path):
+    """Symlinks pointing to wrong target should FAIL."""
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Agents")
+
+    wrong_target = tmp_path / "OTHER.md"
+    wrong_target.write_text("# Wrong")
+
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        (tmp_path / name).symlink_to(wrong_target)
+
+    results = check_agent_files(tmp_path)
+
+    assert len(results) == 4
+    assert results[0].status == CheckStatus.PASS  # AGENTS.md itself
+
+    for r in results[1:]:
+        assert r.status == CheckStatus.FAIL
+        assert "symlink points to" in r.rationale
+
+
+# --- run_static_checks tests ---
+
+
+def test_run_static_checks_minimal_compliant(tmp_path: Path):
+    """A minimal compliant project should return a ComplianceReport with all STATIC."""
+    # docs with SPEC, DESIGN, PATTERNS
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "SPEC.md").write_text("# Spec\n\nRequirements here.")
+    (docs_dir / "DESIGN.md").write_text("# Design\n\nArchitecture here.")
+    patterns_content = (
+        "# Patterns\n\n"
+        "Rationale text that is longer than the code block content.\n"
+        "More rationale to ensure text dominates over code.\n\n"
+        "```python\n"
+        "def example():\n"
+        '    """Docstring only."""\n'
+        "    ...\n"
+        "```\n"
+    )
+    (docs_dir / "PATTERNS.md").write_text(patterns_content)
+
+    # exceptions.py with ProthonError
+    exc_dir = tmp_path / "src" / "prothon"
+    exc_dir.mkdir(parents=True)
+    (exc_dir / "exceptions.py").write_text("class ProthonError(Exception): pass\n")
+
+    # AGENTS.md + symlinks
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("# Agents")
+    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
+        (tmp_path / name).symlink_to(agents)
+
+    report = run_static_checks(tmp_path)
+
+    assert isinstance(report, ComplianceReport)
+    assert len(report.results) > 0
+    assert all(r.check_type == CheckType.STATIC for r in report.results)
+
+
+# --- CheckResult serialization tests ---
+
+
+def test_check_result_to_dict_all_fields():
+    """to_dict() returns a dict with all expected fields and correct values."""
+    req = Requirement(source="SPEC", statement="Must do X", requirement_id="R5")
+    result = CheckResult(
+        requirement=req,
+        status=CheckStatus.FAIL,
+        check_type=CheckType.SEMANTIC,
+        evidence="src/foo.py:42",
+        rationale="Missing implementation",
+    )
+    d = result.to_dict()
+
+    assert d["requirement"]["source"] == "SPEC"
+    assert d["requirement"]["statement"] == "Must do X"
+    assert d["requirement"]["requirement_id"] == "R5"
+    assert d["status"] == "FAIL"
+    assert d["check_type"] == "SEMANTIC"
+    assert d["evidence"] == "src/foo.py:42"
+    assert d["rationale"] == "Missing implementation"
+
+
+def test_check_result_from_dict_reconstructs():
+    """from_dict() reconstructs a CheckResult from a dictionary."""
+    data = {
+        "requirement": {
+            "source": "DESIGN",
+            "statement": "Use dataclasses",
+            "requirement_id": "D3",
+        },
+        "status": "PASS",
+        "check_type": "STATIC",
+        "evidence": "src/bar.py:10",
+        "rationale": "Found dataclass decorator",
+    }
+    result = CheckResult.from_dict(data)
+
+    assert result.requirement.source == "DESIGN"
+    assert result.requirement.statement == "Use dataclasses"
+    assert result.requirement.requirement_id == "D3"
+    assert result.status == CheckStatus.PASS
+    assert result.check_type == CheckType.STATIC
+    assert result.evidence == "src/bar.py:10"
+    assert result.rationale == "Found dataclass decorator"
+
+
+def test_check_result_from_dict_defaults():
+    """from_dict() uses defaults for optional fields."""
+    data = {
+        "requirement": {
+            "source": "PATTERNS",
+            "statement": "Follow convention",
+        },
+        "status": "SKIP",
+    }
+    result = CheckResult.from_dict(data)
+
+    assert result.requirement.requirement_id is None
+    assert result.check_type == CheckType.STATIC
+    assert result.evidence == ""
+    assert result.rationale == ""
+
+
+def test_check_result_roundtrip():
+    """to_dict/from_dict roundtrip preserves all fields."""
+    req = Requirement(source="SPEC", statement="Roundtrip test", requirement_id="R99")
+    original = CheckResult(
+        requirement=req,
+        status=CheckStatus.PASS,
+        check_type=CheckType.SEMANTIC,
+        evidence="tests/test.py:1",
+        rationale="All good",
+    )
+    reconstructed = CheckResult.from_dict(original.to_dict())
+
+    assert reconstructed.requirement.source == original.requirement.source
+    assert reconstructed.requirement.statement == original.requirement.statement
+    assert (
+        reconstructed.requirement.requirement_id == original.requirement.requirement_id
+    )
+    assert reconstructed.status == original.status
+    assert reconstructed.check_type == original.check_type
+    assert reconstructed.evidence == original.evidence
+    assert reconstructed.rationale == original.rationale
+
+
+def test_check_result_roundtrip_no_optional_fields():
+    """to_dict/from_dict roundtrip works when optional fields are absent/default."""
+    req = Requirement(source="DESIGN", statement="Minimal")
+    original = CheckResult(requirement=req, status=CheckStatus.SKIP)
+    reconstructed = CheckResult.from_dict(original.to_dict())
+
+    assert reconstructed.requirement.source == original.requirement.source
+    assert reconstructed.requirement.statement == original.requirement.statement
+    assert reconstructed.requirement.requirement_id is None
+    assert reconstructed.status == CheckStatus.SKIP
+    assert reconstructed.check_type == CheckType.STATIC
+    assert reconstructed.evidence == ""
+    assert reconstructed.rationale == ""
+
+
+# --- ComplianceReport aggregation tests ---
+
+
+def test_compliance_report_merge():
+    """merge() combines results from two reports."""
+    req1 = Requirement(source="SPEC", statement="R1")
+    req2 = Requirement(source="DESIGN", statement="D1")
+
+    report_a = ComplianceReport(results=[CheckResult(req1, CheckStatus.PASS)])
+    report_b = ComplianceReport(
+        results=[
+            CheckResult(req2, CheckStatus.FAIL),
+            CheckResult(req2, CheckStatus.SKIP),
+        ]
+    )
+
+    report_a.merge(report_b)
+
+    assert len(report_a.results) == 3
+    assert report_a.results[0].requirement.source == "SPEC"
+    assert report_a.results[1].requirement.source == "DESIGN"
+    assert report_a.results[2].requirement.source == "DESIGN"
+    assert report_a.results[0].status == CheckStatus.PASS
+    assert report_a.results[1].status == CheckStatus.FAIL
+    assert report_a.results[2].status == CheckStatus.SKIP
+
+
+def test_compliance_report_merge_empty():
+    """merge() with an empty report leaves the original unchanged."""
+    req = Requirement(source="SPEC", statement="Existing")
+    report = ComplianceReport(results=[CheckResult(req, CheckStatus.PASS)])
+    report.merge(ComplianceReport())
+
+    assert len(report.results) == 1
+
+
+def test_compliance_report_add_from_dicts():
+    """add_from_dicts() converts dicts and appends to results."""
+    report = ComplianceReport()
+    findings = [
+        {
+            "requirement": {
+                "source": "SPEC",
+                "statement": "Must exist",
+                "requirement_id": "R1",
+            },
+            "status": "PASS",
+            "check_type": "STATIC",
+            "evidence": "docs/SPEC.md",
+            "rationale": "File found",
+        },
+        {
+            "requirement": {
+                "source": "DESIGN",
+                "statement": "Use ABC",
+            },
+            "status": "FAIL",
+            "rationale": "Not found",
+        },
+    ]
+    report.add_from_dicts(findings)
+
+    assert len(report.results) == 2
+    assert report.results[0].status == CheckStatus.PASS
+    assert report.results[0].requirement.requirement_id == "R1"
+    assert report.results[0].evidence == "docs/SPEC.md"
+    assert report.results[1].status == CheckStatus.FAIL
+    assert report.results[1].requirement.source == "DESIGN"
+    assert report.results[1].rationale == "Not found"
+
+
+def test_compliance_report_add_from_dicts_appends():
+    """add_from_dicts() appends to existing results, not replaces."""
+    req = Requirement(source="SPEC", statement="Pre-existing")
+    report = ComplianceReport(results=[CheckResult(req, CheckStatus.PASS)])
+
+    findings = [
+        {
+            "requirement": {"source": "PATTERNS", "statement": "New finding"},
+            "status": "SKIP",
+        },
+    ]
+    report.add_from_dicts(findings)
+
+    assert len(report.results) == 2
+    assert report.results[0].requirement.source == "SPEC"
+    assert report.results[1].requirement.source == "PATTERNS"
+
+
+# --- check_package_structure tests (from test_compliance_impl.py) ---
+
+
+def test_check_package_structure_missing_src(tmp_path: Path):
+    """Test check_package_structure when src/ is missing."""
+    from prothon.static_checks import check_package_structure
+
+    results = check_package_structure(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.FAIL
+    assert "Missing src/ directory" in results[0].rationale
+
+
+def test_check_package_structure_no_package(tmp_path: Path):
+    """Test check_package_structure when src/ exists but no package is found."""
+    from prothon.static_checks import check_package_structure
+
+    (tmp_path / "src").mkdir()
+    results = check_package_structure(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.FAIL
+    assert "No Python packages found in src/" in results[0].rationale
+
+
+def test_check_package_structure_missing_py_typed(tmp_path: Path):
+    """Test check_package_structure when py.typed is missing from the package."""
+    from prothon.static_checks import check_package_structure
+
+    pkg_dir = tmp_path / "src" / "my_pkg"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "__init__.py").write_text("")
+
+    results = check_package_structure(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.FAIL
+    assert "Missing py.typed marker" in results[0].rationale
+
+
+def test_check_package_structure_compliant(tmp_path: Path):
+    """Test check_package_structure with a compliant layout."""
+    from prothon.static_checks import check_package_structure
+
+    pkg_dir = tmp_path / "src" / "my_pkg"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "__init__.py").write_text("")
+    (pkg_dir / "py.typed").write_text("")
+
+    results = check_package_structure(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.PASS
+
+
+# --- check_pre_commit tests ---
+
+
+def test_check_pre_commit_missing(tmp_path: Path):
+    """Test check_pre_commit when the config file is missing."""
+    from prothon.static_checks import check_pre_commit
+
+    results = check_pre_commit(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.FAIL
+    assert "Missing pre-commit config" in results[0].rationale
+
+
+def test_check_pre_commit_compliant(tmp_path: Path):
+    """Test check_pre_commit when the config file exists."""
+    from prothon.static_checks import check_pre_commit
+
+    (tmp_path / ".pre-commit-config.yaml").write_text("")
+    results = check_pre_commit(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.PASS
+
+
+# --- check_skills_dir tests ---
+
+
+def test_check_skills_dir_missing(tmp_path: Path):
+    """Test check_skills_dir when the directory is missing."""
+    from prothon.static_checks import check_skills_dir
+
+    results = check_skills_dir(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.FAIL
+    assert "Missing project skills directory" in results[0].rationale
+
+
+def test_check_skills_dir_compliant(tmp_path: Path):
+    """Test check_skills_dir when the directory exists."""
+    from prothon.static_checks import check_skills_dir
+
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
+    results = check_skills_dir(tmp_path)
+    assert len(results) == 1
+    assert results[0].status == CheckStatus.PASS

@@ -132,10 +132,13 @@ def test_claude_code_backend_build_command() -> None:
     ]
 
 
-def test_claude_code_backend_env_overrides() -> None:
-    """ClaudeCodeBackend returns empty env_overrides."""
-    backend = ClaudeCodeBackend()
-    assert backend.env_overrides() == {}
+@pytest.mark.parametrize(
+    "backend_cls",
+    [ClaudeCodeBackend, OpenCodeBackend, GeminiCLIBackend, OB1Backend],
+)
+def test_backend_env_overrides_empty(backend_cls) -> None:
+    """All backends return empty env_overrides."""
+    assert backend_cls().env_overrides() == {}
 
 
 def test_claude_code_backend_subagent_type_map() -> None:
@@ -174,12 +177,6 @@ def test_opencode_backend_build_command_uses_slash_prefix() -> None:
     assert cmd[-1] == "/prothon-patterns-writer"
 
 
-def test_opencode_backend_env_overrides() -> None:
-    """OpenCodeBackend returns empty env_overrides."""
-    backend = OpenCodeBackend()
-    assert backend.env_overrides() == {}
-
-
 def test_opencode_backend_subagent_type_map() -> None:
     """OpenCodeBackend returns opencode subagent type mappings."""
     backend = OpenCodeBackend()
@@ -206,14 +203,6 @@ def test_opencode_backend_build_command_without_model() -> None:
     """build_command does not include --model when model is None."""
     backend = OpenCodeBackend()
     result = backend.build_command("prothon-spec-writer", Path("/tmp"), model=None)
-    assert result == ["opencode", "--prompt", "/prothon-spec-writer"]
-    assert "--model" not in result
-
-
-def test_opencode_backend_build_model_parameter_optional() -> None:
-    """build_command works when model parameter is not passed at all."""
-    backend = OpenCodeBackend()
-    result = backend.build_command("prothon-spec-writer", Path("/tmp"))
     assert result == ["opencode", "--prompt", "/prothon-spec-writer"]
     assert "--model" not in result
 
@@ -261,14 +250,6 @@ def test_gemini_cli_backend_build_command_with_model() -> None:
         "--model",
         "gemini-2.0-flash",
     ]
-
-
-def test_gemini_cli_backend_env_overrides() -> None:
-    """GeminiCLIBackend returns empty env_overrides."""
-    from prothon.assistant import GeminiCLIBackend
-
-    backend = GeminiCLIBackend()
-    assert backend.env_overrides() == {}
 
 
 def test_gemini_cli_backend_subagent_type_map() -> None:
@@ -326,14 +307,6 @@ def test_ob1_backend_build_command_with_model() -> None:
     backend = OB1Backend()
     result = backend.build_command("prothon-spec-writer", Path("/tmp"), model="gpt-4o")
     assert result == ["ob1", "Use the prothon-spec-writer skill.", "--model", "gpt-4o"]
-
-
-def test_ob1_backend_env_overrides() -> None:
-    """OB1Backend returns empty env_overrides."""
-    from prothon.assistant import OB1Backend
-
-    backend = OB1Backend()
-    assert backend.env_overrides() == {}
 
 
 def test_ob1_backend_subagent_type_map() -> None:

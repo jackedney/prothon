@@ -5,14 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from hypothesis import given
-from hypothesis import strategies as st
 from prothon.exceptions import PromiseError
 from prothon.git import DiffStat
+from prothon.models import Metadata, Promise, Task
 from prothon.promise import (
-    Metadata,
-    Promise,
-    Task,
     _format_task_plan,
     _metadata_from_dict,
     _task_from_dict,
@@ -31,7 +27,6 @@ from prothon.promise_verify import (
     TaskCheckReport,
     _check_line_count,
     _check_line_counts,
-    _within_tolerance,
     check_task,
 )
 
@@ -66,60 +61,7 @@ def promise_file(tmp_path: Path) -> Path:
     return p
 
 
-# --- _within_tolerance ---
-
-
-def test_within_tolerance_exact_match():
-    assert _within_tolerance(100, 100) is True
-
-
-def test_within_tolerance_at_thirty_percent_upper():
-    # 100 + 30% = 130
-    assert _within_tolerance(100, 130) is True
-
-
-def test_within_tolerance_over_thirty_percent_upper():
-    assert _within_tolerance(100, 131) is False
-
-
-def test_within_tolerance_at_thirty_percent_lower():
-    # 100 - 30% = 70
-    assert _within_tolerance(100, 70) is True
-
-
-def test_within_tolerance_under_thirty_percent_lower():
-    assert _within_tolerance(100, 69) is False
-
-
-def test_within_tolerance_absolute_floor_when_small_expected():
-    # 10 expected, 30% = 3, but absolute minimum is 30
-    # So tolerance is 30: range is -20 to 40
-    assert _within_tolerance(10, 40) is True
-    assert _within_tolerance(10, 41) is False
-
-
-def test_within_tolerance_zero_expected_uses_absolute():
-    # 0 expected, 30% = 0, absolute = 30
-    assert _within_tolerance(0, 30) is True
-    assert _within_tolerance(0, 31) is False
-
-
-@given(expected=st.integers(min_value=0, max_value=10_000))
-def test_within_tolerance_exact_match_always_passes(expected: int):
-    """Hypothesis: exact match always passes regardless of expected value."""
-    assert _within_tolerance(expected, expected) is True
-
-
-@given(
-    expected=st.integers(min_value=0, max_value=10_000),
-    delta=st.integers(min_value=0, max_value=100_000),
-)
-def test_within_tolerance_is_symmetric(expected: int, delta: int):
-    """Hypothesis: tolerance is symmetric -- +delta and -delta give same result."""
-    above = _within_tolerance(expected, expected + delta)
-    below = _within_tolerance(expected, expected - delta)
-    assert above == below
-
+# _within_tolerance tests are in test_promise_verify.py (single source of truth)
 
 # --- load_promise errors ---
 

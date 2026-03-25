@@ -93,6 +93,28 @@ def test_discover_drift_trivial_module_no_test_needed(tmp_path: Path):
     assert "Missing tests for trivial.py" not in titles
 
 
+def test_simple_setter_not_testable(tmp_path: Path):
+    """Classes with only simple setters should not require tests."""
+    src = tmp_path / "src" / "prothon"
+    src.mkdir(parents=True)
+    tests = tmp_path / "tests"
+    tests.mkdir()
+
+    # Module with only simple setter methods
+    module = src / "setters.py"
+    module.write_text(
+        "class Config:\n"
+        "    def __init__(self, enabled: bool):\n"
+        "        self.enabled = enabled\n\n"
+        "    def set_name(self, name: str):\n"
+        "        self.name = name\n"
+    )
+
+    findings = discover_drift(tmp_path)
+    titles = [f.title for f in findings]
+    assert "Missing tests for setters.py" not in titles
+
+
 def test_generate_refactor_promise(tmp_path: Path):
     """Test creating a promise from drift findings."""
     finding = DriftFinding(

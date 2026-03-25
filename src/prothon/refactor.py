@@ -304,7 +304,40 @@ def _is_single_trivial_stmt(stmt: ast.stmt) -> bool:
         return _is_trivial_return(stmt)
     if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
         return stmt.value.value is ...
+    # Simple setter: self.attr = attr (plain or annotated)
+    if isinstance(stmt, ast.Assign) and _is_simple_setter(stmt):
+        return True
+    if isinstance(stmt, ast.AnnAssign) and _is_simple_annotated_setter(stmt):
+        return True
     return False
+
+
+def _is_simple_setter(stmt: ast.Assign) -> bool:
+    """Check if assignment is a simple setter like self.enabled = enabled."""
+    if len(stmt.targets) != 1:
+        return False
+    target = stmt.targets[0]
+    if not isinstance(target, ast.Attribute):
+        return False
+    if not isinstance(target.value, ast.Name) or target.value.id != "self":
+        return False
+    if not isinstance(stmt.value, ast.Name):
+        return False
+    return target.attr == stmt.value.id
+
+
+def _is_simple_annotated_setter(stmt: ast.AnnAssign) -> bool:
+    """Check if annotated assignment is a simple setter like self.enabled: bool = enabled."""
+    if stmt.value is None:
+        return False
+    target = stmt.target
+    if not isinstance(target, ast.Attribute):
+        return False
+    if not isinstance(target.value, ast.Name) or target.value.id != "self":
+        return False
+    if not isinstance(stmt.value, ast.Name):
+        return False
+    return target.attr == stmt.value.id
 
 
 def _is_trivial_return(stmt: ast.Return) -> bool:

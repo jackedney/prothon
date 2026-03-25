@@ -364,7 +364,10 @@ def _is_trivial_return(stmt: ast.Return) -> bool:
 def _all_args_simple(call: ast.Call) -> bool:
     """Check if all arguments in a call are simple (names, attributes, constants)."""
     for arg in call.args:
-        if not isinstance(arg, ast.Name | ast.Attribute | ast.Constant):
+        if isinstance(arg, ast.Starred):
+            if not isinstance(arg.value, ast.Name | ast.Attribute | ast.Constant):
+                return False
+        elif not isinstance(arg, ast.Name | ast.Attribute | ast.Constant):
             return False
     for kw in call.keywords:
         if not isinstance(kw.value, ast.Name | ast.Attribute | ast.Constant):

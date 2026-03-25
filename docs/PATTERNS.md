@@ -126,6 +126,42 @@ Configuration resolution for `opencode` enforces that both model and provider mu
 
 ## Testing Patterns
 
+### Test Value Over Test Count
+
+Prioritize fewer, higher-value tests over comprehensive coverage. Not every line needs a test.
+
+**Do NOT test:**
+- Trivial code: simple attribute access, getters/setters, one-line assignments, pass-through functions that just delegate
+- Language features: that `+` adds numbers, that `dict[key]` retrieves values, that `if` branches
+- Framework behavior: that FastAPI routes return responses, that Pydantic validates types, that Typer parses CLI args
+- Redundant coverage: the same conditional logic tested at unit, integration, and e2e levels with identical assertions
+- Implementation details: private `_helper` methods already exercised through public method tests
+
+**Focus tests on:**
+- Business logic: conditional branches, calculations, state transitions, multi-step workflows
+- Edge cases: boundary conditions, error handling paths, malformed input handling
+- Integration points: how components interact, protocol compliance, contract boundaries
+- Invariants: properties that must always hold regardless of input
+
+**Test file organization:** One test file per source module is NOT required. Test files map to cohesive units of behavior, not file names. A complex module may warrant multiple test files (`test_auth_flows.py`, `test_auth_edge_cases.py`); a trivial module with no logic may need no test file at all.
+
+### Lightweight, Fast Tests
+
+Tests must be cheap to run. The full suite should complete in seconds, not minutes.
+
+**Keep tests lightweight:**
+- Use fakes/stubs instead of real services (no database connections, no HTTP servers, no filesystem writes to real paths)
+- Prefer in-memory structures: `io.StringIO` over temp files, `dict` over real caches, `FakeGitDiff` over subprocess calls
+- Avoid loading heavy dependencies in unit tests — mock at the boundary
+- Isolate units so each test exercises one module, not the entire dependency graph
+- Reset state between tests; never rely on test execution order
+
+**Fast test patterns:**
+- Protocol fakes over real implementations (see Protocol Fakes Over Mocks)
+- Fixture scope: use `@pytest.fixture(scope="function")` as default; promote to session/class only when setup is expensive and stateless
+- Skip slow tests by default: mark with `@pytest.mark.slow` and run via `pytest -m "not slow"` in CI fast paths
+- Parallel-safe: structure tests so `pytest-xdist` works (no shared mutable state between tests)
+
 ### Protocol Fakes Over Mocks
 Test dependencies are managed using simple fake implementations that satisfy protocols (e.g., `FakeGitDiff` for `GitDiffProvider`). This ensures tests break when interfaces change and avoids fragile standard mocks.
 

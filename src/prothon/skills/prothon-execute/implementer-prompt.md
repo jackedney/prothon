@@ -27,16 +27,18 @@ If you have questions about the requirements, approach, or anything unclear in t
 
 Once you're clear on requirements:
 1. Implement exactly what the task specifies (DRY, YAGNI, TDD).
-2. Stage selectively by explicit path:
+2. Write tests that provide value — skip trivial tests (getters, setters, pass-throughs, language features). Focus on business logic, edge cases, and integration points.
+3. By default, keep unit tests lightweight and fast: use fakes/stubs over real services, in-memory structures over filesystem, and mock at boundaries. Aim for millisecond execution for unit tests. Exceptions are permitted for explicitly marked slow/integration tests per docs/PATTERNS.md.
+4. Stage selectively by explicit path:
    - Stage modified files: `git add {files_to_modify}`
    - Stage new files: `git add {files_to_create}`
    - Remove deleted files: `git rm {files_to_remove}`
-3. Type checking: Run `uvx ty check src/ tests/` and fix ALL errors and warnings before proceeding.
-4. Quality gate: Run `pre-commit run --all-files --show-diff-on-failure`.
+5. Type checking: Run `uvx ty check src/ tests/` and fix ALL errors and warnings before proceeding.
+6. Quality gate: Run `pre-commit run --all-files --show-diff-on-failure`.
    - If hooks auto-fixed files, re-stage the specific files and re-run pre-commit once.
-5. Commit your work: `git commit -m "feat: {title}"`
-6. Final check: Run `uvx prothon promise check {task_index}`
-7. Self-review: ensure you didn't overbuild or miss requirements.
-8. Report back with status:
+7. Commit your work: `git commit -m "feat: {title}"`
+8. Final check: Run `uvx prothon promise check {task_index}`
+9. Self-review: ensure you didn't overbuild or miss requirements.
+10. Report back with status:
    - **SUCCESS**: Close the session.
    - **FAILURE**: Include which step failed and the error output so the orchestrator can provide context to the next attempt, then close the session.

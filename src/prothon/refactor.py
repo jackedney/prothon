@@ -185,12 +185,11 @@ def _has_matching_test_file(py_file: Path, tests_dir: Path) -> bool:
 
     for test_file in tests_dir.rglob("*_test.py"):
         test_stem = test_file.stem
-        tokens = test_stem.split("_")
-        # Exact match, prefix match, or tokenized match with last token = "test"
+        # Exact match, prefix match, or tokenized match
         if (
             test_stem == f"{module_stem}_test"
             or test_stem.startswith(f"{module_stem}_")
-            or (module_stem in tokens and tokens[-1] == "test")
+            or module_stem in test_stem.split("_")
         ):
             return True
 
@@ -254,12 +253,28 @@ def _is_testable_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     return not _is_trivial_function(node)
 
 
+def _get_base_identifier(base: ast.expr) -> str | None:
+    """Extract the simple identifier from a base expression.
+
+    Handles:
+    - ast.Name: "ABC" -> "ABC"
+    - ast.Attribute: "abc.ABC" -> "ABC"
+    - ast.Subscript: "Protocol[T]" -> "Protocol"
+    """
+    if isinstance(base, ast.Name):
+        return base.id
+    if isinstance(base, ast.Attribute):
+        return base.attr
+    if isinstance(base, ast.Subscript):
+        return _get_base_identifier(base.value)
+    return None
+
+
 def _is_testable_class(node: ast.ClassDef) -> bool:
     """Check if a class has methods with testable logic."""
     for base in node.bases:
-        base_str = ast.unparse(base)
-        # Check for ABC or Protocol (including qualified names like abc.ABC, typing.Protocol, Protocol[T])
-        if "ABC" in base_str or "Protocol" in base_str:
+        identifier = _get_base_identifier(base)
+        if identifier in ("ABC", "Protocol"):
             return False
     return any(
         isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)

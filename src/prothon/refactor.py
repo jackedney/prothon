@@ -175,17 +175,43 @@ def _has_matching_test_file(py_file: Path, tests_dir: Path) -> bool:
     module_stem = py_file.stem
     for test_file in tests_dir.rglob("test_*.py"):
         test_stem = test_file.stem
-        # test_<module>.py or test_*_<module>.py
-        if test_stem == f"test_{module_stem}" or test_stem.endswith(f"_{module_stem}"):
+        # Exact match, suffix match, or tokenized match (handles test_refactor_impl.py for refactor.py)
+        if (
+            test_stem == f"test_{module_stem}"
+            or test_stem.endswith(f"_{module_stem}")
+            or module_stem in test_stem.split("_")
+        ):
             return True
 
     for test_file in tests_dir.rglob("*_test.py"):
         test_stem = test_file.stem
-        # *_<module>_test.py
-        if test_stem == f"{module_stem}_test":
+        tokens = test_stem.split("_")
+        # Exact match, prefix match, or tokenized match with last token = "test"
+        if (
+            test_stem == f"{module_stem}_test"
+            or test_stem.startswith(f"{module_stem}_")
+            or (module_stem in tokens and tokens[-1] == "test")
+        ):
             return True
 
     return False
+
+
+def _get_parent_map(tree: ast.AST) -> dict[ast.AST, ast.AST]:
+    """Build a map from child nodes to their parent nodes."""
+    return {
+        child: parent
+        for parent in ast.walk(tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+
+
+def _is_method_in_non_testable_class(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, parent_map: dict[ast.AST, ast.AST]
+) -> bool:
+    """Check if a function is a method inside an abstract or Protocol class."""
+    parent = parent_map.get(node)
+    return isinstance(parent, ast.ClassDef) and not _is_testable_class(parent)
 
 
 def _has_testable_logic(py_file: Path) -> bool:
@@ -203,8 +229,12 @@ def _has_testable_logic(py_file: Path) -> bool:
     except (OSError, UnicodeDecodeError, SyntaxError):
         return False
 
+    parent_map = _get_parent_map(tree)
+
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            if _is_method_in_non_testable_class(node, parent_map):
+                continue
             if _is_testable_function(node):
                 return True
         if isinstance(node, ast.ClassDef) and _is_testable_class(node):
@@ -226,9 +256,11 @@ def _is_testable_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 def _is_testable_class(node: ast.ClassDef) -> bool:
     """Check if a class has methods with testable logic."""
-    bases = {ast.unparse(base) for base in node.bases}
-    if "ABC" in bases or "Protocol" in bases:
-        return False
+    for base in node.bases:
+        base_str = ast.unparse(base)
+        # Check for ABC or Protocol (including qualified names like abc.ABC, typing.Protocol, Protocol[T])
+        if "ABC" in base_str or "Protocol" in base_str:
+            return False
     return any(
         isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
         and _is_testable_function(item)

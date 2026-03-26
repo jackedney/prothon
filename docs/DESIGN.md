@@ -135,7 +135,7 @@ Each task in the execute workflow follows this lifecycle:
 6. **Plan verification (R31)** — run `check_task()` which uses `git diff <base_commit>`.
 7. **Completion** — mark the task complete via `complete_task()`.
 
-If step 4 or step 6 fails, the subagent increments its attempt counter and retries from step 3. If `attempts >= max_attempts`, the subagent reports failure to the orchestrator, which asks the user to skip, retry (reset counter), or abort.
+If step 4 or step 6 fails, the subagent calls `record_attempt()` and retries from step 3. The retry is gated by `record_attempt()` succeeding — if `attempts >= max_attempts`, `record_attempt()` raises `MaxAttemptsExceeded` rather than incrementing, which halts the retry loop. The orchestrator then asks the user to skip, retry (reset counter), or abort.
 
 ### Compliance Checker (R34–37)
 
@@ -201,7 +201,10 @@ The `max_attempts` value is resolved via a two-level precedence:
 
 When the executor creates the promise file, it reads `[tool.prothon].max_attempts` and sets it as the default for each task. The planning agent can override `max_attempts` on specific tasks (e.g., a complex migration task might get 5 attempts while a simple file rename gets 2).
 
-Retry enforcement lives in the skill prompt — the subagent reads `max_attempts` from the promise file and bounds its retry loop accordingly. Programmatic enforcement (an `attempt_task()` function that increments under file lock) can be added later if stricter guarantees are needed.
+Retry enforcement operates at two levels:
+
+1. **Skill-prompt compliance** — the subagent reads `max_attempts` from the promise file and bounds its retry loop accordingly.
+2. **Programmatic backstop** — `record_attempt()` must refuse to increment when `attempts >= max_attempts`, raising a `MaxAttemptsExceeded` error. This provides a programmatic backstop independent of skill-prompt compliance.
 
 ### Concurrency
 

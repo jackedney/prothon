@@ -99,16 +99,7 @@ def _is_signature_node(node: ast.AST) -> bool:
 
 def _is_func_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """Verify function body contains only docstring, pass, or ellipsis."""
-    for stmt in node.body:
-        if isinstance(stmt, ast.Expr):
-            if isinstance(stmt.value, ast.Constant) and (
-                isinstance(stmt.value.value, str) or stmt.value.value is Ellipsis
-            ):
-                continue
-        if isinstance(stmt, ast.Pass):
-            continue
-        return False
-    return True
+    return all(_is_passthrough_stmt(stmt) for stmt in node.body)
 
 
 def _is_code_dominant(content: str, code_blocks: list[tuple[int, str]]) -> bool:

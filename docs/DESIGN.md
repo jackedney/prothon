@@ -127,7 +127,7 @@ Verification checks file existence (for creates/removes), git diff analysis (for
 
 Each task in the execute workflow follows this lifecycle:
 
-1. **Dependency check** — wait for all tasks in `dependencies` to be marked complete.
+1. **Dependency check** — wait for all tasks whose `task_id` appears in this task's `dependencies` list to be marked complete.
 2. **Read context** — read `doc_sections`, `reference_skills`, and `context_files`.
 3. **Implement** — create, modify, or remove files per the plan.
 4. **Quality gate (R32)** — run `pre-commit run --all-files`. The agent must fix all reported errors and warnings project-wide (including pre-existing ones) before proceeding.
@@ -287,7 +287,7 @@ expected_lines_removed = <int>
 context_files = ["<path>", ...]
 doc_sections = ["<doc>:<section>", ...]
 reference_skills = ["<skill-name>", ...]
-dependencies = [<zero-based-task-index>, ...]
+dependencies = ["<task_id>", ...]
 completed = <bool>
 attempts = <int>
 max_attempts = <int>
@@ -296,6 +296,8 @@ max_attempts = <int>
 ### Promise Verification Contract
 
 Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (members: `PASSED`, `FAILED`, `SKIPPED` with values `"PASS"`, `"FAIL"`, `"SKIP"`), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). SKIPPED indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAILED entries — SKIPPED results do not affect the outcome.
+
+Dependency resolution uses `task_id` lookup: each entry in a task's `dependencies` list is matched against the `task_id` field of other tasks in the promise file, not against positional indices. This ensures dependencies remain valid when tasks are reordered, inserted, or removed during planning.
 
 Tolerance for line counts: +-30% or +-30 lines, whichever is greater. Binary files are excluded from line counts.
 

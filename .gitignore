@@ -2,3 +2,6 @@ __pycache__/
 .complexipy_cache/
 .hypothesis/
 mutants/
+.coverage
+.prothon/
+docs/change_promise.toml.lock

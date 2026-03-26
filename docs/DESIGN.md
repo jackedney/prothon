@@ -131,7 +131,7 @@ Each task in the execute workflow follows this lifecycle:
 2. **Read context** — read `doc_sections`, `reference_skills`, and `context_files`.
 3. **Implement** — create, modify, or remove files per the plan.
 4. **Quality gate (R32)** — run `pre-commit run --all-files`. The agent must fix all reported errors and warnings project-wide (including pre-existing ones) before proceeding.
-5. **Commit** — `git add . && git commit --no-verify`. This stages all changes, including any global health fixes performed in step 4. `--no-verify` avoids double execution of hooks that were just satisfied by the quality gate.
+5. **Commit** — Stage only files declared in `files_to_create`, `files_to_modify`, and `files_to_remove`, plus any files auto-fixed by the quality gate in step 4. Then commit with `--no-verify`. Note: `--no-verify` is safe because step 4 already ran the full hook suite.
 6. **Plan verification (R31)** — run `check_task()` which uses `git diff <base_commit>`.
 7. **Completion** — mark the task complete via `complete_task()`.
 

@@ -116,7 +116,7 @@ When parallel subagents mark tasks complete simultaneously, the promise TOML fil
 The `cli.py` module acts as the single catch-all boundary for `ProthonError` and its subclasses. Library modules raise exceptions; the CLI catches them, presents a formatted message, and terminates with a non-zero exit code.
 
 ### Terminal Failure Pattern
-When a subagent reaches `max_attempts` for a task without passing verification and quality gates, it reports a terminal failure. The orchestrator records the failure and asks the user for a decision (skip, retry, or abort) to prevent infinite loops.
+When a subagent reaches `max_attempts` for a task without passing verification and quality gates, it reports a terminal failure. The orchestrator records the failure and asks the user for a decision (skip, retry, or abort) to prevent infinite loops. As a programmatic backstop independent of skill-prompt compliance, `record_attempt()` enforces the `max_attempts` limit by raising `MaxAttemptsExceeded` (a subclass of `PromiseError`) when `attempts >= max_attempts`, preventing the counter from incrementing further.
 
 ### Data-Driven Doc Consistency Failures
 Contradictions found by the `doc-harmonizer` are treated as data, not exceptions. They are presented as a structured report of `Conflict` objects, enabling interactive resolution and approval before any documents are amended.

@@ -468,6 +468,51 @@ The tech-researcher generates reference skills in .agents/skills/ based on the t
 
 The compliance checker reads all three documentation levels and all source code, then produces three tables (SPEC compliance, DESIGN compliance, PATTERNS compliance). Each row contains: the checkable statement, a PASS/FAIL/SKIP status, and `file:line` evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category). A summary section reports overall percentage and prioritized action items.
 
+### Refactor Contract
+
+The refactor subsystem discovers drift between documentation and code, then generates a promise file to orchestrate remediation. It operates in two phases: discovery and promise generation.
+
+**DriftFinding data model:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | `str` | Short identifier for the finding (e.g. "Missing SPEC.md", "Large file: commands.py") |
+| `rationale` | `str` | Explanation of why this finding matters and what should change |
+| `doc_sections` | `list[str]` | Documentation files or sections relevant to the finding (empty if code-only) |
+| `files_affected` | `list[Path]` | Filesystem paths impacted by the finding (used to populate promise task file lists) |
+
+**Drift categories:**
+
+The discovery phase checks four categories of drift:
+
+| Category | What it detects | Example finding |
+|----------|----------------|-----------------|
+| Doc hierarchy gaps | Missing core documentation files in the SPEC → DESIGN → PATTERNS chain | "Missing PATTERNS.md" when DESIGN.md exists |
+| Patterns compliance (R25-R26) | PATTERNS.md formatting violations detected by `check_patterns_doc()` | Code blocks containing implementation logic instead of signatures |
+| Large files (>500 lines) | Source files in `src/` exceeding 500 lines | "Large file: commands.py" with 423-line rationale |
+| Missing test coverage | Source modules with testable logic that lack corresponding test files | "Missing tests for refactor.py" when no `test_refactor*.py` exists |
+
+**Discovery specification:**
+
+`discover_drift(root: Path) -> list[DriftFinding]` — Scans the project at `root` and returns all findings across all four drift categories. Each category checker runs independently and returns zero or more findings. The function concatenates all results in category order (doc hierarchy, patterns compliance, large files, missing tests).
+
+Testable logic detection uses AST analysis to skip modules containing only constants, type aliases, trivial pass-through functions, data classes without methods, and abstract/protocol classes. Test file matching supports `test_<module>.py`, `test_*_<module>.py`, and `*_<module>_test.py` naming conventions.
+
+**Promise generation specification:**
+
+`generate_refactor_promise(root: Path, findings: list[DriftFinding]) -> Promise` — Converts selected findings into a Promise object suitable for writing to `docs/change_promise.toml`. Each finding maps to exactly one task. The mapping is:
+
+| DriftFinding field | Task field |
+|--------------------|------------|
+| `title` | `title` |
+| `rationale` | `goal` |
+| `title` (templated) | `success_criteria` ("Resolve the drift identified: {title}") |
+| `files_affected` (existing) | `files_to_modify` |
+| `files_affected` (non-existing) | `files_to_create` |
+| `doc_sections` | `doc_sections` |
+
+The promise metadata captures `base_commit` (current HEAD SHA) and `created_at` (ISO 8601 UTC timestamp). Tasks are ordered by the refactor wave principle: DESIGN-level findings first, then PATTERNS-level, then CODE-level. This ensures documentation is updated before code changes that depend on it.
+
 ### SPEC.md Content Contract
 
 SPEC.md is the highest-authority document in the hierarchy. It defines *what* the system must do without prescribing *how*. Its expected sections are:

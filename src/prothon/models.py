@@ -30,7 +30,7 @@ class Task:
     context_files: list[str] = field(default_factory=list)
     doc_sections: list[str] = field(default_factory=list)
     reference_skills: list[str] = field(default_factory=list)
-    dependencies: list[int] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
     completed: bool = False
     attempts: int = 0
     max_attempts: int = 3

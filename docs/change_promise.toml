@@ -90,7 +90,7 @@ context_files = ["docs/SPEC.md", "src/prothon/commands.py", "docs/refactor-plan.
 doc_sections = ["DESIGN:Tech Research Contract", "DESIGN:Session Lifecycle"]
 reference_skills = []
 dependencies = []
-completed = false
+completed = true
 attempts = 1
 max_attempts = 3
 
@@ -110,8 +110,8 @@ context_files = ["docs/DESIGN.md", "docs/refactor-plan.md"]
 doc_sections = ["PATTERNS:Error Handling", "PATTERNS:Terminal Failure Pattern"]
 reference_skills = []
 dependencies = ["d3h3rfct"]
-completed = false
-attempts = 0
+completed = true
+attempts = 1
 max_attempts = 3
 
 [[tasks]]
@@ -122,14 +122,14 @@ success_criteria = "All 12 modules documented with public API signatures only (n
 files_to_create = []
 files_to_modify = ["docs/PATTERNS.md"]
 files_to_remove = []
-expected_lines_added = 120
+expected_lines_added = 206
 expected_lines_removed = 0
 context_files = ["src/prothon/scaffold.py", "src/prothon/scaffold_cli.py", "src/prothon/git.py", "src/prothon/versioning.py", "src/prothon/promise_verify.py", "src/prothon/adoption.py", "src/prothon/ast_miner.py", "src/prothon/project.py", "src/prothon/exceptions.py", "src/prothon/skills.py", "src/prothon/compliance.py", "src/prothon/models.py"]
 doc_sections = ["PATTERNS:Module API Surface"]
 reference_skills = []
 dependencies = []
-completed = false
-attempts = 0
+completed = true
+attempts = 1
 max_attempts = 3
 
 # Phase 3 — CODE changes (H1, H3, M3)
@@ -149,7 +149,7 @@ doc_sections = ["DESIGN:Promise Contract Format"]
 reference_skills = ["tech-pytest"]
 dependencies = ["d1h1rfct"]
 completed = false
-attempts = 0
+attempts = 1
 max_attempts = 3
 
 [[tasks]]
@@ -167,7 +167,7 @@ doc_sections = ["DESIGN:Retry Configuration"]
 reference_skills = ["tech-pytest"]
 dependencies = ["d3h3rfct", "p1h3rfct"]
 completed = false
-attempts = 0
+attempts = 1
 max_attempts = 3
 
 [[tasks]]
@@ -185,5 +185,5 @@ doc_sections = ["DESIGN:Tech Research Contract", "DESIGN:Session Lifecycle"]
 reference_skills = []
 dependencies = ["d5m3rfct"]
 completed = false
-attempts = 0
+attempts = 1
 max_attempts = 3

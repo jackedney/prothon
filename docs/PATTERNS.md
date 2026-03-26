@@ -28,9 +28,9 @@ Each module exposes a minimal public API. Internal helpers use the `_` prefix.
 
 **cli.py:**
 ```python
-app = typer.Typer(...)        # Main CLI entry point
-promise_app = typer.Typer(...)  # `prothon promise` subcommands
-ci_app = typer.Typer(...)       # `prothon ci` subcommands
+app: typer.Typer        # Main CLI entry point
+promise_app: typer.Typer  # `prothon promise` subcommands
+ci_app: typer.Typer       # `prothon ci` subcommands
 ```
 
 **commands.py:**

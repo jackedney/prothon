@@ -447,7 +447,7 @@ Every assistant session launched via the CLI (`spec`, `design`, `patterns`, `exe
 1. **Pre-session guards** — Record `SPEC.md` hash (to detect unauthorized writes).
 2. **Resolve and Launch** — Resolve the preferred agent and model, sync skills, and launch the assistant subprocess.
 3. **Enforce Commit** — After successful exit (RC=0), check if the relevant doc file is dirty. If so, stage and commit it with a standardized message.
-4. **Trigger Follow-ups** — Launch the appropriate follow-up agents (harmonizer, researcher, compliance) as separate sessions.
+4. **Trigger Follow-ups** — Launch the appropriate follow-up agents (harmonizer, researcher, compliance) as separate sessions. After design sessions, the tech-researcher trigger uses heading-level section hashing (see Tech Research Contract) rather than unconditional launch.
 5. **Post-session guards** — Compare `SPEC.md` hash and warn if it was modified outside of `prothon spec`.
 
 **Content constraints** — In addition to edit permissions, PATTERNS.md has content form rules (R25-R26):
@@ -460,9 +460,9 @@ Every assistant session launched via the CLI (`spec`, `design`, `patterns`, `exe
 
 The tech-researcher generates reference skills in .agents/skills/ based on the technology choices in DESIGN.md (serves R43-46). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
 
-**Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer, refactor, or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
+**Trigger condition** — After a session that modifies DESIGN.md, the CLI compares the Technology Choices and Key Decisions sections before and after the session. If the content differs, the tech-researcher is launched. Section extraction uses heading-level parsing (`##` and `###` markers), not LLM judgment. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
 
-**Skip condition** — If the modifying agent only added, removed, or modified content outside the Technology Choices and Key Decisions tables, the tech-researcher is skipped entirely. The responsible agent determines this by inspecting the scope of its own changes before deciding whether to launch the tech-researcher subagent.
+**Mechanism** — Before launching a design session, the CLI extracts the Technology Choices and Key Decisions sections from DESIGN.md using heading-level boundaries and computes a hash of each. After the session completes, it re-extracts and re-hashes the same sections. The tech-researcher is launched only if at least one hash differs. This replaces the previous approach where the responsible agent determined the trigger by inspecting the scope of its own changes.
 
 ### Compliance Report Contract
 

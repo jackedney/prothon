@@ -12,6 +12,7 @@ src/prothon/
     adoption.py         # Project adoption: overlaying docs-first workflow onto existing projects
     adoption_templates.py  # Templates and scaffolds used during project adoption
     ast_miner.py        # AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
+    assistant.py        # Backend registry, protocol, and launch lifecycle for AI assistants
     cli.py              # Typer app and command definitions
     commands.py         # Implementation logic for CLI commands (delegates to domain modules)
     ui.py               # Rich-based terminal UI, tables, and status reporting
@@ -109,8 +110,8 @@ Each assistant backend encapsulates its binary name, invocation flags, skill syn
 
 AI coding CLIs fall into two structural categories based on how they ingest skills:
 
-- **Category A (native skill directories)** — Claude Code, opencode, and Gemini CLI have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
-- **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. These are out of scope per the SPEC but the abstraction accommodates them for future expansion.
+- **Category A (native skill directories)** — Claude Code, opencode, Gemini CLI, and OB1 have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
+- **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. No Category B backends are currently registered; the abstraction accommodates them for future expansion.
 
 A registry maps assistant names to backend classes. Claude Code, opencode, and Gemini CLI are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 57-58 (Claude Code, opencode, and Gemini CLI support; assistant selection).
 
@@ -120,7 +121,7 @@ The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) t
 
 Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers.
 
-**Flexible Scope:** Verification allows the agent to modify files not explicitly declared in the task's `files_to_modify` if those changes are necessary to satisfy the quality gate (R32). This serves requirements 27-33 (execution verification) and 34-37 (compliance verification).
+**Flexible Scope:** Verification allows the agent to modify files not explicitly declared in the task's `files_to_modify` if those changes are necessary to satisfy the quality gate (R32). This is a deliberate extension of R31's strict plan-verification scope — R32 requires that pre-commit hooks pass after each task, which may necessitate fixes to files outside the task's declared scope (e.g., linting fixes in imports, formatting in adjacent code). This serves requirements 27-33 (execution verification) and 34-37 (compliance verification).
 
 ### Task Lifecycle
 
@@ -305,7 +306,7 @@ Every assistant backend must satisfy the `AssistantBackend` protocol (structural
 - `name` — human-readable name for error messages (e.g. "Claude Code", "opencode")
 - `cli_command` — binary name to look up on PATH (e.g. "claude", "opencode")
 - `install_hint` — installation URL or command for actionable error messages when the binary is missing
-- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name via slash commands. Claude Code uses `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`; opencode uses `["opencode", "--prompt", "/prothon-spec-writer"]` with the `--prompt` flag; and Gemini CLI uses `["gemini", "--yolo", "/prothon-spec-writer"]` to enable non-interactive execution of suggested commands. When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
+- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name via slash commands. Claude Code uses `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`; opencode uses `["opencode", "--prompt", "/prothon-spec-writer"]` with the `--prompt` flag; and Gemini CLI uses `["gemini", "--approval-mode=yolo", "Activate the prothon-spec-writer skill and follow its instructions."]` to enable non-interactive execution via a natural language prompt. When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
 - `sync_skills()` — installs/symlinks bundled skills to the assistant's discovery location. Category A backends call `skills.sync_skills(target=...)` with their specific directory. Category B backends may be a no-op.
 - `env_overrides()` — returns a dict of extra environment variables needed for non-interactive execution (e.g. `{"GOOSE_MODE": "auto"}`). Returns an empty dict if none are needed.
 - `subagent_type_map` — returns a dict mapping canonical agent type names (used in skills) to backend-specific names. Skills reference canonical names; the backend translates at invocation time.
@@ -317,15 +318,15 @@ Registered backends:
 | `claude-code` | Claude Code | `claude` | `~/.claude/skills/` | A (native skills) |
 | `opencode` | opencode | `opencode` | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) | A (native skills) |
 | `gemini` | Gemini CLI | `gemini` | `~/.gemini/skills/` | A (native skills) |
-| `ob1` | OB1 | `ob1` | `~/.ob1/skills/` | B (prompt injection) |
+| `ob1` | OB1 | `ob1` | `~/.ob1/skills/` | A (native skills) |
 
 Canonical-to-backend subagent type mapping:
 
 | Canonical name | Claude Code | opencode | Gemini CLI | OB1 |
 |---------------|-------------|----------|------------|-----|
-| `general-purpose` | `general-purpose` | `general` | `generalist` | `general` |
+| `general-purpose` | `general-purpose` | `general` | `generalist_agent` | `general` |
 | `explore` | `Explore` | `explore` | `codebase_investigator` | `explore` |
-| `plan` | `Plan` | `plan` | `generalist` | `plan` |
+| `plan` | `Plan` | `plan` | `generalist_agent` | `plan` |
 
 A shared launch lifecycle handles: binary existence check (via `shutil.which()`), skill syncing, environment merging (`os.environ` + `env_overrides()`), subprocess execution, and return code reporting. When the binary is missing, the error message includes the backend's `install_hint`.
 

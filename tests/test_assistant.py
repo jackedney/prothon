@@ -232,7 +232,8 @@ def test_gemini_cli_backend_build_command() -> None:
 
     backend = GeminiCLIBackend()
     result = backend.build_command("prothon-spec-writer", Path("/tmp"))
-    assert result == ["gemini", "--yolo", "/prothon-spec-writer"]
+    prompt = "Activate the prothon-spec-writer skill and follow its instructions."
+    assert result == ["gemini", "--approval-mode=yolo", prompt]
 
 
 def test_gemini_cli_backend_build_command_with_model() -> None:
@@ -243,10 +244,11 @@ def test_gemini_cli_backend_build_command_with_model() -> None:
     result = backend.build_command(
         "prothon-spec-writer", Path("/tmp"), model="gemini-2.0-flash"
     )
+    prompt = "Activate the prothon-spec-writer skill and follow its instructions."
     assert result == [
         "gemini",
-        "--yolo",
-        "/prothon-spec-writer",
+        "--approval-mode=yolo",
+        prompt,
         "--model",
         "gemini-2.0-flash",
     ]
@@ -258,9 +260,9 @@ def test_gemini_cli_backend_subagent_type_map() -> None:
 
     backend = GeminiCLIBackend()
     expected = {
-        "general-purpose": "generalist",
+        "general-purpose": "generalist_agent",
         "explore": "codebase_investigator",
-        "plan": "generalist",
+        "plan": "generalist_agent",
     }
     assert backend.subagent_type_map() == expected
 

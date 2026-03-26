@@ -16,7 +16,7 @@ def sync_skills(target: Path | None = None) -> None:
 
     Args:
         target: Directory to symlink skills into. Defaults to
-            ``~/.claude/skills/`` for Claude Code discovery.
+            ``~/.claude/skills/`` (caller overrides per backend).
     """
     if target is None:
         target = Path.home() / ".claude" / "skills"

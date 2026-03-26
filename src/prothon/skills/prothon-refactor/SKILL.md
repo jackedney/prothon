@@ -70,7 +70,7 @@ For the selected items, follow the **DESIGN -> PATTERNS -> CODE** Wave:
 
 2. **Execute Tasks** — For each task (respecting dependency order):
    a) **Record attempt** — Run: `uvx prothon promise record-attempt {task_index}`.
-   b) **Launch subagent** — Spawn a **fresh** subagent (type: general-purpose) with the prompt template below.
+   b) **Launch subagent** — Spawn a **fresh** subagent with the prompt template below.
    c) **Monitor result**:
       - If succeeded (task marked complete): proceed to next task.
       - If failed and `attempts >= max_attempts`: report to user, ask skip/retry/abort.
@@ -112,8 +112,7 @@ You are implementing a single refactoring task with fresh context. You MUST clos
 ```
 
 3. **Verify and Clean up** — Once all tasks are complete:
-   - Spawn a fresh subagent: "Activate prothon-compliance-checker and produce a report."
-   - Show report to user.
+   - The prothon CLI triggers the compliance-checker automatically after this skill completes.
    - Run: `uvx prothon promise cleanup`.
 
 ## Guards

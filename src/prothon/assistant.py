@@ -138,7 +138,8 @@ class GeminiCLIBackend:
         self, skill_name: str, cwd: Path, model: str | None = None
     ) -> list[str]:
         """Return subprocess argv for a Gemini CLI session with *skill_name*."""
-        cmd = [self.cli_command, "--yolo", f"/{skill_name}"]
+        prompt = f"Activate the {skill_name} skill and follow its instructions."
+        cmd = [self.cli_command, "--approval-mode=yolo", prompt]
         if model is not None:
             cmd.extend(["--model", model])
         return cmd
@@ -156,9 +157,9 @@ class GeminiCLIBackend:
     def subagent_type_map(self) -> dict[str, str]:
         """Return mapping from canonical subagent types to Gemini CLI names."""
         return {
-            "general-purpose": "generalist",
+            "general-purpose": "generalist_agent",
             "explore": "codebase_investigator",
-            "plan": "generalist",
+            "plan": "generalist_agent",
         }
 
 

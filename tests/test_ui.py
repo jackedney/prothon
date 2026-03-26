@@ -123,11 +123,11 @@ class TestRenderPlan:
         assert "-20" in text
 
     def test_dependencies_display(self) -> None:
-        task = _make_task(dependencies=[0, 2])
+        task = _make_task(dependencies=["H0", "H2"])
         p = _make_promise(tasks=[task])
         text = _render_to_str(render_plan(p))
-        assert "0" in text
-        assert "2" in text
+        assert "H0" in text
+        assert "H2" in text
 
     def test_no_dependencies_shows_none(self) -> None:
         task = _make_task(dependencies=[])

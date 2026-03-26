@@ -19,6 +19,10 @@ class PromiseError(ProthonError):
     """Promise file missing, malformed, or task index out of range."""
 
 
+class MaxAttemptsExceeded(PromiseError):
+    """Task has reached its maximum retry attempts."""
+
+
 class AssistantNotFoundError(ProthonError):
     """Assistant CLI binary not found on PATH."""
 

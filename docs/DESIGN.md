@@ -12,6 +12,7 @@ src/prothon/
     adoption.py         # Project adoption: overlaying docs-first workflow onto existing projects
     adoption_templates.py  # Templates and scaffolds used during project adoption
     ast_miner.py        # AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
+    assistant.py        # Backend registry, protocol, and launch lifecycle for AI assistants
     cli.py              # Typer app and command definitions
     commands.py         # Implementation logic for CLI commands (delegates to domain modules)
     ui.py               # Rich-based terminal UI, tables, and status reporting
@@ -109,8 +110,8 @@ Each assistant backend encapsulates its binary name, invocation flags, skill syn
 
 AI coding CLIs fall into two structural categories based on how they ingest skills:
 
-- **Category A (native skill directories)** — Claude Code, opencode, and Gemini CLI have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
-- **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. These are out of scope per the SPEC but the abstraction accommodates them for future expansion.
+- **Category A (native skill directories)** — Claude Code, opencode, Gemini CLI, and OB1 have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
+- **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. No Category B backends are currently registered; the abstraction accommodates them for future expansion.
 
 A registry maps assistant names to backend classes. Claude Code, opencode, and Gemini CLI are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 57-58 (Claude Code, opencode, and Gemini CLI support; assistant selection).
 
@@ -120,21 +121,21 @@ The promise system uses typed dataclass models (`Task`, `Metadata`, `Promise`) t
 
 Verification checks file existence (for creates/removes), git diff analysis (for modifications), and line count tolerance (+-30% or +-30 lines, whichever is greater). Per-file `FileCheckDetail` results provide structured error data for programmatic consumers.
 
-**Flexible Scope:** Verification allows the agent to modify files not explicitly declared in the task's `files_to_modify` if those changes are necessary to satisfy the quality gate (R32). This serves requirements 27-33 (execution verification) and 34-37 (compliance verification).
+**Flexible Scope:** Verification allows the agent to modify files not explicitly declared in the task's `files_to_modify` if those changes are necessary to satisfy the quality gate (R32). This is a deliberate extension of R31's strict plan-verification scope — R32 requires that pre-commit hooks pass after each task, which may necessitate fixes to files outside the task's declared scope (e.g., linting fixes in imports, formatting in adjacent code). This serves requirements 27-33 (execution verification) and 34-37 (compliance verification).
 
 ### Task Lifecycle
 
 Each task in the execute workflow follows this lifecycle:
 
-1. **Dependency check** — wait for all tasks in `dependencies` to be marked complete.
+1. **Dependency check** — wait for all tasks whose `task_id` appears in this task's `dependencies` list to be marked complete.
 2. **Read context** — read `doc_sections`, `reference_skills`, and `context_files`.
 3. **Implement** — create, modify, or remove files per the plan.
 4. **Quality gate (R32)** — run `pre-commit run --all-files`. The agent must fix all reported errors and warnings project-wide (including pre-existing ones) before proceeding.
-5. **Commit** — `git add . && git commit --no-verify`. This stages all changes, including any global health fixes performed in step 4. `--no-verify` avoids double execution of hooks that were just satisfied by the quality gate.
+5. **Commit** — Stage only files declared in `files_to_create`, `files_to_modify`, and `files_to_remove`, plus any files auto-fixed by the quality gate in step 4. Then commit with `--no-verify`. Note: `--no-verify` is safe because step 4 already ran the full hook suite.
 6. **Plan verification (R31)** — run `check_task()` which uses `git diff <base_commit>`.
 7. **Completion** — mark the task complete via `complete_task()`.
 
-If step 4 or step 6 fails, the subagent increments its attempt counter and retries from step 3. If `attempts >= max_attempts`, the subagent reports failure to the orchestrator, which asks the user to skip, retry (reset counter), or abort.
+If step 4 or step 6 fails, the subagent calls `record_attempt()` and retries from step 3. The retry is gated by `record_attempt()` succeeding — if `attempts >= max_attempts`, `record_attempt()` raises `MaxAttemptsExceeded` rather than incrementing, which halts the retry loop. The orchestrator then asks the user to skip, retry (reset counter), or abort.
 
 ### Compliance Checker (R34–37)
 
@@ -200,7 +201,10 @@ The `max_attempts` value is resolved via a two-level precedence:
 
 When the executor creates the promise file, it reads `[tool.prothon].max_attempts` and sets it as the default for each task. The planning agent can override `max_attempts` on specific tasks (e.g., a complex migration task might get 5 attempts while a simple file rename gets 2).
 
-Retry enforcement lives in the skill prompt — the subagent reads `max_attempts` from the promise file and bounds its retry loop accordingly. Programmatic enforcement (an `attempt_task()` function that increments under file lock) can be added later if stricter guarantees are needed.
+Retry enforcement operates at two levels:
+
+1. **Skill-prompt compliance** — the subagent reads `max_attempts` from the promise file and bounds its retry loop accordingly.
+2. **Programmatic backstop** — `record_attempt()` must refuse to increment when `attempts >= max_attempts`, raising a `MaxAttemptsExceeded` error. This provides a programmatic backstop independent of skill-prompt compliance.
 
 ### Concurrency
 
@@ -286,7 +290,7 @@ expected_lines_removed = <int>
 context_files = ["<path>", ...]
 doc_sections = ["<doc>:<section>", ...]
 reference_skills = ["<skill-name>", ...]
-dependencies = [<zero-based-task-index>, ...]
+dependencies = ["<task_id>", ...]
 completed = <bool>
 attempts = <int>
 max_attempts = <int>
@@ -295,6 +299,8 @@ max_attempts = <int>
 ### Promise Verification Contract
 
 Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (members: `PASSED`, `FAILED`, `SKIPPED` with values `"PASS"`, `"FAIL"`, `"SKIP"`), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). SKIPPED indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAILED entries — SKIPPED results do not affect the outcome.
+
+Dependency resolution uses `task_id` lookup: each entry in a task's `dependencies` list is matched against the `task_id` field of other tasks in the promise file, not against positional indices. This ensures dependencies remain valid when tasks are reordered, inserted, or removed during planning.
 
 Tolerance for line counts: +-30% or +-30 lines, whichever is greater. Binary files are excluded from line counts.
 
@@ -305,7 +311,7 @@ Every assistant backend must satisfy the `AssistantBackend` protocol (structural
 - `name` — human-readable name for error messages (e.g. "Claude Code", "opencode")
 - `cli_command` — binary name to look up on PATH (e.g. "claude", "opencode")
 - `install_hint` — installation URL or command for actionable error messages when the binary is missing
-- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name via slash commands. Claude Code uses `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`; opencode uses `["opencode", "--prompt", "/prothon-spec-writer"]` with the `--prompt` flag; and Gemini CLI uses `["gemini", "--yolo", "/prothon-spec-writer"]` to enable non-interactive execution of suggested commands. When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
+- `build_command(skill_name, cwd, model=None)` — constructs the subprocess argv for launching a session. The optional `model` parameter is the resolved `provider/model` string (see Model Configuration Contract). Category A backends reference the skill by name via slash commands. Claude Code uses `["claude", "--dangerously-skip-permissions", "/prothon-spec-writer"]`; opencode uses `["opencode", "--prompt", "/prothon-spec-writer"]` with the `--prompt` flag; and Gemini CLI uses `["gemini", "--approval-mode=yolo", "Activate the prothon-spec-writer skill and follow its instructions."]` to enable non-interactive execution via a natural language prompt. When `model` is provided, backends that support it append `["--model", model]` to the argv. Category B backends read skill content and inject it into the prompt argument.
 - `sync_skills()` — installs/symlinks bundled skills to the assistant's discovery location. Category A backends call `skills.sync_skills(target=...)` with their specific directory. Category B backends may be a no-op.
 - `env_overrides()` — returns a dict of extra environment variables needed for non-interactive execution (e.g. `{"GOOSE_MODE": "auto"}`). Returns an empty dict if none are needed.
 - `subagent_type_map` — returns a dict mapping canonical agent type names (used in skills) to backend-specific names. Skills reference canonical names; the backend translates at invocation time.
@@ -317,15 +323,15 @@ Registered backends:
 | `claude-code` | Claude Code | `claude` | `~/.claude/skills/` | A (native skills) |
 | `opencode` | opencode | `opencode` | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) | A (native skills) |
 | `gemini` | Gemini CLI | `gemini` | `~/.gemini/skills/` | A (native skills) |
-| `ob1` | OB1 | `ob1` | `~/.ob1/skills/` | B (prompt injection) |
+| `ob1` | OB1 | `ob1` | `~/.ob1/skills/` | A (native skills) |
 
 Canonical-to-backend subagent type mapping:
 
 | Canonical name | Claude Code | opencode | Gemini CLI | OB1 |
 |---------------|-------------|----------|------------|-----|
-| `general-purpose` | `general-purpose` | `general` | `generalist` | `general` |
+| `general-purpose` | `general-purpose` | `general` | `generalist_agent` | `general` |
 | `explore` | `Explore` | `explore` | `codebase_investigator` | `explore` |
-| `plan` | `Plan` | `plan` | `generalist` | `plan` |
+| `plan` | `Plan` | `plan` | `generalist_agent` | `plan` |
 
 A shared launch lifecycle handles: binary existence check (via `shutil.which()`), skill syncing, environment merging (`os.environ` + `env_overrides()`), subprocess execution, and return code reporting. When the binary is missing, the error message includes the backend's `install_hint`.
 
@@ -441,7 +447,7 @@ Every assistant session launched via the CLI (`spec`, `design`, `patterns`, `exe
 1. **Pre-session guards** — Record `SPEC.md` hash (to detect unauthorized writes).
 2. **Resolve and Launch** — Resolve the preferred agent and model, sync skills, and launch the assistant subprocess.
 3. **Enforce Commit** — After successful exit (RC=0), check if the relevant doc file is dirty. If so, stage and commit it with a standardized message.
-4. **Trigger Follow-ups** — Launch the appropriate follow-up agents (harmonizer, researcher, compliance) as separate sessions.
+4. **Trigger Follow-ups** — Launch the appropriate follow-up agents (harmonizer, researcher, compliance) as separate sessions. After design sessions, the tech-researcher trigger uses heading-level section hashing (see Tech Research Contract) rather than unconditional launch.
 5. **Post-session guards** — Compare `SPEC.md` hash and warn if it was modified outside of `prothon spec`.
 
 **Content constraints** — In addition to edit permissions, PATTERNS.md has content form rules (R25-R26):
@@ -454,13 +460,58 @@ Every assistant session launched via the CLI (`spec`, `design`, `patterns`, `exe
 
 The tech-researcher generates reference skills in .agents/skills/ based on the technology choices in DESIGN.md (serves R43-46). It runs as a post-write quality gate after any agent modifies DESIGN.md, but only when technology choices have materially changed.
 
-**Trigger condition** — The tech-researcher runs when any agent authorized to modify `docs/DESIGN.md` (design-writer, refactor, or doc-harmonizer) makes changes to the **Technology Choices** table or the **Key Decisions** table. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
+**Trigger condition** — After a session that modifies DESIGN.md, the CLI compares the Technology Choices and Key Decisions sections before and after the session. If the content differs, the tech-researcher is launched. Section extraction uses heading-level parsing (`##` and `###` markers), not LLM judgment. Changes limited to other sections (Architecture, Interfaces, contracts, etc.) do not trigger it.
 
-**Skip condition** — If the modifying agent only added, removed, or modified content outside the Technology Choices and Key Decisions tables, the tech-researcher is skipped entirely. The responsible agent determines this by inspecting the scope of its own changes before deciding whether to launch the tech-researcher subagent.
+**Mechanism** — Before launching a design session, the CLI extracts the Technology Choices and Key Decisions sections from DESIGN.md using heading-level boundaries and computes a hash of each. After the session completes, it re-extracts and re-hashes the same sections. The tech-researcher is launched only if at least one hash differs. This replaces the previous approach where the responsible agent determined the trigger by inspecting the scope of its own changes.
 
 ### Compliance Report Contract
 
 The compliance checker reads all three documentation levels and all source code, then produces three tables (SPEC compliance, DESIGN compliance, PATTERNS compliance). Each row contains: the checkable statement, a PASS/FAIL/SKIP status, and `file:line` evidence. SKIP indicates a check was not applicable (e.g., no files declared for that category). A summary section reports overall percentage and prioritized action items.
+
+### Refactor Contract
+
+The refactor subsystem discovers drift between documentation and code, then generates a promise file to orchestrate remediation. It operates in two phases: discovery and promise generation.
+
+**DriftFinding data model:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | `str` | Short identifier for the finding (e.g. "Missing SPEC.md", "Large file: commands.py") |
+| `rationale` | `str` | Explanation of why this finding matters and what should change |
+| `doc_sections` | `list[str]` | Documentation files or sections relevant to the finding (empty if code-only) |
+| `files_affected` | `list[Path]` | Filesystem paths impacted by the finding (used to populate promise task file lists) |
+
+**Drift categories:**
+
+The discovery phase checks four categories of drift:
+
+| Category | What it detects | Example finding |
+|----------|----------------|-----------------|
+| Doc hierarchy gaps | Missing core documentation files in the SPEC → DESIGN → PATTERNS chain | "Missing PATTERNS.md" when DESIGN.md exists |
+| Patterns compliance (R25-R26) | PATTERNS.md formatting violations detected by `check_patterns_doc()` | Code blocks containing implementation logic instead of signatures |
+| Large files (>500 lines) | Source files in `src/` exceeding 500 lines | "Large file: commands.py" with 423-line rationale |
+| Missing test coverage | Source modules with testable logic that lack corresponding test files | "Missing tests for refactor.py" when no `test_refactor*.py` exists |
+
+**Discovery specification:**
+
+`discover_drift(root: Path) -> list[DriftFinding]` — Scans the project at `root` and returns all findings across all four drift categories. Each category checker runs independently and returns zero or more findings. The function concatenates all results in category order (doc hierarchy, patterns compliance, large files, missing tests).
+
+Testable logic detection uses AST analysis to skip modules containing only constants, type aliases, trivial pass-through functions, data classes without methods, and abstract/protocol classes. Test file matching supports `test_<module>.py`, `test_*_<module>.py`, and `*_<module>_test.py` naming conventions.
+
+**Promise generation specification:**
+
+`generate_refactor_promise(root: Path, findings: list[DriftFinding]) -> Promise` — Converts selected findings into a Promise object suitable for writing to `docs/change_promise.toml`. Each finding maps to exactly one task. The mapping is:
+
+| DriftFinding field | Task field |
+|--------------------|------------|
+| `title` | `title` |
+| `rationale` | `goal` |
+| `title` (templated) | `success_criteria` ("Resolve the drift identified: {title}") |
+| `files_affected` (existing) | `files_to_modify` |
+| `files_affected` (non-existing) | `files_to_create` |
+| `doc_sections` | `doc_sections` |
+
+The promise metadata captures `base_commit` (current HEAD SHA) and `created_at` (ISO 8601 UTC timestamp). Tasks are ordered by the refactor wave principle: DESIGN-level findings first, then PATTERNS-level, then CODE-level. This ensures documentation is updated before code changes that depend on it.
 
 ### SPEC.md Content Contract
 

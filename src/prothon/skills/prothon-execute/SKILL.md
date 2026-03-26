@@ -71,10 +71,10 @@ For each task in the promise (respecting dependency order):
 
 1. **Orchestrate Retries & Two-Stage Review** — While `attempts < max_attempts` and task is not `completed`:
    a) **Record attempt** — Run: `uvx prothon promise record-attempt {task_index}` (counts every attempt, including the one about to start).
-   b) **Launch Implementer Subagent** — Spawn a **fresh** Claude/OpenCode instance (type: general-purpose) using `./implementer-prompt.md`. Keep this session alive until both reviewers approve. If it asks questions before implementing, answer them.
-   c) **Launch Spec Reviewer Subagent** — Once the implementer finishes, spawn a **fresh** instance using `./spec-reviewer-prompt.md` to confirm the code matches the specification.
+   b) **Launch Implementer Subagent** — Spawn a **fresh** subagent using `./implementer-prompt.md`. Keep this session alive until both reviewers approve. If it asks questions before implementing, answer them.
+   c) **Launch Spec Reviewer Subagent** — Once the implementer finishes, spawn a **fresh** subagent using `./spec-reviewer-prompt.md` to confirm the code matches the specification.
       - If it reports gaps/issues, send the feedback to the **still-open Implementer Subagent** to fix. Re-launch a fresh spec reviewer until approved.
-   d) **Launch Code Quality Reviewer Subagent** — Once spec compliance is approved, spawn a **fresh** instance using `./code-quality-reviewer-prompt.md`.
+   d) **Launch Code Quality Reviewer Subagent** — Once spec compliance is approved, spawn a **fresh** subagent using `./code-quality-reviewer-prompt.md`.
       - If it reports issues, send the feedback to the **still-open Implementer Subagent** to fix. Re-launch a fresh code quality reviewer until approved.
    Once both reviewers approve, the implementer session closes.
    e) **Monitor Result**:
@@ -90,8 +90,8 @@ For each task in the promise (respecting dependency order):
 
 ## Phase 3: Verify & Advance
 
-1. **Compliance Check** — Spawn a fresh subagent: "Activate prothon-compliance-checker and produce a report."
-2. **Report & Clean up** — Show report to user. Run `uvx prothon promise cleanup`.
+1. **Compliance Check** — The prothon CLI triggers the compliance-checker automatically after this skill completes.
+2. **Report & Clean up** — Run `uvx prothon promise cleanup`.
 3. **Next Phase** — Tell the user: "Phase complete. Run `prothon execute` again to begin the next phase."
 
 ## Guards

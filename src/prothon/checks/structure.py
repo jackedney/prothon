@@ -163,10 +163,22 @@ def check_inheritance(root: Path) -> list[CheckResult]:
         requirement_id="D1",
     )
     analysis = analyze_python_file(exc_path)
+    base_classes = analysis.get("base_classes", {})
+
+    # Build transitive set of classes inheriting from ProthonError
+    inheritors: set[str] = {"ProthonError"}
+    changed = True
+    while changed:
+        changed = False
+        for name, bases in base_classes.items():
+            if name not in inheritors and inheritors & set(bases):
+                inheritors.add(name)
+                changed = True
+
     violations = [
         name
-        for name, bases in analysis.get("base_classes", {}).items()
-        if name != "ProthonError" and "ProthonError" not in bases
+        for name in base_classes
+        if name != "ProthonError" and name not in inheritors
     ]
 
     if not violations:

@@ -18,6 +18,10 @@ uv.lock
 htmlcov/
 .coverage
 
+# Prothon
+.prothon/
+docs/change_promise.toml.lock
+
 # IDE
 .idea/
 .vscode/

@@ -12,7 +12,7 @@ from pathlib import Path
 import tomlkit
 import tomlkit.exceptions
 
-from prothon.exceptions import PromiseError
+from prothon.exceptions import MaxAttemptsExceeded, PromiseError
 from prothon.git import GitDiffProvider
 from prothon.models import PROMISE_PATH, Metadata, Promise, Task, _generate_id
 
@@ -297,7 +297,13 @@ def record_attempt(
             raise PromiseError(
                 f"Task index {task_index} out of range; promise file may have changed"
             )
-        new_attempts = promise.tasks[task_index].attempts + 1
+        task = promise.tasks[task_index]
+        if task.attempts >= task.max_attempts:
+            raise MaxAttemptsExceeded(
+                f"Task {task_index} has reached its maximum retry attempts "
+                f"({task.max_attempts})"
+            )
+        new_attempts = task.attempts + 1
         _update_task_fields(path, task_index, {"attempts": new_attempts})
 
 
@@ -332,8 +338,7 @@ def _format_task_plan(index: int, task: Task) -> list[str]:
             lines.append(f"  {label + ':':8s}{', '.join(items)}")
 
     if task.dependencies:
-        dep_labels = [f"Task {d}" for d in task.dependencies]
-        lines.append(f"  Deps:   {', '.join(dep_labels)}")
+        lines.append(f"  Deps:   {', '.join(task.dependencies)}")
     else:
         lines.append("  Deps:   none")
 

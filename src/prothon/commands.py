@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from enum import StrEnum
 from pathlib import Path
@@ -52,6 +53,49 @@ SKILL_DOC_MAP = {
 }
 
 
+def _extract_design_sections(path: Path) -> str:
+    """Extract Technology Choices and Key Decisions sections from DESIGN.md.
+
+    Uses heading-level parsing (## markers) to find section boundaries.
+    Returns the concatenated content of both sections, or empty string
+    if the file is unreadable or sections are missing.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+    target_headings = {"## Technology Choices", "## Key Decisions"}
+    lines = text.splitlines(keepends=True)
+    sections: list[str] = []
+    capturing = False
+    current: list[str] = []
+
+    for line in lines:
+        stripped = line.rstrip()
+        if stripped.startswith("## ") and not stripped.startswith("### "):
+            if capturing:
+                sections.append("".join(current))
+                current = []
+                capturing = False
+            if stripped in target_headings:
+                capturing = True
+                current.append(line)
+        elif capturing:
+            current.append(line)
+
+    if capturing:
+        sections.append("".join(current))
+
+    return "".join(sections)
+
+
+def _hash_design_sections(path: Path) -> str:
+    """Return SHA-256 hex digest of the Technology Choices + Key Decisions content."""
+    content = _extract_design_sections(path)
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
 def require_project_root() -> Path:
     """Find the project root or raise ProthonError."""
     return find_project_root()
@@ -100,6 +144,8 @@ def trigger_follow_ups(
     agent: str | None = None,
     model: str | None = None,
     provider: str | None = None,
+    *,
+    design_sections_hash_before: str | None = None,
 ) -> None:
     """Launch follow-up sessions based on the completed skill and file changes."""
     if skill_name in (Skill.SPEC_WRITER, Skill.DESIGN_WRITER, Skill.PATTERNS_WRITER):
@@ -114,15 +160,25 @@ def trigger_follow_ups(
         )
 
     if skill_name == Skill.DESIGN_WRITER:
-        console.print("\n  Triggering tech-researcher...")
-        launch_skill(
-            Skill.TECH_RESEARCHER,
-            cwd,
-            agent,
-            model,
-            provider,
-            run_follow_ups=False,
-        )
+        design_path = cwd / "docs" / "DESIGN.md"
+        after_hash = _hash_design_sections(design_path)
+        if (
+            design_sections_hash_before is None
+            or after_hash != design_sections_hash_before
+        ):
+            console.print("\n  Triggering tech-researcher...")
+            launch_skill(
+                Skill.TECH_RESEARCHER,
+                cwd,
+                agent,
+                model,
+                provider,
+                run_follow_ups=False,
+            )
+        else:
+            console.print(
+                "\n  Skipping tech-researcher (Technology Choices and Key Decisions unchanged)."
+            )
 
     if skill_name == Skill.EXECUTE:
         console.print("\n  Triggering compliance-checker...")
@@ -153,6 +209,11 @@ def launch_skill(
     guard_spec = skill_name != Skill.SPEC_WRITER
     spec_hash = file_hash(spec_path) if guard_spec else None
 
+    # Capture design section hash before session for deterministic tech-researcher trigger
+    design_hash_before: str | None = None
+    if skill_name == Skill.DESIGN_WRITER:
+        design_hash_before = _hash_design_sections(cwd / "docs" / "DESIGN.md")
+
     name = resolve_agent(agent)
     backend = get_backend(name)
     resolved_model = resolve_model(model, provider) if name == "opencode" else None
@@ -168,7 +229,14 @@ def launch_skill(
     if rc == 0:
         enforce_commit(skill_name, cwd)
         if run_follow_ups:
-            trigger_follow_ups(skill_name, cwd, agent, model, provider)
+            trigger_follow_ups(
+                skill_name,
+                cwd,
+                agent,
+                model,
+                provider,
+                design_sections_hash_before=design_hash_before,
+            )
 
     return rc
 

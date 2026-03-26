@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from prothon.exceptions import PromiseError
+from prothon.exceptions import MaxAttemptsExceeded, PromiseError
 from prothon.git import DiffStat
 from prothon.models import Metadata, Promise, Task
 from prothon.promise import (
@@ -338,7 +338,7 @@ def test_record_attempt_parallel_no_lost_updates(tmp_path: Path):
 
     p_obj = Promise(
         metadata=Metadata(base_commit="abc1234"),
-        tasks=[Task(title="Concurrent", attempts=0)],
+        tasks=[Task(title="Concurrent", attempts=0, max_attempts=10)],
     )
     path = tmp_path / "promise.toml"
     save_promise(p_obj, path)
@@ -351,6 +351,23 @@ def test_record_attempt_parallel_no_lost_updates(tmp_path: Path):
 
     result = load_promise(path)
     assert result.tasks[0].attempts == n_threads
+
+
+def test_record_attempt_raises_max_attempts_exceeded(tmp_path: Path):
+    """record_attempt refuses to increment when attempts >= max_attempts."""
+    promise = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="Exhausted", attempts=3, max_attempts=3)],
+    )
+    p = tmp_path / "promise.toml"
+    save_promise(promise, p)
+
+    with pytest.raises(MaxAttemptsExceeded, match="maximum retry attempts"):
+        record_attempt(0, path=p)
+
+    # Verify counter was NOT incremented
+    result = load_promise(p)
+    assert result.tasks[0].attempts == 3
 
 
 def test_complete_task_refuses_when_checks_fail(tmp_path: Path):
@@ -497,7 +514,7 @@ def test_plan_formats_dependencies(tmp_path: Path):
             Task(
                 title="Task B",
                 goal="Second",
-                dependencies=[0],
+                dependencies=["H0"],
                 expected_lines_added=20,
             ),
         ],
@@ -509,7 +526,7 @@ def test_plan_formats_dependencies(tmp_path: Path):
     assert "PLAN: 2 tasks" in output
     assert "Task 0" in output
     assert "Task 1" in output
-    assert "Deps:   Task 0" in output
+    assert "Deps:   H0" in output
 
 
 # --- cleanup ---
@@ -592,7 +609,7 @@ def test_task_from_dict_reads_each_key():
         "context_files": ["ctx.py"],
         "doc_sections": ["DESIGN.md#API"],
         "reference_skills": ["tech-fastapi"],
-        "dependencies": [0, 1],
+        "dependencies": ["H0", "H1"],
         "completed": True,
         "max_attempts": 5,
         "attempts": 2,
@@ -610,7 +627,7 @@ def test_task_from_dict_reads_each_key():
     assert task.context_files == ["ctx.py"]
     assert task.doc_sections == ["DESIGN.md#API"]
     assert task.reference_skills == ["tech-fastapi"]
-    assert task.dependencies == [0, 1]
+    assert task.dependencies == ["H0", "H1"]
     assert task.completed is True
     assert task.max_attempts == 5
     assert task.attempts == 2
@@ -626,7 +643,7 @@ def test_task_from_dict_list_wrapping():
         "context_files": ("ctx.py",),
         "doc_sections": ("sec",),
         "reference_skills": ("skill",),
-        "dependencies": (0,),
+        "dependencies": ("H0",),
     }
     task = _task_from_dict(d)
     assert isinstance(task.files_to_create, list)
@@ -677,7 +694,7 @@ def test_task_to_dict_all_keys_present():
         context_files=["ctx"],
         doc_sections=["doc"],
         reference_skills=["skill"],
-        dependencies=[0],
+        dependencies=["H0"],
         completed=True,
         attempts=2,
         max_attempts=5,
@@ -695,7 +712,7 @@ def test_task_to_dict_all_keys_present():
     assert d["context_files"] == ["ctx"]
     assert d["doc_sections"] == ["doc"]
     assert d["reference_skills"] == ["skill"]
-    assert d["dependencies"] == [0]
+    assert d["dependencies"] == ["H0"]
     assert d["completed"] is True
     assert d["attempts"] == 2
     assert d["max_attempts"] == 5
@@ -1194,10 +1211,10 @@ def test_format_task_plan_with_all_file_lists():
 
 
 def test_format_task_plan_with_deps():
-    task = Task(title="T", dependencies=[0, 1])
+    task = Task(title="T", dependencies=["H0", "H1"])
     lines = _format_task_plan(2, task)
     text = "\n".join(lines)
-    assert "Deps:   Task 0, Task 1" in text
+    assert "Deps:   H0, H1" in text
     assert "Deps:   none" not in text
 
 

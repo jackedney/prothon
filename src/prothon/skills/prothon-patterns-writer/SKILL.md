@@ -135,9 +135,8 @@ A populated `docs/PATTERNS.md` with all sections filled in, concrete examples, a
 
 ## After Writing
 
-Once PATTERNS.md is written to disk, run this quality gate before finishing. Do NOT ask the user — just run it.
+Once PATTERNS.md is written to disk and committed:
 
-1. **Harmonize docs** — Spawn a subagent (type: general-purpose, fresh context) with this prompt:
-   > Activate the prothon-doc-harmonizer skill and execute it. Read `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md`, cross-reference them, and report any conflicts. For each conflict found, present the proposed amendment to the user and wait for explicit approval before applying the change. Do NOT apply any fixes without user confirmation.
+1. **Follow-up quality gates** — The prothon CLI automatically triggers doc-harmonizer after this skill completes. You do not need to spawn it manually.
 
-2. **Report and finish** — Once the subagent completes, summarize its results to the user and tell them the documentation hierarchy is complete — they can now implement code.
+2. **Report and finish** — Tell the user the documentation hierarchy is complete — they can now implement code.

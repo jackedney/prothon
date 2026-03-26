@@ -65,12 +65,7 @@ All documents are consistent.
    - Commit with message: `docs: update <FILENAME> via doc-harmonizer`
    - Do NOT push — the commit is local only.
    - If multiple files are amended, commit each file separately with its own commit message.
-9. **Conditionally trigger tech-researcher** — If you amended `docs/DESIGN.md` and the changes touched the **Technology Choices** table or the **Key Decisions** table:
-   - Spawn a subagent (type: general-purpose, fresh context) with this prompt:
-     > Activate the prothon-tech-researcher skill and execute it. Read `docs/SPEC.md` and `docs/DESIGN.md`, then generate reference skills in `.agents/skills/` for all chosen technologies, codestyle, optimisation, and domain knowledge.
-
-   - If amendments were limited to other sections and the Technology Choices and Key Decisions tables were untouched → skip the tech-researcher entirely.
-   - Tell the user which path was taken: "Tech-researcher triggered — Technology Choices / Key Decisions changed." or "Tech-researcher skipped — no changes to Technology Choices or Key Decisions tables."
+9. **Tech-researcher follow-up** — The prothon CLI triggers the tech-researcher automatically after this skill if it was invoked following a design-writer session. You do not need to spawn it manually. Report whether the **Technology Choices** or **Key Decisions** tables were amended so the CLI can determine if the tech-researcher is needed.
 
 ## What Counts as a Conflict
 

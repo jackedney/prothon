@@ -28,9 +28,9 @@ Each module exposes a minimal public API. Internal helpers use the `_` prefix.
 
 **cli.py:**
 ```python
-app = typer.Typer(...)        # Main CLI entry point
-promise_app = typer.Typer(...)  # `prothon promise` subcommands
-ci_app = typer.Typer(...)       # `prothon ci` subcommands
+app: typer.Typer        # Main CLI entry point
+promise_app: typer.Typer  # `prothon promise` subcommands
+ci_app: typer.Typer       # `prothon ci` subcommands
 ```
 
 **commands.py:**
@@ -96,6 +96,212 @@ def discover_drift(root: Path) -> list[DriftFinding]: ...
 def generate_refactor_promise(root: Path, findings: list[DriftFinding]) -> Promise: ...
 ```
 
+**scaffold.py:**
+```python
+def get_template_dir() -> Path: ...
+def generate(dest: Path, data: dict | None = None) -> None: ...
+```
+
+**scaffold_cli.py:**
+```python
+def new_project(destination: str = ".") -> None: ...
+def init_project(cwd: Path | None = None) -> None: ...
+```
+
+**git.py:**
+```python
+DiffStat = dict[str, tuple[int, int]]
+
+class GitDiffProvider(Protocol):
+    def diff_names(self, base_commit: str, *paths: str) -> set[str]: ...
+    def diff_numstat(self, base_commit: str, *paths: str) -> DiffStat: ...
+
+def run_git(*args: str, cwd: Path | None = None) -> str: ...
+
+class SubprocessGitDiff:
+    def diff_names(self, base_commit: str, *paths: str) -> set[str]: ...
+    def diff_numstat(self, base_commit: str, *paths: str) -> DiffStat: ...
+
+def rev_parse_head(cwd: Path | None = None) -> str: ...
+def is_dirty(path: Path, cwd: Path | None = None) -> bool: ...
+def commit_file(path: Path, message: str, cwd: Path | None = None) -> None: ...
+```
+
+**versioning.py:**
+```python
+def parse_version(v: str) -> tuple[int, int, int]: ...
+def bump_major(v: str) -> str: ...
+def bump_minor(v: str) -> str: ...
+def bump_patch(v: str) -> str: ...
+def update_pyproject_version(path: Path, new_version: str) -> None: ...
+def update_init_version(path: Path, new_version: str) -> None: ...
+def create_tag(version: str, cwd: Path | None = None) -> None: ...
+def detect_bump_type(before_sha: str, after_sha: str, cwd: Path | None = None) -> str | None: ...
+```
+
+**promise_verify.py:**
+```python
+DEFAULT_TOLERANCE = 30
+
+class CheckStatus(Enum):
+    PASSED = "PASS"
+    FAILED = "FAIL"
+    SKIPPED = "SKIP"
+
+@dataclass
+class FileCheckDetail:
+    path: str
+    expected_state: str
+    actual_state: str
+    status: CheckStatus
+
+@dataclass
+class CheckResult:
+    name: str
+    status: CheckStatus
+    detail: str
+    file_details: list[FileCheckDetail] = field(default_factory=list)
+
+@dataclass
+class TaskCheckReport:
+    task_index: int
+    title: str
+    task_id: str
+    checks: list[CheckResult] = field(default_factory=list)
+    @property
+    def passed(self) -> bool: ...
+    def format(self) -> str: ...
+
+def check_task(task_index: int, *, diff: GitDiffProvider | None = None, path: Path | None = None, promise: Promise | None = None) -> TaskCheckReport: ...
+```
+
+**adoption.py:**
+```python
+def init_existing(cwd: Path | None = None, data: dict[str, str] | None = None) -> list[Path]: ...
+```
+
+**ast_miner.py:**
+```python
+class IdiomMatcher:
+    def __init__(self) -> None: ...
+    def is_idiom_name(self, name: str) -> bool: ...
+    def is_idiom_node(self, node: ast.AST) -> bool: ...
+    def is_idiom_decorator(self, node: ast.AST) -> bool: ...
+
+class ASTPatternMiner:
+    def __init__(self, matcher: IdiomMatcher | None = None) -> None: ...
+    def scan_directory(self, root: Path) -> str: ...
+    def extract_from_file(self, path: Path) -> str: ...
+```
+
+**project.py:**
+```python
+def find_project_root(start: Path | None = None) -> Path: ...
+```
+
+**exceptions.py:**
+```python
+class ProthonError(Exception): ...
+class ProjectNotFoundError(ProthonError): ...
+class ProjectAlreadyInitError(ProthonError): ...
+class PromiseError(ProthonError): ...
+class AssistantNotFoundError(ProthonError): ...
+class UnknownBackendError(ProthonError): ...
+class ComplianceError(ProthonError): ...
+class GitError(ProthonError): ...
+class VersionError(ProthonError): ...
+class MaxAttemptsExceeded(PromiseError): ...
+```
+
+**skills.py:**
+```python
+def bundled_skills_dir() -> Path: ...
+def sync_skills(target: Path | None = None) -> None: ...
+```
+
+**compliance.py:**
+```python
+class CheckStatus(Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+    SKIP = "SKIP"
+
+class CheckType(Enum):
+    STATIC = "STATIC"
+    SEMANTIC = "SEMANTIC"
+
+@dataclass
+class Requirement:
+    source: str
+    statement: str
+    requirement_id: str | None = None
+
+@dataclass
+class CheckResult:
+    requirement: Requirement
+    status: CheckStatus
+    check_type: CheckType = CheckType.STATIC
+    evidence: str = ""
+    rationale: str = ""
+    def __str__(self) -> str: ...
+    def to_dict(self) -> dict[str, Any]: ...
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CheckResult": ...
+
+@dataclass
+class ComplianceReport:
+    results: list[CheckResult] = field(default_factory=list)
+    @property
+    def passed(self) -> bool: ...
+    @property
+    def score(self) -> float: ...
+    @property
+    def failures(self) -> list[CheckResult]: ...
+    def results_by_source(self, source: str) -> list[CheckResult]: ...
+    def results_by_type(self, check_type: CheckType) -> list[CheckResult]: ...
+    @property
+    def static_results(self) -> list[CheckResult]: ...
+    @property
+    def semantic_results(self) -> list[CheckResult]: ...
+    def merge(self, other: "ComplianceReport") -> None: ...
+    def add_from_dicts(self, findings: list[dict[str, Any]]) -> None: ...
+    def format_summary(self) -> str: ...
+```
+
+**models.py:**
+```python
+PROMISE_PATH = Path("docs/change_promise.toml")
+
+@dataclass
+class Task:
+    title: str
+    task_id: str = field(default_factory=_generate_id)
+    goal: str = ""
+    success_criteria: str = ""
+    files_to_create: list[str] = field(default_factory=list)
+    files_to_modify: list[str] = field(default_factory=list)
+    files_to_remove: list[str] = field(default_factory=list)
+    expected_lines_added: int = 0
+    expected_lines_removed: int = 0
+    context_files: list[str] = field(default_factory=list)
+    doc_sections: list[str] = field(default_factory=list)
+    reference_skills: list[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
+    completed: bool = False
+    attempts: int = 0
+    max_attempts: int = 3
+
+@dataclass
+class Metadata:
+    base_commit: str = ""
+    created_at: str = ""
+
+@dataclass
+class Promise:
+    metadata: Metadata = field(default_factory=Metadata)
+    tasks: list[Task] = field(default_factory=list)
+```
+
 ## Design Patterns
 
 ### Tiered Compliance Evidence Pattern
@@ -116,7 +322,7 @@ When parallel subagents mark tasks complete simultaneously, the promise TOML fil
 The `cli.py` module acts as the single catch-all boundary for `ProthonError` and its subclasses. Library modules raise exceptions; the CLI catches them, presents a formatted message, and terminates with a non-zero exit code.
 
 ### Terminal Failure Pattern
-When a subagent reaches `max_attempts` for a task without passing verification and quality gates, it reports a terminal failure. The orchestrator records the failure and asks the user for a decision (skip, retry, or abort) to prevent infinite loops.
+When a subagent reaches `max_attempts` for a task without passing verification and quality gates, it reports a terminal failure. The orchestrator records the failure and asks the user for a decision (skip, retry, or abort) to prevent infinite loops. As a programmatic backstop independent of skill-prompt compliance, `record_attempt()` enforces the `max_attempts` limit by raising `MaxAttemptsExceeded` (a subclass of `PromiseError`) when `attempts >= max_attempts`, preventing the counter from incrementing further.
 
 ### Data-Driven Doc Consistency Failures
 Contradictions found by the `doc-harmonizer` are treated as data, not exceptions. They are presented as a structured report of `Conflict` objects, enabling interactive resolution and approval before any documents are amended.

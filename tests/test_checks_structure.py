@@ -153,11 +153,7 @@ def test_inheritance_deep_chain_passes(tmp_path: Path) -> None:
     """PASS for a deep chain: ProthonError -> Mid -> Leaf (Mid inherits ProthonError)."""
     exc_dir = tmp_path / "src" / "prothon"
     exc_dir.mkdir(parents=True)
-    # Note: check_inheritance only checks direct bases contain "ProthonError",
-    # so Mid must directly list ProthonError and Leaf must list ProthonError or Mid.
-    # Actually the check is: "ProthonError" not in bases -> violation.
-    # Leaf(Mid) does NOT have "ProthonError" in bases, so it would be flagged.
-    # This tests the actual behavior of the function.
+    # Transitive inheritance: LeafError -> MidError -> ProthonError should PASS.
     (exc_dir / "exceptions.py").write_text(
         "class ProthonError(Exception): pass\n"
         "class MidError(ProthonError): pass\n"
@@ -165,6 +161,4 @@ def test_inheritance_deep_chain_passes(tmp_path: Path) -> None:
     )
     results = check_inheritance(tmp_path)
     assert len(results) == 1
-    # LeafError doesn't directly list ProthonError — check verifies actual behavior
-    assert results[0].status == CheckStatus.FAIL
-    assert "LeafError" in results[0].rationale
+    assert results[0].status == CheckStatus.PASS

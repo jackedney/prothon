@@ -75,22 +75,24 @@ def _is_signature_only(code: str) -> bool:
     return True
 
 
+def _is_passthrough_stmt(node: ast.stmt) -> bool:
+    """Check if a statement is a pass, docstring, or ellipsis literal."""
+    if isinstance(node, ast.Pass):
+        return True
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and (isinstance(node.value.value, str) or node.value.value is Ellipsis)
+    )
+
+
 def _is_signature_node(node: ast.AST) -> bool:
     """Verify a node is a signature-only definition."""
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         return _is_func_signature(node)
     if isinstance(node, ast.ClassDef):
-        for n in node.body:
-            if isinstance(n, ast.Pass):
-                continue
-            if (
-                isinstance(n, ast.Expr)
-                and isinstance(n.value, ast.Constant)
-                and (isinstance(n.value.value, str) or n.value.value is Ellipsis)
-            ):
-                continue
-            if not _is_signature_node(n):
-                return False
+        return all(_is_passthrough_stmt(n) or _is_signature_node(n) for n in node.body)
+    if isinstance(node, ast.AnnAssign):
         return True
     return False
 

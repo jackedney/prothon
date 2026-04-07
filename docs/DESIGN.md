@@ -147,10 +147,11 @@ The compliance checker is a hybrid verification engine that maps requirements fr
 
 ### Refactor Workflow
 
-The refactor workflow facilitates the evolution of the project by identifying and resolving drift or opportunities for improvement.
+The refactor workflow facilitates the evolution of the project by identifying and resolving drift or opportunities for improvement. It operates in two waves to ensure documentation is improved before code is aligned to it.
 
-- **Refactor Wave:** Changes flow from **DESIGN -> PATTERNS -> CODE**. Architectural shifts must be documented before code is modified.
-- **Discovery Phase:** Scans the codebase and docs for drift and proactive optimization opportunities (e.g., improving patterns or decisions based on current project context).
+- **Wave 0 — Documentation Quality:** Before examining code drift, the workflow evaluates whether DESIGN.md and PATTERNS.md are still optimal given how the project has grown. This serves R40's mandate for "proactive optimization opportunities." Wave 0 uses a hybrid approach: programmatic evidence gathering (module metrics, pattern usage analysis, cross-module similarity detection) feeds into LLM-driven analysis that evaluates design decisions and pattern quality. Wave 0 produces only documentation changes (DESIGN → PATTERNS). After Wave 0 completes, the doc-harmonizer runs automatically to ensure cross-document consistency.
+- **Wave 1 — Code Drift:** The existing code-level discovery (doc hierarchy gaps, patterns compliance, large files, missing tests) runs against the *updated* documentation from Wave 0, ensuring code changes align with the improved design rather than the original.
+- **Refactor Wave:** Within each wave, changes flow from **DESIGN -> PATTERNS -> CODE**. Architectural shifts must be documented before code is modified.
 - **Execution Phase:** Orchestrates implementation tasks using self-correcting subagent loops to align the project with the updated documentation.
 
 ### Doc-Harmonizer (R24)
@@ -470,7 +471,7 @@ The compliance checker reads all three documentation levels and all source code,
 
 ### Refactor Contract
 
-The refactor subsystem discovers drift between documentation and code, then generates a promise file to orchestrate remediation. It operates in two phases: discovery and promise generation.
+The refactor subsystem discovers drift between documentation and code, then generates a promise file to orchestrate remediation. It operates in two waves: Wave 0 (documentation quality) and Wave 1 (code drift), each with discovery and promise generation phases.
 
 **DriftFinding data model:**
 
@@ -478,23 +479,44 @@ The refactor subsystem discovers drift between documentation and code, then gene
 |-------|------|-------------|
 | `title` | `str` | Short identifier for the finding (e.g. "Missing SPEC.md", "Large file: commands.py") |
 | `rationale` | `str` | Explanation of why this finding matters and what should change |
+| `category` | `DriftCategory` | Enum identifying the drift category — one of the values from the drift categories table below |
+| `severity` | `Severity` | Enum for impact level: `HIGH`, `MEDIUM`, or `LOW` |
 | `doc_sections` | `list[str]` | Documentation files or sections relevant to the finding (empty if code-only) |
 | `files_affected` | `list[Path]` | Filesystem paths impacted by the finding (used to populate promise task file lists) |
+| `evidence` | `list[str]` | Specific metrics, file:line references, or data points supporting the finding |
 
 **Drift categories:**
 
-The discovery phase checks four categories of drift:
+The discovery phase checks six categories of drift across two waves:
 
-| Category | What it detects | Example finding |
-|----------|----------------|-----------------|
-| Doc hierarchy gaps | Missing core documentation files in the SPEC → DESIGN → PATTERNS chain | "Missing PATTERNS.md" when DESIGN.md exists |
-| Patterns compliance (R25-R26) | PATTERNS.md formatting violations detected by `check_patterns_doc()` | Code blocks containing implementation logic instead of signatures |
-| Large files (>500 lines) | Source files in `src/` exceeding 500 lines | "Large file: commands.py" with 423-line rationale |
-| Missing test coverage | Source modules with testable logic that lack corresponding test files | "Missing tests for refactor.py" when no `test_refactor*.py` exists |
+| Wave | Category | What it detects | Example finding |
+|------|----------|----------------|-----------------|
+| 0 | `design_quality` | Design decisions that have become suboptimal as the project grew — decision interactions, outgrown module boundaries, missing abstractions, stale technology choices | "commands.py hub pattern has outgrown flat-module design" |
+| 0 | `pattern_quality` | Patterns that could be improved holistically — uncodified recurring patterns, inconsistently applicable conventions, over-specific patterns, cross-module logic duplication | "File I/O guard pattern used in 6 modules but not codified" |
+| 1 | `doc_hierarchy` | Missing core documentation files in the SPEC → DESIGN → PATTERNS chain | "Missing PATTERNS.md" when DESIGN.md exists |
+| 1 | `patterns_compliance` | PATTERNS.md formatting violations detected by `check_patterns_doc()` | Code blocks containing implementation logic instead of signatures |
+| 1 | `large_files` | Source files in `src/` exceeding 500 lines | "Large file: commands.py" with line count rationale |
+| 1 | `missing_tests` | Source modules with testable logic that lack corresponding test files | "Missing tests for refactor.py" when no `test_refactor*.py` exists |
 
-**Discovery specification:**
+**Wave 0 evidence gathering:**
 
-`discover_drift(root: Path) -> list[DriftFinding]` — Scans the project at `root` and returns all findings across all four drift categories. Each category checker runs independently and returns zero or more findings. The function concatenates all results in category order (doc hierarchy, patterns compliance, large files, missing tests).
+Wave 0 findings are LLM-driven but grounded in programmatic evidence. Three evidence-gathering functions provide structured data for the agent to reason over:
+
+`collect_module_metrics(root: Path) -> list[ModuleMetrics]` — For each Python module under `src/`, collects: line count, public function count, import count (both inbound and outbound). Returns a list of `ModuleMetrics` dataclasses. This surfaces modules that have outgrown their design boundary or become coupling hubs.
+
+`collect_pattern_usage(root: Path) -> list[PatternOccurrence]` — AST scan across all modules under `src/` for recurring structural patterns: try/except guards around file I/O, check-then-act conditionals, path existence checks before reads, and similar shapes. Returns occurrences grouped by pattern type. This surfaces candidates for uncodified patterns.
+
+`collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]` — Identifies public functions across different modules with similar signatures (parameter names and types overlap above a threshold). Returns groups of similar functions. This surfaces logic duplication candidates.
+
+The agent receives these metrics alongside the full documentation and produces `design_quality` and `pattern_quality` findings. SPEC.md is read for context but never modified.
+
+**Wave 0 cascade:**
+
+After Wave 0 tasks (documentation improvements) are executed and committed, the doc-harmonizer runs automatically to ensure DESIGN↔PATTERNS consistency. Only then does Wave 1 discovery run, ensuring code-level findings reference the improved documentation rather than the original.
+
+**Wave 1 discovery specification:**
+
+`discover_drift(root: Path) -> list[DriftFinding]` — Scans the project at `root` and returns all findings across the four Wave 1 drift categories. Each category checker runs independently and returns zero or more findings. The function concatenates all results in category order (doc hierarchy, patterns compliance, large files, missing tests). All returned findings have their `category` field set to the corresponding category identifier and `severity` set based on the checker's assessment.
 
 Testable logic detection uses AST analysis to skip modules containing only constants, type aliases, trivial pass-through functions, data classes without methods, and abstract/protocol classes. Test file matching supports `test_<module>.py`, `test_*_<module>.py`, and `*_<module>_test.py` naming conventions.
 

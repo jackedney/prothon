@@ -4,7 +4,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from prothon.refactor import (
+    DriftCategory,
     DriftFinding,
+    Severity,
     _check_large_files,
     _check_missing_tests,
     _check_patterns_compliance,
@@ -246,3 +248,22 @@ def test_discover_drift_fully_compliant(tmp_path: Path):
 
     findings = discover_drift(tmp_path)
     assert findings == []
+
+
+def test_checkers_set_category_and_severity(tmp_path: Path):
+    """Verify that existing drift checkers populate category and severity enums."""
+    # Missing docs → doc_hierarchy, high
+    findings = discover_drift(tmp_path)
+    doc_finding = next(f for f in findings if f.title == "Missing SPEC.md")
+    assert doc_finding.category == DriftCategory.DOC_HIERARCHY
+    assert doc_finding.severity == Severity.HIGH
+
+    # Large file → large_files, medium
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "big.py").write_text("x = 1\n" * 501)
+    large_findings = _check_large_files(tmp_path)
+    assert len(large_findings) == 1
+    assert large_findings[0].category == DriftCategory.LARGE_FILES
+    assert large_findings[0].severity == Severity.MEDIUM
+    assert len(large_findings[0].evidence) == 1

@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 
 from prothon.compliance import CheckStatus as ComplianceStatus
@@ -11,14 +12,72 @@ from prothon.git import rev_parse_head
 from prothon.models import Metadata, Promise, Task
 
 
+class DriftCategory(Enum):
+    """Categories of drift detected by the refactor discovery phase."""
+
+    DESIGN_QUALITY = "design_quality"
+    PATTERN_QUALITY = "pattern_quality"
+    DOC_HIERARCHY = "doc_hierarchy"
+    PATTERNS_COMPLIANCE = "patterns_compliance"
+    LARGE_FILES = "large_files"
+    MISSING_TESTS = "missing_tests"
+
+
+class Severity(Enum):
+    """Impact level of a drift finding."""
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class PatternType(Enum):
+    """Types of recurring structural patterns detected across modules."""
+
+    TRY_EXCEPT_FILE_IO = "try_except_file_io"
+    PATH_EXISTS_GUARD = "path_exists_guard"
+
+
 @dataclass
 class DriftFinding:
     """Represents a single discovery of drift or an optimization opportunity."""
 
     title: str
     rationale: str
+    category: DriftCategory = DriftCategory.DOC_HIERARCHY
+    severity: Severity = Severity.MEDIUM
     doc_sections: list[str] = field(default_factory=list)
     files_affected: list[Path] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ModuleMetrics:
+    """Metrics for a single Python module used as evidence for Wave 0 analysis."""
+
+    path: Path
+    line_count: int
+    public_function_count: int
+    import_count: int
+    imported_by_count: int
+
+
+@dataclass
+class PatternOccurrence:
+    """A recurring structural pattern found across modules."""
+
+    pattern_type: PatternType
+    file_path: Path
+    line_number: int
+
+
+@dataclass
+class SimilarityGroup:
+    """A group of public functions with overlapping signatures across modules."""
+
+    function_name: str
+    file_path: Path
+    parameters: list[str]
 
 
 def discover_drift(root: Path) -> list[DriftFinding]:
@@ -38,6 +97,207 @@ def discover_drift(root: Path) -> list[DriftFinding]:
     return findings
 
 
+def collect_module_metrics(root: Path) -> list[ModuleMetrics]:
+    """Collect per-module metrics as evidence for Wave 0 doc quality analysis.
+
+    For each Python module under src/, collects line count, public function count,
+    import count (outbound), and imported-by count (inbound from other modules
+    in the same src/ tree).
+    """
+    src_dir = root / "src"
+    if not src_dir.exists():
+        return []
+
+    modules: dict[Path, ModuleMetrics] = {}
+    for py_file in src_dir.rglob("*.py"):
+        if py_file.name == "__init__.py":
+            continue
+        metrics = _parse_module_metrics(py_file)
+        if metrics is not None:
+            modules[py_file] = metrics
+
+    _count_inbound_imports(modules)
+    return list(modules.values())
+
+
+def _parse_module_metrics(py_file: Path) -> ModuleMetrics | None:
+    """Parse a single module and return its metrics, or None on failure."""
+    try:
+        source = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return None
+
+    lines = source.splitlines()
+    public_funcs = sum(
+        1
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        and not node.name.startswith("_")
+    )
+    import_count = sum(
+        1 for node in ast.walk(tree) if isinstance(node, ast.Import | ast.ImportFrom)
+    )
+    return ModuleMetrics(
+        path=py_file,
+        line_count=len(lines),
+        public_function_count=public_funcs,
+        import_count=import_count,
+        imported_by_count=0,
+    )
+
+
+def _count_inbound_imports(modules: dict[Path, ModuleMetrics]) -> None:
+    """Increment imported_by_count for each module referenced by other modules."""
+    module_stems = {p.stem: p for p in modules}
+    for py_file in modules:
+        for target in _extract_import_targets(py_file, module_stems):
+            if target != py_file and target in modules:
+                modules[target].imported_by_count += 1
+
+
+def _extract_import_targets(py_file: Path, module_stems: dict[str, Path]) -> list[Path]:
+    """Extract paths of modules imported by py_file."""
+    try:
+        tree = ast.parse(py_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return []
+    targets: list[Path] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for part in node.module.split("."):
+                target = module_stems.get(part)
+                if target:
+                    targets.append(target)
+    return targets
+
+
+def collect_pattern_usage(root: Path) -> list[PatternOccurrence]:
+    """Scan src/ modules for recurring structural patterns.
+
+    Detects: try/except around file I/O, path-existence checks before reads,
+    check-then-act conditionals (if not x.exists(): return/raise).
+    Returns occurrences grouped by pattern type.
+    """
+    src_dir = root / "src"
+    if not src_dir.exists():
+        return []
+
+    occurrences: list[PatternOccurrence] = []
+    for py_file in src_dir.rglob("*.py"):
+        if py_file.name == "__init__.py":
+            continue
+        try:
+            source = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(source)
+        except (OSError, UnicodeDecodeError, SyntaxError):
+            continue
+
+        occurrences.extend(_scan_file_patterns(tree, py_file))
+
+    return occurrences
+
+
+def _scan_file_patterns(tree: ast.AST, py_file: Path) -> list[PatternOccurrence]:
+    """Extract pattern occurrences from a single parsed module."""
+    results: list[PatternOccurrence] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Try):
+            for body_node in ast.walk(node):
+                if isinstance(body_node, ast.Call) and _is_file_io_call(body_node):
+                    results.append(
+                        PatternOccurrence(
+                            pattern_type=PatternType.TRY_EXCEPT_FILE_IO,
+                            file_path=py_file,
+                            line_number=node.lineno,
+                        )
+                    )
+                    break
+
+        if isinstance(node, ast.If) and _is_path_exists_check(node.test):
+            results.append(
+                PatternOccurrence(
+                    pattern_type=PatternType.PATH_EXISTS_GUARD,
+                    file_path=py_file,
+                    line_number=node.lineno,
+                )
+            )
+    return results
+
+
+def _is_file_io_call(node: ast.Call) -> bool:
+    """Check if a call node looks like file I/O (read_text, write_text, open)."""
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr in (
+            "read_text",
+            "write_text",
+            "read_bytes",
+            "write_bytes",
+        )
+    if isinstance(node.func, ast.Name):
+        return node.func.id == "open"
+    return False
+
+
+def _is_path_exists_check(node: ast.expr) -> bool:
+    """Check if an expression is a path.exists() or not path.exists() check."""
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return _is_path_exists_check(node.operand)
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        return node.func.attr in ("exists", "is_file", "is_dir")
+    return False
+
+
+def collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]:
+    """Identify public functions across different modules with overlapping signatures.
+
+    Collects all public function signatures (name + parameter names) from src/
+    modules and groups functions that share a name across different files.
+    """
+    src_dir = root / "src"
+    if not src_dir.exists():
+        return []
+
+    func_map: dict[str, list[SimilarityGroup]] = {}
+    for py_file in src_dir.rglob("*.py"):
+        if py_file.name == "__init__.py":
+            continue
+        for entry in _extract_public_signatures(py_file):
+            func_map.setdefault(entry.function_name, []).append(entry)
+
+    # Only return functions that appear in multiple files
+    results: list[SimilarityGroup] = []
+    for entries in func_map.values():
+        files = {e.file_path for e in entries}
+        if len(files) > 1:
+            results.extend(entries)
+    return results
+
+
+def _extract_public_signatures(py_file: Path) -> list[SimilarityGroup]:
+    """Extract public function signatures from a single module."""
+    try:
+        source = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return []
+
+    entries: list[SimilarityGroup] = []
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            if node.name.startswith("_"):
+                continue
+            params = [arg.arg for arg in node.args.args if arg.arg != "self"]
+            entries.append(
+                SimilarityGroup(
+                    function_name=node.name,
+                    file_path=py_file,
+                    parameters=params,
+                )
+            )
+    return entries
+
+
 def _check_docs_hierarchy(root: Path) -> list[DriftFinding]:
     """Check for missing core documentation files."""
     findings = []
@@ -52,6 +312,8 @@ def _check_docs_hierarchy(root: Path) -> list[DriftFinding]:
                 title="Missing SPEC.md",
                 rationale="SPEC.md is the highest authority in the prothon workflow. "
                 "It must exist to define system requirements.",
+                category=DriftCategory.DOC_HIERARCHY,
+                severity=Severity.HIGH,
                 doc_sections=["SPEC.md"],
                 files_affected=[spec_path],
             )
@@ -63,6 +325,8 @@ def _check_docs_hierarchy(root: Path) -> list[DriftFinding]:
                 title="Missing DESIGN.md",
                 rationale="DESIGN.md defines the architecture and must exist once "
                 "requirements are set in SPEC.md.",
+                category=DriftCategory.DOC_HIERARCHY,
+                severity=Severity.HIGH,
                 doc_sections=["DESIGN.md"],
                 files_affected=[design_path],
             )
@@ -74,6 +338,8 @@ def _check_docs_hierarchy(root: Path) -> list[DriftFinding]:
                 title="Missing PATTERNS.md",
                 rationale="PATTERNS.md defines code conventions and should exist "
                 "once architecture is documented in DESIGN.md.",
+                category=DriftCategory.DOC_HIERARCHY,
+                severity=Severity.HIGH,
                 doc_sections=["PATTERNS.md"],
                 files_affected=[patterns_path],
             )
@@ -95,6 +361,8 @@ def _check_patterns_compliance(root: Path) -> list[DriftFinding]:
                 DriftFinding(
                     title=f"PATTERNS.md drift: {res.requirement.requirement_id or 'Formatting'}",
                     rationale=res.rationale or res.requirement.statement,
+                    category=DriftCategory.PATTERNS_COMPLIANCE,
+                    severity=Severity.LOW,
                     doc_sections=["PATTERNS.md"],
                     files_affected=[patterns_path],
                 )
@@ -119,7 +387,10 @@ def _check_large_files(root: Path) -> list[DriftFinding]:
                         rationale=f"{py_file.relative_to(root)} has {len(lines)} "
                         "lines. Consider refactoring into smaller modules "
                         "to maintain navigability.",
+                        category=DriftCategory.LARGE_FILES,
+                        severity=Severity.MEDIUM,
                         files_affected=[py_file],
+                        evidence=[f"{py_file.relative_to(root)}: {len(lines)} lines"],
                     )
                 )
         except (OSError, UnicodeDecodeError):
@@ -155,6 +426,8 @@ def _check_missing_tests(root: Path) -> list[DriftFinding]:
                     title=f"Missing tests for {py_file.name}",
                     rationale=f"No corresponding test file found for {rel}. "
                     "This module contains functions/classes with logic that should be tested.",
+                    category=DriftCategory.MISSING_TESTS,
+                    severity=Severity.MEDIUM,
                     files_affected=[tests_dir],
                 )
             )

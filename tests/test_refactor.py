@@ -12,9 +12,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 from prothon.refactor import (
+    DriftCategory,
     DriftFinding,
+    PatternType,
+    Severity,
     _has_matching_test_file,
     _has_testable_logic,
+    collect_cross_module_similarities,
+    collect_module_metrics,
+    collect_pattern_usage,
     generate_refactor_promise,
 )
 
@@ -234,3 +240,170 @@ def test_generate_promise_multiple_findings(tmp_path: Path):
         "Finding 1",
         "Finding 2",
     ]
+
+
+# ---------------------------------------------------------------------------
+# DriftFinding — new enum fields
+# ---------------------------------------------------------------------------
+
+
+def test_drift_finding_default_category_and_severity():
+    """DriftFinding defaults to DOC_HIERARCHY category and MEDIUM severity."""
+    finding = DriftFinding(title="test", rationale="reason")
+    assert finding.category == DriftCategory.DOC_HIERARCHY
+    assert finding.severity == Severity.MEDIUM
+    assert finding.evidence == []
+
+
+def test_drift_finding_with_explicit_enums():
+    """DriftFinding accepts explicit enum values for category and severity."""
+    finding = DriftFinding(
+        title="test",
+        rationale="reason",
+        category=DriftCategory.LARGE_FILES,
+        severity=Severity.HIGH,
+        evidence=["src/big.py: 600 lines"],
+    )
+    assert finding.category == DriftCategory.LARGE_FILES
+    assert finding.severity == Severity.HIGH
+    assert finding.evidence == ["src/big.py: 600 lines"]
+
+
+# ---------------------------------------------------------------------------
+# collect_module_metrics
+# ---------------------------------------------------------------------------
+
+
+def test_collect_module_metrics_basic(tmp_path: Path):
+    """Collects line count, function count, and import count per module."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "core.py").write_text(
+        "import os\nimport sys\n\ndef public_func():\n    pass\n\n"
+        "def another():\n    pass\n\n"
+        "def _private():\n    pass\n"
+    )
+
+    metrics = collect_module_metrics(tmp_path)
+    assert len(metrics) == 1
+    m = metrics[0]
+    assert m.path == src / "core.py"
+    assert m.public_function_count == 2  # public_func, another (not _private)
+    assert m.import_count == 2  # os, sys
+
+
+def test_collect_module_metrics_no_src(tmp_path: Path):
+    """Returns empty list when src/ doesn't exist."""
+    assert collect_module_metrics(tmp_path) == []
+
+
+def test_collect_module_metrics_imported_by_count(tmp_path: Path):
+    """Counts how many other modules import a given module."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "utils.py").write_text("def helper():\n    pass\n")
+    (src / "a.py").write_text("from pkg.utils import helper\n\ndef do_a():\n    pass\n")
+    (src / "b.py").write_text("from pkg.utils import helper\n\ndef do_b():\n    pass\n")
+
+    metrics = collect_module_metrics(tmp_path)
+    utils_metric = next(m for m in metrics if m.path.name == "utils.py")
+    assert utils_metric.imported_by_count == 2
+
+
+# ---------------------------------------------------------------------------
+# collect_pattern_usage
+# ---------------------------------------------------------------------------
+
+
+def test_collect_pattern_usage_try_except_file_io(tmp_path: Path):
+    """Detects try/except around file I/O calls."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "reader.py").write_text(
+        "from pathlib import Path\n\n"
+        "def read_config(p: Path):\n"
+        "    try:\n"
+        "        return p.read_text()\n"
+        "    except OSError:\n"
+        "        return ''\n"
+    )
+
+    occurrences = collect_pattern_usage(tmp_path)
+    assert len(occurrences) == 1
+    assert occurrences[0].pattern_type == PatternType.TRY_EXCEPT_FILE_IO
+    assert occurrences[0].file_path == src / "reader.py"
+
+
+def test_collect_pattern_usage_path_exists_guard(tmp_path: Path):
+    """Detects path.exists() guard patterns."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "loader.py").write_text(
+        "from pathlib import Path\n\n"
+        "def load(p: Path):\n"
+        "    if not p.exists():\n"
+        "        return None\n"
+        "    return p.read_text()\n"
+    )
+
+    occurrences = collect_pattern_usage(tmp_path)
+    assert any(o.pattern_type == PatternType.PATH_EXISTS_GUARD for o in occurrences)
+
+
+def test_collect_pattern_usage_no_src(tmp_path: Path):
+    """Returns empty list when src/ doesn't exist."""
+    assert collect_pattern_usage(tmp_path) == []
+
+
+# ---------------------------------------------------------------------------
+# collect_cross_module_similarities
+# ---------------------------------------------------------------------------
+
+
+def test_collect_cross_module_similarities_shared_name(tmp_path: Path):
+    """Identifies public functions with the same name across different modules."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "a.py").write_text("def validate(data, strict=False):\n    pass\n")
+    (src / "b.py").write_text("def validate(data, mode='fast'):\n    pass\n")
+
+    groups = collect_cross_module_similarities(tmp_path)
+    assert len(groups) == 2  # One entry per function, both named "validate"
+    names = {g.function_name for g in groups}
+    assert names == {"validate"}
+    files = {g.file_path for g in groups}
+    assert files == {src / "a.py", src / "b.py"}
+
+
+def test_collect_cross_module_similarities_private_excluded(tmp_path: Path):
+    """Private functions are excluded from similarity analysis."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "a.py").write_text("def _helper(x):\n    pass\n")
+    (src / "b.py").write_text("def _helper(x):\n    pass\n")
+
+    groups = collect_cross_module_similarities(tmp_path)
+    assert groups == []
+
+
+def test_collect_cross_module_similarities_unique_names(tmp_path: Path):
+    """Functions with unique names across modules are not returned."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "a.py").write_text("def func_a():\n    pass\n")
+    (src / "b.py").write_text("def func_b():\n    pass\n")
+
+    groups = collect_cross_module_similarities(tmp_path)
+    assert groups == []
+
+
+def test_collect_cross_module_similarities_no_src(tmp_path: Path):
+    """Returns empty list when src/ doesn't exist."""
+    assert collect_cross_module_similarities(tmp_path) == []

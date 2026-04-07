@@ -27,37 +27,80 @@ You are **advisory-first**. You do NOT modify docs or code autonomously. You:
 1. **Read all docs** — Read `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` in full.
 2. **Ask for focus** — Present the following menu to the user:
    > Where would you like to focus?
-   > 1. Documentation hierarchy (SPEC > DESIGN > PATTERNS exists and aligns)
-   > 2. Pattern compliance (prose rationale, signature-only code blocks)
-   > 3. Code health (large files > 500 lines, missing tests)
-   > 4. Architectural drift (code diverging from DESIGN/PATTERNS)
-   > 5. Full scan (all of the above)
+   > 1. Documentation quality (are design decisions and patterns still optimal?)
+   > 2. Documentation hierarchy (SPEC > DESIGN > PATTERNS exists and aligns)
+   > 3. Pattern compliance (prose rationale, signature-only code blocks)
+   > 4. Code health (large files > 500 lines, missing tests)
+   > 5. Architectural drift (code diverging from DESIGN/PATTERNS)
+   > 6. Full scan (docs first, then code — all of the above)
 
-3. **Scan and Analyze** — Based on the selection, perform analysis across the doc hierarchy and codebase:
+3. **Scan and Analyze** — Based on the selection, perform analysis. Options 1 and 6 trigger Wave 0 (doc quality) before Wave 1 (code drift). All other options trigger Wave 1 only.
+
+   **Wave 0 — Documentation Quality (options 1, 6):**
+
+   First, gather programmatic evidence by running these Python functions:
+   - `collect_module_metrics(root)` — line counts, function counts, import counts per module
+   - `collect_pattern_usage(root)` — recurring structural patterns (try/except guards, check-then-act, etc.)
+   - `collect_cross_module_similarities(root)` — functions with overlapping signatures across modules
+
+   Then, using the evidence alongside the full documentation, evaluate:
+
+   - **DESIGN.md quality:**
+     - Do any Key Decisions interact or conflict now that the project has grown?
+     - Have any modules outgrown their original design boundary? (Use module metrics as evidence.)
+     - Are there recurring code patterns that suggest an architectural concept DESIGN.md doesn't name? (Use pattern usage data.)
+     - Are any Technology Choices no longer the best fit given actual usage?
+
+   - **PATTERNS.md quality:**
+     - Are there recurring code shapes across modules that should be codified as a shared convention? (Use pattern usage and cross-module similarity data.)
+     - Do any documented patterns work for simple cases but break for complex ones?
+     - What conventions has the codebase adopted organically that PATTERNS.md doesn't document?
+     - Could any patterns be generalized to cover more cases, reducing special-case logic?
+     - Are there functions doing essentially the same thing in different modules? (Use similarity data.)
+
+   IMPORTANT: SPEC.md is read for context but NEVER modified. Wave 0 only produces DESIGN.md and PATTERNS.md changes.
+
+   **Wave 1 — Code Drift (options 2–6):**
    - **Doc Hierarchy (R24):** Verify `docs/` contains SPEC, DESIGN, and PATTERNS. Check for contradictions using the authority hierarchy (SPEC > DESIGN > PATTERNS).
    - **Pattern Compliance (R25, R26):** Verify `docs/PATTERNS.md` uses natural language for rationale and limits code examples to signatures only.
    - **Code Health:** Scan `src/` for large modules (> 500 lines) that need splitting. Scan `tests/` for missing test coverage of `src/` modules.
    - **Architectural Drift:** Compare implementation against DESIGN and PATTERNS to find where the code has evolved away from documented conventions.
 
-4. **Present Findings** — Present a menu of findings grouped by the **Refactor Wave** levels with impact (High/Medium/Low).
+4. **Present Findings** — Present findings grouped by wave, then by Refactor Wave level, with severity.
    Example format:
    ```text
-   Findings:
+   Wave 0 — Documentation Quality:
      [DESIGN]
-       [D1] Module X could use strategy pattern to better satisfy R12 (high impact)
-       [D2] Architecture doesn't account for constraint C3 (high impact)
+       [D1] commands.py hub pattern has outgrown flat-module design (high)
+            Evidence: 423 lines, 8 direct importers, acts as orchestration layer
+       [D2] Promise and refactor systems share verification patterns
+            but are designed independently (medium)
+            Evidence: promise_verify.py and refactor.py both implement check→report loops
      [PATTERNS]
-       [P1] Error handling pattern doesn't match current architecture (medium impact)
-       [P2] PATTERNS.md has implementation logic in code blocks (low impact)
+       [P1] File I/O guard pattern used in 6 modules but not codified (medium)
+            Evidence: refactor.py:107, compliance.py:42, promise.py:88, ...
+       [P2] Error handling convention inconsistent between layers (low)
+            Evidence: cli.py catches ProthonError, domain modules raise mixed types
+
+   Wave 1 — Code Drift:
      [CODE]
-       [C1] auth.py diverges from documented protocol pattern (low impact)
-       [C2] cli.py is > 500 lines and should be split (medium impact)
-       [C3] scaffold.py is missing corresponding tests (medium impact)
+       [C1] cli.py is > 500 lines and should be split (medium)
+       [C2] scaffold.py is missing corresponding tests (medium)
    ```
 
-5. **User Selection** — Ask the user to select which items to address (e.g., `[D1, P2, C3]`).
+5. **User Selection** — Ask the user to select which items to address (e.g., `[D1, P1, C2]`).
 
 ## Phase 2: Execution (Refactor Wave)
+
+### Wave 0 Execution (if doc quality items were selected)
+
+Execute Wave 0 items first. These produce only DESIGN.md and PATTERNS.md changes:
+1. Generate a promise with Wave 0 tasks (DESIGN tasks first, then PATTERNS tasks).
+2. Execute tasks using the standard subagent loop (see below).
+3. After all Wave 0 tasks complete, run the **doc-harmonizer** automatically to ensure DESIGN↔PATTERNS consistency.
+4. Then proceed to Wave 1 execution below.
+
+### Wave 1 Execution
 
 For the selected items, follow the **DESIGN -> PATTERNS -> CODE** Wave:
 

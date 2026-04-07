@@ -169,7 +169,7 @@ def _build_fqn_map(
     for py_file in modules:
         rel = py_file.relative_to(src_dir)
         # e.g. prothon/refactor.py -> prothon.refactor
-        fqn = str(rel.with_suffix("")).replace("/", ".")
+        fqn = ".".join(rel.with_suffix("").parts)
         fqn_map[fqn] = py_file
     return fqn_map
 
@@ -189,26 +189,27 @@ def _extract_import_targets(
 
     targets: set[Path] = set()
     for node in ast.walk(tree):
-        resolved = _resolve_import_fqn(node, importer_pkg)
-        if resolved is None:
-            continue
-        target = fqn_to_path.get(resolved)
-        if target and target != py_file:
-            targets.add(target)
-            continue
+        candidates = _resolve_import_fqns(node, importer_pkg)
+        for resolved in candidates:
+            target = fqn_to_path.get(resolved)
+            if target and target != py_file:
+                targets.add(target)
         # "from pkg import mod" — try appending each imported name as a submodule
-        if isinstance(node, ast.ImportFrom):
-            _resolve_submodule_imports(node, resolved, fqn_to_path, py_file, targets)
+        if isinstance(node, ast.ImportFrom) and candidates:
+            _resolve_submodule_imports(
+                node, candidates[0], fqn_to_path, py_file, targets
+            )
     return targets
 
 
-def _resolve_import_fqn(node: ast.AST, importer_pkg: list[str]) -> str | None:
-    """Resolve an import node to a fully-qualified module name, or None."""
+def _resolve_import_fqns(node: ast.AST, importer_pkg: list[str]) -> list[str]:
+    """Resolve an import node to candidate fully-qualified module names."""
     if isinstance(node, ast.Import):
-        return node.names[0].name if node.names else None
+        return [alias.name for alias in node.names]
     if isinstance(node, ast.ImportFrom):
-        return _resolve_import_from(node, importer_pkg)
-    return None
+        result = _resolve_import_from(node, importer_pkg)
+        return [result] if result else []
+    return []
 
 
 def _resolve_import_from(node: ast.ImportFrom, importer_pkg: list[str]) -> str | None:
@@ -280,7 +281,11 @@ def _scan_file_patterns(tree: ast.AST, py_file: Path) -> list[PatternOccurrence]
                     )
                     break
 
-        if isinstance(node, ast.If) and _is_path_exists_check(node.test):
+        if (
+            isinstance(node, ast.If)
+            and _is_path_exists_check(node.test)
+            and _has_guard_action(node)
+        ):
             results.append(
                 PatternOccurrence(
                     pattern_type=PatternType.PATH_EXISTS_GUARD,
@@ -311,6 +316,14 @@ def _is_path_exists_check(node: ast.expr) -> bool:
         return _is_path_exists_check(node.operand)
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
         return node.func.attr in ("exists", "is_file", "is_dir")
+    return False
+
+
+def _has_guard_action(node: ast.If) -> bool:
+    """Check if an if-node's body contains an immediate guard (return/raise/break/continue)."""
+    for stmt in node.body:
+        if isinstance(stmt, ast.Return | ast.Raise | ast.Continue | ast.Break):
+            return True
     return False
 
 

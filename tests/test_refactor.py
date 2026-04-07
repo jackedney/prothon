@@ -379,6 +379,22 @@ def test_collect_module_metrics_absolute_import(tmp_path: Path):
     assert utils_metric.imported_by_count == 1
 
 
+def test_collect_module_metrics_multi_alias_import(tmp_path: Path):
+    """'import pkg.a, pkg.b' resolves both targets."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "a.py").write_text("def func_a():\n    pass\n")
+    (src / "b.py").write_text("def func_b():\n    pass\n")
+    (src / "core.py").write_text("import pkg.a, pkg.b\n\ndef do_core():\n    pass\n")
+
+    metrics = collect_module_metrics(tmp_path)
+    a_metric = next(m for m in metrics if m.path.name == "a.py")
+    b_metric = next(m for m in metrics if m.path.name == "b.py")
+    assert a_metric.imported_by_count == 1
+    assert b_metric.imported_by_count == 1
+
+
 def test_collect_module_metrics_from_pkg_import_mod(tmp_path: Path):
     """'from pkg import mod' resolves to pkg.mod when mod is a module."""
     src = tmp_path / "src" / "pkg"
@@ -432,6 +448,23 @@ def test_collect_pattern_usage_path_exists_guard(tmp_path: Path):
 
     occurrences = collect_pattern_usage(tmp_path)
     assert any(o.pattern_type == PatternType.PATH_EXISTS_GUARD for o in occurrences)
+
+
+def test_collect_pattern_usage_exists_check_without_guard_not_detected(tmp_path: Path):
+    """path.exists() checks without a guard action (return/raise) are not flagged."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "checker.py").write_text(
+        "from pathlib import Path\n\n"
+        "def check(p: Path):\n"
+        "    if p.exists():\n"
+        "        print('found')\n"
+        "    return True\n"
+    )
+
+    occurrences = collect_pattern_usage(tmp_path)
+    assert not any(o.pattern_type == PatternType.PATH_EXISTS_GUARD for o in occurrences)
 
 
 def test_collect_pattern_usage_no_src(tmp_path: Path):

@@ -116,7 +116,7 @@ def collect_module_metrics(root: Path) -> list[ModuleMetrics]:
         if metrics is not None:
             modules[py_file] = metrics
 
-    _count_inbound_imports(modules)
+    _count_inbound_imports(modules, src_dir)
     return list(modules.values())
 
 
@@ -147,29 +147,76 @@ def _parse_module_metrics(py_file: Path) -> ModuleMetrics | None:
     )
 
 
-def _count_inbound_imports(modules: dict[Path, ModuleMetrics]) -> None:
-    """Increment imported_by_count for each module referenced by other modules."""
-    module_stems = {p.stem: p for p in modules}
+def _count_inbound_imports(modules: dict[Path, ModuleMetrics], src_dir: Path) -> None:
+    """Increment imported_by_count for each module referenced by other modules.
+
+    Uses fully-qualified module names derived from file paths relative to src_dir
+    to avoid stem-collision misattribution. Counts unique importers per target
+    (not per import statement).
+    """
+    fqn_to_path = _build_fqn_map(modules, src_dir)
     for py_file in modules:
-        for target in _extract_import_targets(py_file, module_stems):
-            if target != py_file and target in modules:
-                modules[target].imported_by_count += 1
+        targets = _extract_import_targets(py_file, src_dir, fqn_to_path)
+        for target in targets:
+            modules[target].imported_by_count += 1
 
 
-def _extract_import_targets(py_file: Path, module_stems: dict[str, Path]) -> list[Path]:
-    """Extract paths of modules imported by py_file."""
+def _build_fqn_map(
+    modules: dict[Path, ModuleMetrics], src_dir: Path
+) -> dict[str, Path]:
+    """Build a mapping from fully-qualified module name to file path."""
+    fqn_map: dict[str, Path] = {}
+    for py_file in modules:
+        rel = py_file.relative_to(src_dir)
+        # e.g. prothon/refactor.py -> prothon.refactor
+        fqn = str(rel.with_suffix("")).replace("/", ".")
+        fqn_map[fqn] = py_file
+    return fqn_map
+
+
+def _extract_import_targets(
+    py_file: Path, src_dir: Path, fqn_to_path: dict[str, Path]
+) -> set[Path]:
+    """Extract unique target module paths imported by py_file."""
     try:
         tree = ast.parse(py_file.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, SyntaxError):
-        return []
-    targets: list[Path] = []
+        return set()
+
+    rel = py_file.relative_to(src_dir)
+    importer_parts = list(rel.with_suffix("").parts)
+    importer_pkg = importer_parts[:-1]  # package path for relative import resolution
+
+    targets: set[Path] = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            for part in node.module.split("."):
-                target = module_stems.get(part)
-                if target:
-                    targets.append(target)
+        resolved = _resolve_import_fqn(node, importer_pkg)
+        if resolved is None:
+            continue
+        target = fqn_to_path.get(resolved)
+        if target and target != py_file:
+            targets.add(target)
     return targets
+
+
+def _resolve_import_fqn(node: ast.AST, importer_pkg: list[str]) -> str | None:
+    """Resolve an import node to a fully-qualified module name, or None."""
+    if isinstance(node, ast.Import):
+        return node.names[0].name if node.names else None
+    if isinstance(node, ast.ImportFrom):
+        return _resolve_import_from(node, importer_pkg)
+    return None
+
+
+def _resolve_import_from(node: ast.ImportFrom, importer_pkg: list[str]) -> str | None:
+    """Resolve an ImportFrom node, handling both absolute and relative imports."""
+    module = node.module or ""
+    if not node.level or node.level == 0:
+        return module or None
+    # Relative import: level=1 means current package, level=2 means parent, etc.
+    base_parts = importer_pkg[: len(importer_pkg) - (node.level - 1)]
+    if module:
+        return ".".join(base_parts + [module]) if base_parts else module
+    return ".".join(base_parts) if base_parts else None
 
 
 def collect_pattern_usage(root: Path) -> list[PatternOccurrence]:

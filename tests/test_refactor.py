@@ -312,6 +312,73 @@ def test_collect_module_metrics_imported_by_count(tmp_path: Path):
     assert utils_metric.imported_by_count == 2
 
 
+def test_collect_module_metrics_no_double_count_same_importer(tmp_path: Path):
+    """Multiple imports of the same module from one file count as one importer."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "utils.py").write_text("def helper():\n    pass\n\ndef other():\n    pass\n")
+    (src / "a.py").write_text(
+        "from pkg.utils import helper\nfrom pkg.utils import other\n\n"
+        "def do_a():\n    pass\n"
+    )
+
+    metrics = collect_module_metrics(tmp_path)
+    utils_metric = next(m for m in metrics if m.path.name == "utils.py")
+    assert utils_metric.imported_by_count == 1  # a.py counts once, not twice
+
+
+def test_collect_module_metrics_no_stem_collision(tmp_path: Path):
+    """Modules with the same stem in different packages are distinguished."""
+    src = tmp_path / "src"
+    pkg_a = src / "pkg_a"
+    pkg_b = src / "pkg_b"
+    pkg_a.mkdir(parents=True)
+    pkg_b.mkdir(parents=True)
+    (pkg_a / "__init__.py").write_text("")
+    (pkg_b / "__init__.py").write_text("")
+    (pkg_a / "utils.py").write_text("def a_helper():\n    pass\n")
+    (pkg_b / "utils.py").write_text("def b_helper():\n    pass\n")
+    # pkg_b/consumer.py imports pkg_a.utils — only pkg_a/utils should get the count
+    (pkg_b / "consumer.py").write_text(
+        "from pkg_a.utils import a_helper\n\ndef do_b():\n    pass\n"
+    )
+
+    metrics = collect_module_metrics(tmp_path)
+    a_utils = next(m for m in metrics if m.path == pkg_a / "utils.py")
+    b_utils = next(m for m in metrics if m.path == pkg_b / "utils.py")
+    assert a_utils.imported_by_count == 1
+    assert b_utils.imported_by_count == 0
+
+
+def test_collect_module_metrics_relative_import(tmp_path: Path):
+    """Relative imports are resolved correctly."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "utils.py").write_text("def helper():\n    pass\n")
+    (src / "core.py").write_text(
+        "from .utils import helper\n\ndef do_core():\n    pass\n"
+    )
+
+    metrics = collect_module_metrics(tmp_path)
+    utils_metric = next(m for m in metrics if m.path.name == "utils.py")
+    assert utils_metric.imported_by_count == 1
+
+
+def test_collect_module_metrics_absolute_import(tmp_path: Path):
+    """ast.Import (import pkg.utils) is handled."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "utils.py").write_text("def helper():\n    pass\n")
+    (src / "core.py").write_text("import pkg.utils\n\ndef do_core():\n    pass\n")
+
+    metrics = collect_module_metrics(tmp_path)
+    utils_metric = next(m for m in metrics if m.path.name == "utils.py")
+    assert utils_metric.imported_by_count == 1
+
+
 # ---------------------------------------------------------------------------
 # collect_pattern_usage
 # ---------------------------------------------------------------------------

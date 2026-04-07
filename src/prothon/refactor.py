@@ -242,9 +242,9 @@ def _resolve_submodule_imports(
 def collect_pattern_usage(root: Path) -> list[PatternOccurrence]:
     """Scan src/ modules for recurring structural patterns.
 
-    Detects: try/except around file I/O, path-existence checks before reads,
-    check-then-act conditionals (if not x.exists(): return/raise).
-    Returns occurrences grouped by pattern type.
+    Detects: try/except around file I/O, path-existence guard conditionals
+    (if not x.exists(): return/raise).
+    Returns a flat list of occurrences, each tagged with a pattern type.
     """
     src_dir = root / "src"
     if not src_dir.exists():
@@ -366,7 +366,9 @@ def _extract_public_signatures(py_file: Path) -> list[SimilarityGroup]:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             if node.name.startswith("_"):
                 continue
-            params = [arg.arg for arg in node.args.args if arg.arg != "self"]
+            params = [
+                arg.arg for arg in node.args.args if arg.arg not in {"self", "cls"}
+            ]
             entries.append(
                 SimilarityGroup(
                     function_name=node.name,

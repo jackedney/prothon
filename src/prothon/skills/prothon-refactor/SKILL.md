@@ -32,7 +32,7 @@ The CLI command (`prothon refactor`) requires all three docs (`SPEC.md`, `DESIGN
    > 4. Code health (large files > 500 lines, missing tests)
    > 5. Full scan (docs first, then code — all of the above)
 
-3. **Scan and Analyze** — Based on the selection, perform analysis. Options 1 and 5 trigger Wave 0 (doc quality) before Wave 1 (code drift). All other options trigger Wave 1 only.
+3. **Scan and Analyze** — Based on the selection, perform analysis. Option 1 runs Wave 0 only (documentation quality). Option 5 runs Wave 0 first, then Wave 1 (code drift). Options 2–4 run Wave 1 only.
 
    **Wave 0 — Documentation Quality (options 1, 5):**
 
@@ -58,7 +58,7 @@ The CLI command (`prothon refactor`) requires all three docs (`SPEC.md`, `DESIGN
 
    IMPORTANT: SPEC.md is read for context but NEVER modified. Wave 0 only produces DESIGN.md and PATTERNS.md changes.
 
-   **Wave 1 — Code Drift (options 2–5):**
+   **Wave 1 — Code Drift (options 2–4, 5):**
    - **Doc Hierarchy (R24):** Verify `docs/` contains SPEC, DESIGN, and PATTERNS. Check for contradictions using the authority hierarchy (SPEC > DESIGN > PATTERNS).
    - **Pattern Compliance (R25, R26):** Verify `docs/PATTERNS.md` uses natural language for rationale and limits code examples to signatures only.
    - **Code Health:** Scan `src/` for large modules (> 500 lines) that need splitting. Scan `tests/` for missing test coverage of `src/` modules.

@@ -195,6 +195,10 @@ def _extract_import_targets(
         target = fqn_to_path.get(resolved)
         if target and target != py_file:
             targets.add(target)
+            continue
+        # "from pkg import mod" — try appending each imported name as a submodule
+        if isinstance(node, ast.ImportFrom):
+            _resolve_submodule_imports(node, resolved, fqn_to_path, py_file, targets)
     return targets
 
 
@@ -217,6 +221,21 @@ def _resolve_import_from(node: ast.ImportFrom, importer_pkg: list[str]) -> str |
     if module:
         return ".".join(base_parts + [module]) if base_parts else module
     return ".".join(base_parts) if base_parts else None
+
+
+def _resolve_submodule_imports(
+    node: ast.ImportFrom,
+    base_fqn: str,
+    fqn_to_path: dict[str, Path],
+    py_file: Path,
+    targets: set[Path],
+) -> None:
+    """Try resolving imported names as submodules (e.g. 'from pkg import mod')."""
+    for alias in node.names:
+        candidate = f"{base_fqn}.{alias.name}"
+        target = fqn_to_path.get(candidate)
+        if target and target != py_file:
+            targets.add(target)
 
 
 def collect_pattern_usage(root: Path) -> list[PatternOccurrence]:
@@ -468,6 +487,7 @@ def _check_missing_tests(root: Path) -> list[DriftFinding]:
 
         if not _has_matching_test_file(py_file, tests_dir):
             rel = py_file.relative_to(root)
+            expected_test = tests_dir / f"test_{py_file.stem}.py"
             findings.append(
                 DriftFinding(
                     title=f"Missing tests for {py_file.name}",
@@ -475,7 +495,7 @@ def _check_missing_tests(root: Path) -> list[DriftFinding]:
                     "This module contains functions/classes with logic that should be tested.",
                     category=DriftCategory.MISSING_TESTS,
                     severity=Severity.MEDIUM,
-                    files_affected=[tests_dir],
+                    files_affected=[expected_test],
                 )
             )
     return findings

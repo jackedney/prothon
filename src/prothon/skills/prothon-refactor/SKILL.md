@@ -19,8 +19,7 @@ You are **advisory-first**. You do NOT modify docs or code autonomously. You:
 
 ## Prerequisites
 
-- `docs/SPEC.md`, `docs/DESIGN.md`, and `docs/PATTERNS.md` must all exist and be populated.
-- If any are missing or empty, tell the user which `prothon` command to run first.
+The CLI command (`prothon refactor`) requires all three docs (`SPEC.md`, `DESIGN.md`, `PATTERNS.md`) to exist before launching this skill. If the user reaches this skill, the docs are guaranteed to be present.
 
 ## Phase 1: Interactive Discovery
 
@@ -28,15 +27,14 @@ You are **advisory-first**. You do NOT modify docs or code autonomously. You:
 2. **Ask for focus** — Present the following menu to the user:
    > Where would you like to focus?
    > 1. Documentation quality (are design decisions and patterns still optimal?)
-   > 2. Documentation hierarchy (SPEC > DESIGN > PATTERNS exists and aligns)
+   > 2. Documentation hierarchy (SPEC > DESIGN > PATTERNS alignment and contradictions)
    > 3. Pattern compliance (prose rationale, signature-only code blocks)
    > 4. Code health (large files > 500 lines, missing tests)
-   > 5. Architectural drift (code diverging from DESIGN/PATTERNS)
-   > 6. Full scan (docs first, then code — all of the above)
+   > 5. Full scan (docs first, then code — all of the above)
 
-3. **Scan and Analyze** — Based on the selection, perform analysis. Options 1 and 6 trigger Wave 0 (doc quality) before Wave 1 (code drift). All other options trigger Wave 1 only.
+3. **Scan and Analyze** — Based on the selection, perform analysis. Options 1 and 5 trigger Wave 0 (doc quality) before Wave 1 (code drift). All other options trigger Wave 1 only.
 
-   **Wave 0 — Documentation Quality (options 1, 6):**
+   **Wave 0 — Documentation Quality (options 1, 5):**
 
    First, gather programmatic evidence by running these Python functions:
    - `collect_module_metrics(root)` — line counts, function counts, import counts per module
@@ -60,11 +58,10 @@ You are **advisory-first**. You do NOT modify docs or code autonomously. You:
 
    IMPORTANT: SPEC.md is read for context but NEVER modified. Wave 0 only produces DESIGN.md and PATTERNS.md changes.
 
-   **Wave 1 — Code Drift (options 2–6):**
+   **Wave 1 — Code Drift (options 2–5):**
    - **Doc Hierarchy (R24):** Verify `docs/` contains SPEC, DESIGN, and PATTERNS. Check for contradictions using the authority hierarchy (SPEC > DESIGN > PATTERNS).
    - **Pattern Compliance (R25, R26):** Verify `docs/PATTERNS.md` uses natural language for rationale and limits code examples to signatures only.
    - **Code Health:** Scan `src/` for large modules (> 500 lines) that need splitting. Scan `tests/` for missing test coverage of `src/` modules.
-   - **Architectural Drift:** Compare implementation against DESIGN and PATTERNS to find where the code has evolved away from documented conventions.
 
 4. **Present Findings** — Present findings grouped by wave, then by Refactor Wave level, with severity.
    Example format:

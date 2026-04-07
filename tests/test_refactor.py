@@ -379,6 +379,19 @@ def test_collect_module_metrics_absolute_import(tmp_path: Path):
     assert utils_metric.imported_by_count == 1
 
 
+def test_collect_module_metrics_from_pkg_import_mod(tmp_path: Path):
+    """'from pkg import mod' resolves to pkg.mod when mod is a module."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "utils.py").write_text("def helper():\n    pass\n")
+    (src / "core.py").write_text("from pkg import utils\n\ndef do_core():\n    pass\n")
+
+    metrics = collect_module_metrics(tmp_path)
+    utils_metric = next(m for m in metrics if m.path.name == "utils.py")
+    assert utils_metric.imported_by_count == 1
+
+
 # ---------------------------------------------------------------------------
 # collect_pattern_usage
 # ---------------------------------------------------------------------------

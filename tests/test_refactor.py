@@ -520,3 +520,87 @@ def test_collect_cross_module_similarities_unique_names(tmp_path: Path):
 def test_collect_cross_module_similarities_no_src(tmp_path: Path):
     """Returns empty list when src/ doesn't exist."""
     assert collect_cross_module_similarities(tmp_path) == []
+
+
+def test_collect_pattern_usage_is_file_guard(tmp_path: Path):
+    """Detects path.is_file() guard patterns with return."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "checker.py").write_text(
+        "from pathlib import Path\n\n"
+        "def load(p: Path):\n"
+        "    if not p.is_file():\n"
+        "        raise FileNotFoundError\n"
+        "    return p.read_text()\n"
+    )
+
+    occurrences = collect_pattern_usage(tmp_path)
+    assert any(o.pattern_type == PatternType.PATH_EXISTS_GUARD for o in occurrences)
+
+
+def test_collect_pattern_usage_is_dir_guard(tmp_path: Path):
+    """Detects path.is_dir() guard patterns with return."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "checker.py").write_text(
+        "from pathlib import Path\n\n"
+        "def scan(p: Path):\n"
+        "    if not p.is_dir():\n"
+        "        return []\n"
+        "    return list(p.iterdir())\n"
+    )
+
+    occurrences = collect_pattern_usage(tmp_path)
+    assert any(o.pattern_type == PatternType.PATH_EXISTS_GUARD for o in occurrences)
+
+
+def test_collect_pattern_usage_try_except_io_in_handler(tmp_path: Path):
+    """Detects try/except file I/O even when I/O call is in the except handler."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "recovery.py").write_text(
+        "from pathlib import Path\n\n"
+        "def safe_read(p: Path):\n"
+        "    try:\n"
+        "        return p.read_text()\n"
+        "    except OSError:\n"
+        "        return ''\n"
+    )
+
+    occurrences = collect_pattern_usage(tmp_path)
+    assert len(occurrences) == 1
+    assert occurrences[0].pattern_type == PatternType.TRY_EXCEPT_FILE_IO
+
+
+def test_collect_module_metrics_imported_by_zero_when_not_imported(tmp_path: Path):
+    """Modules not imported by anyone have imported_by_count == 0."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "isolated.py").write_text("def standalone():\n    pass\n")
+    (src / "other.py").write_text("def other_func():\n    pass\n")
+
+    metrics = collect_module_metrics(tmp_path)
+    for m in metrics:
+        assert m.imported_by_count == 0
+
+
+def test_collect_module_metrics_relative_import_level_two(tmp_path: Path):
+    """Relative imports with level > 1 (from ..pkg) resolve correctly."""
+    src = tmp_path / "src"
+    pkg = src / "pkg"
+    sub = pkg / "sub"
+    sub.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (sub / "__init__.py").write_text("")
+    (pkg / "utils.py").write_text("def helper():\n    pass\n")
+    (sub / "core.py").write_text(
+        "from ..utils import helper\n\ndef do_core():\n    pass\n"
+    )
+
+    metrics = collect_module_metrics(tmp_path)
+    utils_metric = next(m for m in metrics if m.path.name == "utils.py")
+    assert utils_metric.imported_by_count == 1

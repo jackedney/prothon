@@ -506,7 +506,7 @@ Wave 0 findings are LLM-driven but grounded in programmatic evidence. Three evid
 
 `collect_pattern_usage(root: Path) -> list[PatternOccurrence]` — AST scan across all modules under `src/` for recurring structural patterns: try/except guards around file I/O, check-then-act conditionals, path existence checks before reads, and similar shapes. Returns occurrences grouped by pattern type. This surfaces candidates for uncodified patterns.
 
-`collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]` — Identifies public functions across different modules with similar signatures (parameter names and types overlap above a threshold). Returns groups of similar functions. This surfaces logic duplication candidates.
+`collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]` — Identifies public functions across different modules that share a name. Each `SimilarityGroup` entry includes the function name, file path, and parameter names, allowing consumers to further assess signature similarity. Returns entries for functions that appear in more than one file. This surfaces logic duplication candidates.
 
 The agent receives these metrics alongside the full documentation and produces `design_quality` and `pattern_quality` findings. SPEC.md is read for context but never modified.
 

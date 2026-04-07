@@ -81,13 +81,13 @@ class SimilarityGroup:
 
 
 def discover_drift(root: Path) -> list[DriftFinding]:
-    """Scan the codebase and docs for drift and proactive optimization opportunities.
+    """Scan the codebase for Wave 1 drift (doc hierarchy, patterns, large files, missing tests).
 
     Args:
         root: The project root directory.
 
     Returns:
-        A list of DriftFinding objects.
+        A list of DriftFinding objects with category and severity populated.
     """
     findings = []
     findings.extend(_check_docs_hierarchy(root))
@@ -311,7 +311,7 @@ def _is_file_io_call(node: ast.Call) -> bool:
 
 
 def _is_path_exists_check(node: ast.expr) -> bool:
-    """Check if an expression is a path.exists() or not path.exists() check."""
+    """Check if an expression is a path.exists()/is_file()/is_dir() or negated form."""
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return _is_path_exists_check(node.operand)
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):

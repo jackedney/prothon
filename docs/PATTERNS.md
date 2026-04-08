@@ -319,6 +319,32 @@ Changes must flow top-down through the documentation hierarchy: **DESIGN -> PATT
 ### File Locking and Atomic Persistence
 When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates, using a sibling `.toml.lock` file.
 
+### Session Command Wrapper Pattern
+
+**Problem:** The six session commands in `cli.py` (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) each repeat an identical error-handling block: resolve the project root, call the corresponding `commands.*_command()` function inside a `try/except ProthonError`, format the error, and exit. This produces six nearly-identical blocks with ~20 total `raise typer.Exit()` calls across the file. Adding a new session command means copy-pasting the same boilerplate.
+
+**Convention:** Extract a shared private helper in `cli.py` that wraps any `commands.*_command()` call with the standard error boundary and exit-code propagation. Session command handlers call this helper instead of inlining the try/except:
+
+```python
+def _run_session_command(
+    cmd: Callable[..., int | None], root: Path, agent: str | None,
+    model: str | None, provider: str | None,
+) -> None: ...
+```
+
+Each session command handler then reduces to a single call:
+
+```python
+def spec(agent: AgentOption = None, model: ModelOption = None,
+         provider: ProviderOption = None) -> None: ...
+```
+
+**Rationale:**
+- **DRY** — eliminates duplication across all six session commands.
+- **Consistent error handling** — a single point ensures every command follows the same `ProthonError → stderr → exit(1)` path.
+- **Exit-code correctness** — the wrapper handles both `int` return codes (e.g., `spec_command` returns `int`) and `None`-returning commands (e.g., `compliance_command`) uniformly.
+- **Extensibility** — adding a new session command requires only wiring the Typer decorator and delegating to the wrapper.
+
 ## Error Handling
 
 ### Centralized CLI Error Boundary

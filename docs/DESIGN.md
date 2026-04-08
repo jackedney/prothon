@@ -4,7 +4,7 @@
 
 ### Module Structure
 
-Mostly flat module layout under `src/prothon/`, with one subpackage (`checks/`) grouping static compliance checks. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
+Mostly flat module layout under `src/prothon/`, with two subpackages (`checks/` and `refactor/`) grouping related functionality. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
 
 ```text
 src/prothon/
@@ -32,7 +32,13 @@ src/prothon/
     promise.py          # Promise TOML I/O and lifecycle management
     promise_verify.py   # Git diff analysis and task verification logic
     project.py          # Project root detection, shared project context
-    refactor.py         # Drift discovery and refactor promise generation
+    refactor/              # Drift discovery and refactor promise generation subpackage
+        __init__.py        # Re-exports all 5 public functions
+        models.py          # DriftCategory, Severity, PatternType, DriftFinding, ModuleMetrics, PatternOccurrence, SimilarityGroup
+        metrics.py         # collect_module_metrics(), collect_pattern_usage(), collect_cross_module_similarities()
+        discovery.py       # discover_drift() and Wave 1 category checkers
+        testability.py     # Testable logic detection heuristics (AST-based)
+        promise_gen.py     # generate_refactor_promise()
     scaffold.py         # Template rendering, copier answers, project adoption
     scaffold_cli.py     # Scaffolding-specific CLI commands and interactive prompts
     skills.py           # Skill discovery, symlink management
@@ -42,7 +48,7 @@ src/prothon/
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. The `checks/` subpackage is the single exception to the flat layout — it groups 28+ static check functions that would otherwise form an 850+ line monolith.
+This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. Two subpackages break the flat layout: `checks/` groups 28+ static check functions that would otherwise form an 850+ line monolith, and `refactor/` splits an 800+ line module into focused internal modules by concern (data models, metrics gathering, drift discovery, testability heuristics, promise generation).
 
 ### Module Dependencies
 
@@ -71,6 +77,13 @@ adoption.py
 
 checks.*
   └── compliance.CheckResult, CheckStatus, CheckType, ComplianceReport, Requirement
+
+refactor.*
+  ├── refactor.models.DriftCategory, Severity, PatternType, DriftFinding, ModuleMetrics, PatternOccurrence, SimilarityGroup
+  ├── refactor.metrics.collect_module_metrics(), collect_pattern_usage(), collect_cross_module_similarities()
+  ├── refactor.discovery.discover_drift() → checks.check_patterns_doc(), compliance.CheckStatus
+  ├── refactor.testability._has_testable_logic(), _is_testable_function(), _is_testable_class(), _is_trivial_function()
+  └── refactor.promise_gen.generate_refactor_promise() → models.Task, Metadata, Promise, git.rev_parse_head()
 
 scaffold_cli.py
   └── scaffold.generate(), init_existing()
@@ -496,17 +509,17 @@ The discovery phase checks six categories of drift across two waves:
 | 1 | `doc_hierarchy` | Missing core documentation files in the SPEC → DESIGN → PATTERNS chain | "Missing PATTERNS.md" when DESIGN.md exists |
 | 1 | `patterns_compliance` | PATTERNS.md formatting violations detected by `check_patterns_doc()` | Code blocks containing implementation logic instead of signatures |
 | 1 | `large_files` | Source files in `src/` exceeding 500 lines | "Large file: commands.py" with line count rationale |
-| 1 | `missing_tests` | Source modules with testable logic that lack corresponding test files | "Missing tests for refactor.py" when no `test_refactor*.py` exists |
+| 1 | `missing_tests` | Source modules with testable logic that lack corresponding test files | "Missing tests for refactor.discovery" when no `test_refactor*.py` exists |
 
 **Wave 0 evidence gathering:**
 
 Wave 0 findings are LLM-driven but grounded in programmatic evidence. Three evidence-gathering functions provide structured data for the agent to reason over:
 
-`collect_module_metrics(root: Path) -> list[ModuleMetrics]` — For each Python module under `src/`, collects: line count, public function count, import count (both inbound and outbound). Returns a list of `ModuleMetrics` dataclasses. This surfaces modules that have outgrown their design boundary or become coupling hubs.
+`collect_module_metrics(root: Path) -> list[ModuleMetrics]` (in `refactor.metrics`) — For each Python module under `src/`, collects: line count, public function count, import count (both inbound and outbound). Returns a list of `ModuleMetrics` dataclasses (defined in `refactor.models`). This surfaces modules that have outgrown their design boundary or become coupling hubs.
 
-`collect_pattern_usage(root: Path) -> list[PatternOccurrence]` — AST scan across all modules under `src/` for recurring structural patterns: try/except guards around file I/O, check-then-act conditionals, path existence checks before reads, and similar shapes. Returns occurrences grouped by pattern type. This surfaces candidates for uncodified patterns.
+`collect_pattern_usage(root: Path) -> list[PatternOccurrence]` (in `refactor.metrics`) — AST scan across all modules under `src/` for recurring structural patterns: try/except guards around file I/O, check-then-act conditionals, path existence checks before reads, and similar shapes. Returns occurrences grouped by pattern type (using `PatternType` and `PatternOccurrence` from `refactor.models`). This surfaces candidates for uncodified patterns.
 
-`collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]` — Identifies public functions across different modules that share a name. Each `SimilarityGroup` entry includes the function name, file path, and parameter names, allowing consumers to further assess signature similarity. Returns entries for functions that appear in more than one file. This surfaces logic duplication candidates.
+`collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]` (in `refactor.metrics`) — Identifies public functions across different modules that share a name. Each `SimilarityGroup` entry (from `refactor.models`) includes the function name, file path, and parameter names, allowing consumers to further assess signature similarity. Returns entries for functions that appear in more than one file. This surfaces logic duplication candidates.
 
 The agent receives these metrics alongside the full documentation and produces `design_quality` and `pattern_quality` findings. SPEC.md is read for context but never modified.
 
@@ -516,13 +529,13 @@ After Wave 0 tasks (documentation improvements) are executed and committed, the 
 
 **Wave 1 discovery specification:**
 
-`discover_drift(root: Path) -> list[DriftFinding]` — Scans the project at `root` and returns all findings across the four Wave 1 drift categories. Each category checker runs independently and returns zero or more findings. The function concatenates all results in category order (doc hierarchy, patterns compliance, large files, missing tests). All returned findings have their `category` field set to the corresponding category identifier and `severity` set based on the checker's assessment.
+`discover_drift(root: Path) -> list[DriftFinding]` (in `refactor.discovery`) — Scans the project at `root` and returns all findings across the four Wave 1 drift categories. Each category checker runs independently and returns zero or more findings. The function concatenates all results in category order (doc hierarchy, patterns compliance, large files, missing tests). All returned findings have their `category` field set to the corresponding category identifier and `severity` set based on the checker's assessment.
 
-Testable logic detection uses AST analysis to skip modules containing only constants, type aliases, trivial pass-through functions, data classes without methods, and abstract/protocol classes. Test file matching supports `test_<module>.py`, `test_*_<module>.py`, and `*_<module>_test.py` naming conventions.
+Testable logic detection (in `refactor.testability`) uses AST analysis to skip modules containing only constants, type aliases, trivial pass-through functions, data classes without methods, and abstract/protocol classes. Test file matching supports `test_<module>.py`, `test_*_<module>.py`, and `*_<module>_test.py` naming conventions.
 
 **Promise generation specification:**
 
-`generate_refactor_promise(root: Path, findings: list[DriftFinding]) -> Promise` — Converts selected findings into a Promise object suitable for writing to `docs/change_promise.toml`. Each finding maps to exactly one task. The mapping is:
+`generate_refactor_promise(root: Path, findings: list[DriftFinding]) -> Promise` (in `refactor.promise_gen`) — Converts selected findings into a Promise object suitable for writing to `docs/change_promise.toml`. Each finding maps to exactly one task. The mapping is:
 
 | DriftFinding field | Task field |
 |--------------------|------------|

@@ -4,7 +4,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from prothon.refactor import (
+    DriftCategory,
     DriftFinding,
+    Severity,
     _check_large_files,
     _check_missing_tests,
     _check_patterns_compliance,
@@ -246,3 +248,40 @@ def test_discover_drift_fully_compliant(tmp_path: Path):
 
     findings = discover_drift(tmp_path)
     assert findings == []
+
+
+def test_checkers_set_category_and_severity(tmp_path: Path):
+    """Verify that existing drift checkers populate category and severity enums."""
+    # Missing docs → doc_hierarchy, high
+    findings = discover_drift(tmp_path)
+    doc_finding = next(f for f in findings if f.title == "Missing SPEC.md")
+    assert doc_finding.category == DriftCategory.DOC_HIERARCHY
+    assert doc_finding.severity == Severity.HIGH
+
+    # Large file → large_files, medium
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "big.py").write_text("x = 1\n" * 501)
+    large_findings = _check_large_files(tmp_path)
+    assert len(large_findings) == 1
+    assert large_findings[0].category == DriftCategory.LARGE_FILES
+    assert large_findings[0].severity == Severity.MEDIUM
+    assert len(large_findings[0].evidence) == 1
+
+
+def test_missing_tests_finding_uses_concrete_test_path(tmp_path: Path):
+    """Missing tests finding should point at a concrete test file, not the tests dir."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (src / "feature.py").write_text(
+        "def logic(x):\n    if x:\n        return 1\n    return 0\n"
+    )
+
+    findings = _check_missing_tests(tmp_path)
+    assert len(findings) == 1
+    affected = findings[0].files_affected
+    assert len(affected) == 1
+    assert affected[0] == tests / "test_feature.py"
+    assert affected[0].name == "test_feature.py"

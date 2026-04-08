@@ -146,13 +146,11 @@ def detect_bump_type(before_sha: str, after_sha: str, cwd: Path | None = None) -
 ```
 
 **promise_verify.py:**
+
+`CheckStatus` is imported from `compliance.py` (shared canonical source).
+
 ```python
 DEFAULT_TOLERANCE = 30
-
-class CheckStatus(Enum):
-    PASSED = "PASS"
-    FAILED = "FAIL"
-    SKIPPED = "SKIP"
 
 @dataclass
 class FileCheckDetail:
@@ -352,19 +350,9 @@ def spec(agent: AgentOption = None, model: ModelOption = None,
 
 Before any filesystem operation that assumes a path exists, check using `Path` methods (`.is_dir()`, `.is_file()`, `.exists()`) and raise a specific `ProthonError` subclass with an actionable message when the check fails. Used in 12+ locations across the codebase.
 
-*Positive guard* — verify the resource exists before acting:
-```python
-if src_dir.is_dir():
-    ...
-```
+*Positive guard* — verify the resource exists before acting. Guard functions accept a `Path`, call `.is_dir()` / `.is_file()` / `.exists()`, and proceed only when the check passes.
 
-*Negative guard* — verify the resource does NOT exist, then fail fast:
-```python
-if not doc_path.is_file():
-    raise ProjectNotFoundError(...)
-if spec_path.exists():
-    raise ProjectAlreadyInitError(...)
-```
+*Negative guard* — verify the resource does NOT exist, then fail fast by raising a domain-specific `ProthonError` subclass such as `ProjectNotFoundError` or `ProjectAlreadyInitError` with an actionable message.
 
 **When to use:** Before any filesystem read, write, copy, or iteration that semantically requires the path to be present (or absent). Skip for idempotent operations like `mkdir(parents=True, exist_ok=True)`.
 

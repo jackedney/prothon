@@ -478,7 +478,25 @@ def test_collect_pattern_usage_no_src(tmp_path: Path):
 
 
 def test_collect_cross_module_similarities_shared_name(tmp_path: Path):
-    """Identifies public functions with the same name across different modules."""
+    """Identifies public functions with the same name and signature across modules."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "a.py").write_text("def validate(data, strict=False):\n    pass\n")
+    (src / "b.py").write_text("def validate(data, strict=False):\n    pass\n")
+
+    groups = collect_cross_module_similarities(tmp_path)
+    assert len(groups) == 2
+    names = {g.function_name for g in groups}
+    assert names == {"validate"}
+    files = {g.file_path for g in groups}
+    assert files == {src / "a.py", src / "b.py"}
+
+
+def test_collect_cross_module_similarities_different_signature_not_grouped(
+    tmp_path: Path,
+):
+    """Same-name functions with different signatures are not grouped."""
     src = tmp_path / "src" / "pkg"
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("")
@@ -486,11 +504,19 @@ def test_collect_cross_module_similarities_shared_name(tmp_path: Path):
     (src / "b.py").write_text("def validate(data, mode='fast'):\n    pass\n")
 
     groups = collect_cross_module_similarities(tmp_path)
-    assert len(groups) == 2  # One entry per function, both named "validate"
-    names = {g.function_name for g in groups}
-    assert names == {"validate"}
-    files = {g.file_path for g in groups}
-    assert files == {src / "a.py", src / "b.py"}
+    assert groups == []
+
+
+def test_collect_cross_module_similarities_varargs_distinguished(tmp_path: Path):
+    """Functions with varargs/kwargs are distinguished from plain params."""
+    src = tmp_path / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "a.py").write_text("def process(data):\n    pass\n")
+    (src / "b.py").write_text("def process(data, *args, **kwargs):\n    pass\n")
+
+    groups = collect_cross_module_similarities(tmp_path)
+    assert groups == []
 
 
 def test_collect_cross_module_similarities_private_excluded(tmp_path: Path):
@@ -556,8 +582,10 @@ def test_collect_pattern_usage_is_dir_guard(tmp_path: Path):
     assert any(o.pattern_type == PatternType.PATH_EXISTS_GUARD for o in occurrences)
 
 
-def test_collect_pattern_usage_try_except_io_in_handler(tmp_path: Path):
-    """Detects try/except file I/O even when I/O call is in the except handler."""
+def test_collect_pattern_usage_try_except_io_only_in_handler_not_detected(
+    tmp_path: Path,
+):
+    """File I/O only in the except handler is not reported as TRY_EXCEPT_FILE_IO."""
     src = tmp_path / "src" / "pkg"
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("")
@@ -565,14 +593,15 @@ def test_collect_pattern_usage_try_except_io_in_handler(tmp_path: Path):
         "from pathlib import Path\n\n"
         "def safe_read(p: Path):\n"
         "    try:\n"
-        "        return p.read_text()\n"
+        "        return p.stat()\n"
         "    except OSError:\n"
-        "        return ''\n"
+        "        return p.read_text()\n"
     )
 
     occurrences = collect_pattern_usage(tmp_path)
-    assert len(occurrences) == 1
-    assert occurrences[0].pattern_type == PatternType.TRY_EXCEPT_FILE_IO
+    assert not any(
+        o.pattern_type == PatternType.TRY_EXCEPT_FILE_IO for o in occurrences
+    )
 
 
 def test_collect_module_metrics_imported_by_zero_when_not_imported(tmp_path: Path):

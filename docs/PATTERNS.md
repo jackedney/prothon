@@ -90,7 +90,10 @@ def check_skills_dir(root: Path) -> list[CheckResult]: ...
 def check_tech_researcher(root: Path) -> list[CheckResult]: ...
 ```
 
-**refactor.py:**
+**refactor/ (subpackage):**
+
+The `refactor` package re-exports all public symbols via `__init__.py`. The primary entry points are the discovery and promise generation functions; individual metrics and model types are also available for targeted use.
+
 ```python
 def discover_drift(root: Path) -> list[DriftFinding]: ...
 def collect_module_metrics(root: Path) -> list[ModuleMetrics]: ...
@@ -379,7 +382,7 @@ When a subagent reaches `max_attempts` for a task without passing verification a
 Contradictions found by the `doc-harmonizer` are treated as data, not exceptions. They are presented as a structured report of `Conflict` objects, enabling interactive resolution and approval before any documents are amended.
 
 ### Model/Provider Resolution Errors
-Configuration resolution for `opencode` enforces that both model and provider must be present if one is provided. Violations raise a `ConfigurationError` explaining the required format, ensuring early failure.
+Configuration resolution for `opencode` enforces that both model and provider must be present if one is provided. Violations raise a `ProthonError` explaining the required format, ensuring early failure.
 
 ## Testing Patterns
 

@@ -7,11 +7,13 @@ from prothon.refactor import (
     DriftCategory,
     DriftFinding,
     Severity,
+    discover_drift,
+    generate_refactor_promise,
+)
+from prothon.refactor.discovery import (
     _check_large_files,
     _check_missing_tests,
     _check_patterns_compliance,
-    discover_drift,
-    generate_refactor_promise,
 )
 
 
@@ -219,7 +221,10 @@ def test_generate_refactor_promise_git_error_fallback(tmp_path: Path):
         rationale="Rationale",
     )
 
-    with patch("prothon.refactor.rev_parse_head", side_effect=RuntimeError("no git")):
+    with patch(
+        "prothon.refactor.promise_gen.rev_parse_head",
+        side_effect=RuntimeError("no git"),
+    ):
         promise = generate_refactor_promise(tmp_path, [finding])
 
     assert promise.metadata.base_commit == "HEAD"

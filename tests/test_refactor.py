@@ -16,13 +16,13 @@ from prothon.refactor import (
     DriftFinding,
     PatternType,
     Severity,
-    _has_matching_test_file,
-    _has_testable_logic,
     collect_cross_module_similarities,
     collect_module_metrics,
     collect_pattern_usage,
     generate_refactor_promise,
 )
+from prothon.refactor.discovery import _has_matching_test_file
+from prothon.refactor.testability import _has_testable_logic
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +189,7 @@ def test_generate_promise_existing_vs_new_files(tmp_path: Path):
         )
     ]
 
-    with patch("prothon.refactor.rev_parse_head", return_value="abc123"):
+    with patch("prothon.refactor.promise_gen.rev_parse_head", return_value="abc123"):
         promise = generate_refactor_promise(tmp_path, findings)
 
     task = promise.tasks[0]
@@ -199,7 +199,7 @@ def test_generate_promise_existing_vs_new_files(tmp_path: Path):
 
 def test_generate_promise_empty_findings(tmp_path: Path):
     """Empty findings list produces a promise with no tasks."""
-    with patch("prothon.refactor.rev_parse_head", return_value="abc123"):
+    with patch("prothon.refactor.promise_gen.rev_parse_head", return_value="abc123"):
         promise = generate_refactor_promise(tmp_path, [])
 
     assert promise.tasks == []
@@ -217,7 +217,7 @@ def test_generate_promise_files_outside_root_skipped(tmp_path: Path):
         )
     ]
 
-    with patch("prothon.refactor.rev_parse_head", return_value="abc"):
+    with patch("prothon.refactor.promise_gen.rev_parse_head", return_value="abc"):
         promise = generate_refactor_promise(tmp_path, findings)
 
     task = promise.tasks[0]
@@ -231,7 +231,7 @@ def test_generate_promise_multiple_findings(tmp_path: Path):
         DriftFinding(title=f"Finding {i}", rationale=f"Reason {i}") for i in range(3)
     ]
 
-    with patch("prothon.refactor.rev_parse_head", return_value="abc"):
+    with patch("prothon.refactor.promise_gen.rev_parse_head", return_value="abc"):
         promise = generate_refactor_promise(tmp_path, findings)
 
     assert len(promise.tasks) == 3

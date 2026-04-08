@@ -131,7 +131,7 @@ Each assistant backend encapsulates its binary name, invocation flags, skill syn
 
 AI coding CLIs fall into two structural categories based on how they ingest skills:
 
-- **Category A (native skill directories)** — Claude Code, opencode, Gemini CLI, and OB1 have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
+- **Category A (native skill directories)** — Claude Code, opencode, and Gemini CLI have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
 - **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. No Category B backends are currently registered; the abstraction accommodates them for future expansion.
 
 A registry maps assistant names to backend classes. Claude Code, opencode, and Gemini CLI are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 57-58 (Claude Code, opencode, and Gemini CLI support; assistant selection).
@@ -243,11 +243,11 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 | tomlkit (>=0.13,<1.0) | TOML read/write with comment and formatting preservation | R27-R28: change promise contract | tomllib+tomli-w, toml |
 | rich (via typer) | Table rendering for promise plans, status, and compliance reports | R35: compliance report with PASS/FAIL/SKIP status | tabulate, click echo/style |
 | subprocess (stdlib) | Git CLI interaction via thin typed wrapper | R7: git init, R31: promise verification | GitPython, pygit2, dulwich |
-| claude-code | AI assistant backend | R57: Claude Code support | opencode, gemini, ob1 |
-| opencode | AI assistant backend | R57-R58, R61: opencode support | claude-code, gemini, ob1 |
-| gemini-cli | AI assistant backend | R57: Gemini CLI support | claude-code, opencode, ob1 |
+| claude-code | AI assistant backend | R57: Claude Code support | opencode, gemini |
+| opencode | AI assistant backend | R57-R58, R61: opencode support | claude-code, gemini |
+| gemini-cli | AI assistant backend | R57: Gemini CLI support | claude-code, opencode |
 | jinja2 (>=3.1) | Template rendering for adoption scaffolds (AGENTS.md, doc stubs) | R13-R16: project adoption | string.Template, mako |
-| ob1 | AI assistant backend | R57: OB1 support (pluggable) | claude-code, opencode, gemini |
+
 
 ### Rationale
 
@@ -347,15 +347,14 @@ Registered backends:
 | `claude-code` | Claude Code | `claude` | `~/.claude/skills/` | A (native skills) |
 | `opencode` | opencode | `opencode` | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) | A (native skills) |
 | `gemini` | Gemini CLI | `gemini` | `~/.gemini/skills/` | A (native skills) |
-| `ob1` | OB1 | `ob1` | `~/.ob1/skills/` | A (native skills) |
 
 Canonical-to-backend subagent type mapping:
 
-| Canonical name | Claude Code | opencode | Gemini CLI | OB1 |
-|---------------|-------------|----------|------------|-----|
-| `general-purpose` | `general-purpose` | `general` | `generalist_agent` | `general` |
-| `explore` | `Explore` | `explore` | `codebase_investigator` | `explore` |
-| `plan` | `Plan` | `plan` | `generalist_agent` | `plan` |
+| Canonical name | Claude Code | opencode | Gemini CLI |
+|---------------|-------------|----------|------------|
+| `general-purpose` | `general-purpose` | `general` | `generalist_agent` |
+| `explore` | `Explore` | `explore` | `codebase_investigator` |
+| `plan` | `Plan` | `plan` | `generalist_agent` |
 
 A shared launch lifecycle handles: binary existence check (via `shutil.which()`), skill syncing, environment merging (`os.environ` + `env_overrides()`), subprocess execution, and return code reporting. When the binary is missing, the error message includes the backend's `install_hint`.
 
@@ -636,7 +635,6 @@ Bundled skills live in `src/prothon/skills/` as directories containing `SKILL.md
 | Claude Code | `~/.claude/skills/` |
 | opencode | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) |
 | Gemini CLI | `~/.gemini/skills/` |
-| OB1 | `~/.ob1/skills/` |
 
 Symlinks point directly from the backend's skill directory to the bundled package directory. Each backend maintains its own set of symlinks (no shared central location). The duplication cost is zero since symlinks have no disk footprint.
 

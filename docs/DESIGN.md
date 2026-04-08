@@ -14,7 +14,7 @@ src/prothon/
     ast_miner.py        # AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
     assistant.py        # Backend registry, protocol, and launch lifecycle for AI assistants
     cli.py              # Typer app and command definitions
-    commands.py         # Session orchestration: Skill enum, SPEC hash guards, follow-up triggers, doc commit enforcement, tech-researcher section hashing
+    commands.py         # Session orchestration: Skill enum, SKILL_DOC_MAP, launch lifecycle, promise subcommand handlers
     ui.py               # Rich-based terminal UI, tables, and status reporting
     config.py           # Multi-level configuration resolution (CLI, env, toml)
     checks/             # Static compliance checks subpackage (split from static_checks.py)
@@ -42,13 +42,13 @@ src/prothon/
     scaffold.py         # Template rendering, copier answers, project adoption
     scaffold_cli.py     # Scaffolding-specific CLI commands and interactive prompts
     skills.py           # Skill discovery, symlink management
-    versioning.py       # Semantic version detection, bumping, git tagging
+    versioning.py       # Semantic version detection, bumping, git tagging, CI version bump orchestration (ci_bump_command, ci_detect_command)
     skills/             # Bundled skill assets (non-Python, 8 directories)
 
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-`commands.py` serves as the session orchestration layer between `cli.py` (Typer command definitions) and the domain modules. It owns the `Skill` enum (canonical skill name registry), the `SKILL_DOC_MAP` (skill-to-document-file mapping), and the `launch_skill()` lifecycle — which captures a pre-session SPEC.md hash guard to detect unauthorized writes, captures design-section hashes for deterministic tech-researcher triggering, enforces post-session doc commits for any skill that modifies documentation, and dispatches follow-up agent sessions (doc-harmonizer after spec/design/patterns, tech-researcher after design when Technology Choices or Key Decisions sections changed, compliance-checker after execute). Individual command functions (`spec_command`, `design_command`, etc.) call into `launch_skill()` with prerequisite checks. Promise and CI commands delegate directly to their domain modules. This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. Two subpackages break the flat layout: `checks/` groups 28+ static check functions that would otherwise form an 850+ line monolith, and `refactor/` splits an 800+ line module into focused internal modules by concern (data models, metrics gathering, drift discovery, testability heuristics, promise generation).
+`commands.py` serves as the session orchestration layer between `cli.py` (Typer command definitions) and the domain modules. It owns the `Skill` enum (canonical skill name registry), the `SKILL_DOC_MAP` (skill-to-document-file mapping), and the `launch_skill()` lifecycle — which captures a pre-session SPEC.md hash guard to detect unauthorized writes, captures design-section hashes for deterministic tech-researcher triggering, enforces post-session doc commits for any skill that modifies documentation, and dispatches follow-up agent sessions (doc-harmonizer after spec/design/patterns, tech-researcher after design when Technology Choices or Key Decisions sections changed, compliance-checker after execute). Individual command functions (`spec_command`, `design_command`, etc.) call into `launch_skill()` with prerequisite checks. Promise subcommand handlers (`promise_plan_command`, `promise_status_command`, etc.) delegate to the `promise` and `promise_verify` modules. This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. Two subpackages break the flat layout: `checks/` groups 28+ static check functions that would otherwise form an 850+ line monolith, and `refactor/` splits an 800+ line module into focused internal modules by concern (data models, metrics gathering, drift discovery, testability heuristics, promise generation).
 
 ### Module Dependencies
 
@@ -64,7 +64,7 @@ commands.py
   ├── config.resolve_agent(), resolve_model(), file_hash(), find_init_path(), ...
   ├── git.commit_file(), is_dirty()
   ├── models.PROMISE_PATH
-  ├── promise.*, promise_verify.*, versioning.*
+  ├── promise.*, promise_verify.*
   ├── project.find_project_root()
   ├── checks.run_static_checks()
   └── ui.render_check_report(), render_compliance_report(), render_plan(), render_status()
@@ -103,7 +103,9 @@ assistant.py
 
 versioning.py
   ├── git.* (for tag operations)
-  └── tomlkit (for version file updates)
+  ├── tomlkit (for version file updates)
+  ├── config.read_toml(), config.nested_get(), config.find_init_path()
+  └── ui.console
 ```
 
 All modules
@@ -287,6 +289,8 @@ All commands that launch an assistant session (`spec`, `design`, `patterns`, `ex
 | `prothon promise complete N` | Zero-based task index | Updated `change_promise.toml` (marks task complete) | promise.py |
 | `prothon promise record-attempt N` | Zero-based task index | Updated `change_promise.toml` (increments attempt counter) | promise.py |
 | `prothon promise cleanup` | None | Removes `change_promise.toml` | promise.py |
+| `prothon ci bump` | `--before-sha`, `--after-sha`, `--dry-run`, `--no-tag` | Updated `pyproject.toml` version, `__init__.py` version, git tag | versioning.py |
+| `prothon ci detect` | `--before-sha`, `--after-sha` | Bump type string (`major`, `minor`, `patch`, or `none`) | versioning.py |
 
 ### Promise Contract Format
 
@@ -632,6 +636,7 @@ Bundled skills live in `src/prothon/skills/` as directories containing `SKILL.md
 | Claude Code | `~/.claude/skills/` |
 | opencode | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) |
 | Gemini CLI | `~/.gemini/skills/` |
+| OB1 | `~/.ob1/skills/` |
 
 Symlinks point directly from the backend's skill directory to the bundled package directory. Each backend maintains its own set of symlinks (no shared central location). The duplication cost is zero since symlinks have no disk footprint.
 

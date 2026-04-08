@@ -25,7 +25,7 @@ src/prothon/
         workflows.py    # Execute/refactor workflow checks (R27-R42)
         research.py     # Tech researcher and versioning checks (R43-R55)
         adoption.py     # Adoption intelligence check (R13)
-    compliance.py       # Compliance data types (CheckResult, CheckStatus, ComplianceReport)
+    compliance.py       # Compliance data types (CheckResult, CheckStatus, ComplianceReport); canonical source for shared CheckStatus enum
     exceptions.py       # Custom exception hierarchy
     git.py              # Thin typed wrapper around git CLI via subprocess
     models.py           # Shared data models (Task, Metadata, Promise) for the promise system
@@ -91,6 +91,12 @@ scaffold_cli.py
 promise.py
   ├── models.Task, Metadata, Promise, PROMISE_PATH
   └── promise_verify.check_task()
+
+promise_verify.py
+  ├── compliance.CheckStatus
+  ├── exceptions.PromiseError
+  ├── git.GitDiffProvider, SubprocessGitDiff
+  └── models.Promise, Task
 
 assistant.py
   └── skills.sync_skills(target)
@@ -312,7 +318,7 @@ max_attempts = <int>
 
 ### Promise Verification Contract
 
-Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (members: `PASSED`, `FAILED`, `SKIPPED` with values `"PASS"`, `"FAIL"`, `"SKIP"`), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). SKIPPED indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAILED entries — SKIPPED results do not affect the outcome.
+Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (imported from `compliance.py`; members: `PASSED`, `FAILED`, `SKIPPED` with values `"PASS"`, `"FAIL"`, `"SKIP"`), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). `CheckStatus` is defined canonically in `compliance.py` and shared across both promise verification and compliance checking to avoid duplicate definitions. SKIPPED indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAILED entries — SKIPPED results do not affect the outcome.
 
 Dependency resolution uses `task_id` lookup: each entry in a task's `dependencies` list is matched against the `task_id` field of other tasks in the promise file, not against positional indices. This ensures dependencies remain valid when tasks are reordered, inserted, or removed during planning.
 

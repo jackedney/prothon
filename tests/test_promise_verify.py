@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from prothon.compliance import CheckStatus
 from prothon.exceptions import PromiseError
 from prothon.models import Metadata, Promise, Task
 from prothon.promise import save_promise
 from prothon.promise_verify import (
-    CheckStatus,
     _check_files_to_create,
     _check_files_to_modify,
     _check_files_to_remove,
@@ -99,27 +99,27 @@ class TestCheckFilesToCreate:
     def test_empty_list_skipped(self) -> None:
         task = Task(title="t")
         result = _check_files_to_create(task, Path("/tmp"))
-        assert result.status is CheckStatus.SKIPPED
+        assert result.status is CheckStatus.SKIP
 
     def test_all_exist_passed(self, tmp_path: Path) -> None:
         (tmp_path / "a.py").write_text("x")
         (tmp_path / "b.py").write_text("y")
         task = Task(title="t", files_to_create=["a.py", "b.py"])
         result = _check_files_to_create(task, tmp_path)
-        assert result.status is CheckStatus.PASSED
+        assert result.status is CheckStatus.PASS
         assert "2/2" in result.detail
 
     def test_partial_exist_failed(self, tmp_path: Path) -> None:
         (tmp_path / "a.py").write_text("x")
         task = Task(title="t", files_to_create=["a.py", "missing.py"])
         result = _check_files_to_create(task, tmp_path)
-        assert result.status is CheckStatus.FAILED
+        assert result.status is CheckStatus.FAIL
         assert "1/2" in result.detail
 
     def test_none_exist_failed(self, tmp_path: Path) -> None:
         task = Task(title="t", files_to_create=["nope.py"])
         result = _check_files_to_create(task, tmp_path)
-        assert result.status is CheckStatus.FAILED
+        assert result.status is CheckStatus.FAIL
         assert "0/1" in result.detail
 
 
@@ -135,27 +135,27 @@ class TestCheckFilesToModify:
         task = Task(title="t")
         diff = FakeGitDiff()
         result = _check_files_to_modify(task, diff, "HEAD")
-        assert result.status is CheckStatus.SKIPPED
+        assert result.status is CheckStatus.SKIP
 
     def test_all_in_diff_passed(self) -> None:
         task = Task(title="t", files_to_modify=["src/a.py", "src/b.py"])
         diff = FakeGitDiff(names={"src/a.py", "src/b.py"})
         result = _check_files_to_modify(task, diff, "HEAD")
-        assert result.status is CheckStatus.PASSED
+        assert result.status is CheckStatus.PASS
         assert "2/2" in result.detail
 
     def test_partial_in_diff_failed(self) -> None:
         task = Task(title="t", files_to_modify=["src/a.py", "src/b.py"])
         diff = FakeGitDiff(names={"src/a.py"})
         result = _check_files_to_modify(task, diff, "HEAD")
-        assert result.status is CheckStatus.FAILED
+        assert result.status is CheckStatus.FAIL
         assert "1/2" in result.detail
 
     def test_none_in_diff_failed(self) -> None:
         task = Task(title="t", files_to_modify=["src/a.py"])
         diff = FakeGitDiff(names=set())
         result = _check_files_to_modify(task, diff, "HEAD")
-        assert result.status is CheckStatus.FAILED
+        assert result.status is CheckStatus.FAIL
         assert "0/1" in result.detail
 
 
@@ -170,7 +170,7 @@ class TestCheckFilesToRemove:
     def test_empty_list_skipped(self, tmp_path: Path) -> None:
         task = Task(title="t")
         result = _check_files_to_remove(task, tmp_path)
-        assert result.status is CheckStatus.SKIPPED
+        assert result.status is CheckStatus.SKIP
 
     def test_all_removed_passed(self, tmp_path: Path) -> None:
         # Use paths that definitely don't exist
@@ -182,7 +182,7 @@ class TestCheckFilesToRemove:
             ],
         )
         result = _check_files_to_remove(task, tmp_path)
-        assert result.status is CheckStatus.PASSED
+        assert result.status is CheckStatus.PASS
         assert "2/2" in result.detail
 
     def test_some_still_exist_failed(self, tmp_path: Path) -> None:
@@ -196,7 +196,7 @@ class TestCheckFilesToRemove:
             ],
         )
         result = _check_files_to_remove(task, tmp_path)
-        assert result.status is CheckStatus.FAILED
+        assert result.status is CheckStatus.FAIL
         assert "1/2" in result.detail
 
     def test_none_removed_failed(self, tmp_path: Path) -> None:
@@ -204,7 +204,7 @@ class TestCheckFilesToRemove:
         f.write_text("still here")
         task = Task(title="t", files_to_remove=[str(f)])
         result = _check_files_to_remove(task, tmp_path)
-        assert result.status is CheckStatus.FAILED
+        assert result.status is CheckStatus.FAIL
         assert "0/1" in result.detail
 
 
@@ -225,7 +225,7 @@ class TestCheckLineCounts:
         diff = FakeGitDiff()
         results = _check_line_counts(task, diff, "HEAD")
         added_r = next(r for r in results if r.name == "lines_added")
-        assert added_r.status is CheckStatus.SKIPPED
+        assert added_r.status is CheckStatus.SKIP
 
     def test_zero_expected_lines_removed_skipped(self) -> None:
         task = Task(
@@ -236,7 +236,7 @@ class TestCheckLineCounts:
         diff = FakeGitDiff()
         results = _check_line_counts(task, diff, "HEAD")
         removed_r = next(r for r in results if r.name == "lines_removed")
-        assert removed_r.status is CheckStatus.SKIPPED
+        assert removed_r.status is CheckStatus.SKIP
 
     def test_no_add_files_skipped(self) -> None:
         # No files_to_create or files_to_modify -> no add_files
@@ -248,7 +248,7 @@ class TestCheckLineCounts:
         diff = FakeGitDiff()
         results = _check_line_counts(task, diff, "HEAD")
         added_r = next(r for r in results if r.name == "lines_added")
-        assert added_r.status is CheckStatus.SKIPPED
+        assert added_r.status is CheckStatus.SKIP
 
     def test_within_tolerance_passed(self) -> None:
         task = Task(
@@ -261,8 +261,8 @@ class TestCheckLineCounts:
         results = _check_line_counts(task, diff, "HEAD")
         added_r = next(r for r in results if r.name == "lines_added")
         removed_r = next(r for r in results if r.name == "lines_removed")
-        assert added_r.status is CheckStatus.PASSED
-        assert removed_r.status is CheckStatus.PASSED
+        assert added_r.status is CheckStatus.PASS
+        assert removed_r.status is CheckStatus.PASS
 
     def test_outside_tolerance_failed(self) -> None:
         task = Task(
@@ -276,8 +276,8 @@ class TestCheckLineCounts:
         results = _check_line_counts(task, diff, "HEAD")
         added_r = next(r for r in results if r.name == "lines_added")
         removed_r = next(r for r in results if r.name == "lines_removed")
-        assert added_r.status is CheckStatus.FAILED
-        assert removed_r.status is CheckStatus.FAILED
+        assert added_r.status is CheckStatus.FAIL
+        assert removed_r.status is CheckStatus.FAIL
 
 
 # ===========================================================================
@@ -368,7 +368,7 @@ class TestCheckTask:
         report = check_task(0, diff=diff, path=pfile, promise=promise)
         assert report.passed is False
         create_check = next(c for c in report.checks if c.name == "files_to_create")
-        assert create_check.status is CheckStatus.FAILED
+        assert create_check.status is CheckStatus.FAIL
 
     def test_out_of_range_index_raises(self) -> None:
         promise = _promise_with_tasks(Task(title="t", task_id="x"))

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from prothon.compliance import CheckStatus
 from prothon.exceptions import MaxAttemptsExceeded, PromiseError
 from prothon.git import DiffStat
 from prothon.models import Metadata, Promise, Task
@@ -23,7 +24,6 @@ from prothon.promise import (
 )
 from prothon.promise_verify import (
     CheckResult,
-    CheckStatus,
     TaskCheckReport,
     _check_line_count,
     _check_line_counts,
@@ -136,7 +136,7 @@ def test_check_task_all_pass(promise_file: Path, tmp_path: Path):
     )
     report = check_task(0, diff=fake_diff, path=promise_file)
     assert report.passed is True
-    assert not any(c.status is CheckStatus.FAILED for c in report.checks)
+    assert not any(c.status is CheckStatus.FAIL for c in report.checks)
 
 
 def test_check_task_missing_created_file(promise_file: Path, tmp_path: Path):
@@ -151,7 +151,7 @@ def test_check_task_missing_created_file(promise_file: Path, tmp_path: Path):
     fake_diff = FakeGitDiff(names={"src/app.py"})
     report = check_task(0, diff=fake_diff, path=promise_file)
     create_check = next(c for c in report.checks if c.name == "files_to_create")
-    assert create_check.status is CheckStatus.FAILED
+    assert create_check.status is CheckStatus.FAIL
 
 
 def test_check_task_unmodified_file(promise_file: Path):
@@ -159,7 +159,7 @@ def test_check_task_unmodified_file(promise_file: Path):
     fake_diff = FakeGitDiff(names=set())
     report = check_task(0, diff=fake_diff, path=promise_file)
     modify_check = next(c for c in report.checks if c.name == "files_to_modify")
-    assert modify_check.status is CheckStatus.FAILED
+    assert modify_check.status is CheckStatus.FAIL
 
 
 def test_check_task_file_not_removed(promise_file: Path, tmp_path: Path):
@@ -172,7 +172,7 @@ def test_check_task_file_not_removed(promise_file: Path, tmp_path: Path):
     fake_diff = FakeGitDiff(names={"src/app.py"})
     report = check_task(0, diff=fake_diff, path=promise_file)
     remove_check = next(c for c in report.checks if c.name == "files_to_remove")
-    assert remove_check.status is CheckStatus.FAILED
+    assert remove_check.status is CheckStatus.FAIL
 
 
 def test_check_task_line_count_outside_tolerance(promise_file: Path):
@@ -183,7 +183,7 @@ def test_check_task_line_count_outside_tolerance(promise_file: Path):
     )
     report = check_task(0, diff=fake_diff, path=promise_file)
     removed_check = next(c for c in report.checks if c.name == "lines_removed")
-    assert removed_check.status is CheckStatus.FAILED
+    assert removed_check.status is CheckStatus.FAIL
 
 
 def test_check_task_empty_file_lists_are_skipped(promise_file: Path):
@@ -191,8 +191,8 @@ def test_check_task_empty_file_lists_are_skipped(promise_file: Path):
     fake_diff = FakeGitDiff()
     report = check_task(1, diff=fake_diff, path=promise_file)
     by_name = {c.name: c for c in report.checks}
-    assert by_name["files_to_modify"].status is CheckStatus.SKIPPED
-    assert by_name["files_to_remove"].status is CheckStatus.SKIPPED
+    assert by_name["files_to_modify"].status is CheckStatus.SKIP
+    assert by_name["files_to_remove"].status is CheckStatus.SKIP
 
 
 def test_check_task_passes_base_commit_to_diff_provider(tmp_path: Path):
@@ -416,7 +416,7 @@ def test_report_format_pass():
         task_id="fake_id",
         checks=[
             CheckResult(
-                name="files_to_create", status=CheckStatus.PASSED, detail="2/2 exist"
+                name="files_to_create", status=CheckStatus.PASS, detail="2/2 exist"
             ),
         ],
     )
@@ -432,10 +432,10 @@ def test_report_format_discrepancy():
         task_id="fake_id",
         checks=[
             CheckResult(
-                name="files_to_create", status=CheckStatus.PASSED, detail="2/2 exist"
+                name="files_to_create", status=CheckStatus.PASS, detail="2/2 exist"
             ),
             CheckResult(
-                name="files_to_modify", status=CheckStatus.FAILED, detail="0/1 modified"
+                name="files_to_modify", status=CheckStatus.FAIL, detail="0/1 modified"
             ),
         ],
     )
@@ -451,11 +451,11 @@ def test_report_format_skip_does_not_cause_failure():
         task_id="fake_id",
         checks=[
             CheckResult(
-                name="files_to_create", status=CheckStatus.PASSED, detail="1/1 exist"
+                name="files_to_create", status=CheckStatus.PASS, detail="1/1 exist"
             ),
             CheckResult(
                 name="files_to_modify",
-                status=CheckStatus.SKIPPED,
+                status=CheckStatus.SKIP,
                 detail="none declared",
             ),
         ],
@@ -799,7 +799,7 @@ def test_save_promise_includes_all_task_fields(tmp_path: Path):
 
 def test_check_line_count_pass_has_correct_fields():
     result = _check_line_count("lines_added", 100, 100)
-    assert result.status is CheckStatus.PASSED
+    assert result.status is CheckStatus.PASS
     assert result.name == "lines_added"
     assert "expected ~100" in result.detail
     assert "actual 100" in result.detail
@@ -808,7 +808,7 @@ def test_check_line_count_pass_has_correct_fields():
 
 def test_check_line_count_fail_has_tolerance_detail():
     result = _check_line_count("lines_removed", 100, 200)
-    assert result.status is CheckStatus.FAILED
+    assert result.status is CheckStatus.FAIL
     assert result.name == "lines_removed"
     assert "expected ~100" in result.detail
     assert "actual 200" in result.detail
@@ -823,10 +823,10 @@ def test_check_line_counts_skips_when_no_files():
     results = _check_line_counts(task, FakeGitDiff(), "HEAD")
     assert len(results) == 2
     assert results[0].name == "lines_added"
-    assert results[0].status is CheckStatus.SKIPPED
+    assert results[0].status is CheckStatus.SKIP
     assert results[0].detail == "none expected"
     assert results[1].name == "lines_removed"
-    assert results[1].status is CheckStatus.SKIPPED
+    assert results[1].status is CheckStatus.SKIP
     assert results[1].detail == "none expected"
 
 
@@ -838,8 +838,8 @@ def test_check_line_counts_skips_when_zero_expected():
         expected_lines_removed=0,
     )
     results = _check_line_counts(task, FakeGitDiff(stats={"a.py": (10, 5)}), "HEAD")
-    assert results[0].status is CheckStatus.SKIPPED
-    assert results[1].status is CheckStatus.SKIPPED
+    assert results[0].status is CheckStatus.SKIP
+    assert results[1].status is CheckStatus.SKIP
 
 
 def test_check_line_counts_add_files_includes_create_and_modify():
@@ -853,7 +853,7 @@ def test_check_line_counts_add_files_includes_create_and_modify():
     diff = FakeGitDiff(stats={"new.py": (60, 0), "mod.py": (40, 10)})
     results = _check_line_counts(task, diff, "HEAD")
     added = next(r for r in results if r.name == "lines_added")
-    assert added.status is CheckStatus.PASSED  # 60 + 40 = 100
+    assert added.status is CheckStatus.PASS  # 60 + 40 = 100
 
 
 def test_check_line_counts_remove_files_includes_modify_and_remove():
@@ -867,7 +867,7 @@ def test_check_line_counts_remove_files_includes_modify_and_remove():
     diff = FakeGitDiff(stats={"mod.py": (10, 30), "old.py": (0, 20)})
     results = _check_line_counts(task, diff, "HEAD")
     removed = next(r for r in results if r.name == "lines_removed")
-    assert removed.status is CheckStatus.PASSED  # 30 + 20 = 50
+    assert removed.status is CheckStatus.PASS  # 30 + 20 = 50
 
 
 def test_check_line_counts_reads_correct_tuple_index():
@@ -885,8 +885,8 @@ def test_check_line_counts_reads_correct_tuple_index():
     results = _check_line_counts(task, diff, "HEAD")
     added = next(r for r in results if r.name == "lines_added")
     removed = next(r for r in results if r.name == "lines_removed")
-    assert added.status is CheckStatus.PASSED
-    assert removed.status is CheckStatus.PASSED
+    assert added.status is CheckStatus.PASS
+    assert removed.status is CheckStatus.PASS
 
 
 def test_check_line_counts_missing_file_defaults_to_zero():
@@ -900,7 +900,7 @@ def test_check_line_counts_missing_file_defaults_to_zero():
     results = _check_line_counts(task, FakeGitDiff(stats={}), "HEAD")
     # expected_lines_added is 0, so it should be skipped
     added = next(r for r in results if r.name == "lines_added")
-    assert added.status is CheckStatus.SKIPPED
+    assert added.status is CheckStatus.SKIP
 
 
 def test_check_line_counts_only_create_files_no_modify():
@@ -914,8 +914,8 @@ def test_check_line_counts_only_create_files_no_modify():
     results = _check_line_counts(task, diff, "HEAD")
     added = next(r for r in results if r.name == "lines_added")
     removed = next(r for r in results if r.name == "lines_removed")
-    assert added.status is CheckStatus.PASSED
-    assert removed.status is CheckStatus.SKIPPED
+    assert added.status is CheckStatus.PASS
+    assert removed.status is CheckStatus.SKIP
 
 
 def test_check_line_counts_only_remove_files_no_modify():
@@ -929,8 +929,8 @@ def test_check_line_counts_only_remove_files_no_modify():
     results = _check_line_counts(task, diff, "HEAD")
     added = next(r for r in results if r.name == "lines_added")
     removed = next(r for r in results if r.name == "lines_removed")
-    assert added.status is CheckStatus.SKIPPED
-    assert removed.status is CheckStatus.PASSED
+    assert added.status is CheckStatus.SKIP
+    assert removed.status is CheckStatus.PASS
 
 
 # --- check_task detail assertions ---
@@ -1021,7 +1021,7 @@ def test_check_task_files_to_create_detail(tmp_path: Path):
     report = check_task(0, diff=FakeGitDiff(), path=path)
     create_check = next(c for c in report.checks if c.name == "files_to_create")
     assert "1/2" in create_check.detail
-    assert create_check.status is CheckStatus.FAILED
+    assert create_check.status is CheckStatus.FAIL
 
 
 def test_check_task_files_to_create_all_exist(tmp_path: Path):
@@ -1041,7 +1041,7 @@ def test_check_task_files_to_create_all_exist(tmp_path: Path):
     report = check_task(0, diff=FakeGitDiff(), path=path)
     create_check = next(c for c in report.checks if c.name == "files_to_create")
     assert "2/2" in create_check.detail
-    assert create_check.status is CheckStatus.PASSED
+    assert create_check.status is CheckStatus.PASS
 
 
 def test_check_task_files_to_modify_detail(tmp_path: Path):
@@ -1054,7 +1054,7 @@ def test_check_task_files_to_modify_detail(tmp_path: Path):
     report = check_task(0, diff=FakeGitDiff(names={"a.py"}), path=path)
     modify_check = next(c for c in report.checks if c.name == "files_to_modify")
     assert "1/2" in modify_check.detail
-    assert modify_check.status is CheckStatus.FAILED
+    assert modify_check.status is CheckStatus.FAIL
 
 
 def test_check_task_files_to_remove_detail(tmp_path: Path):
@@ -1073,7 +1073,7 @@ def test_check_task_files_to_remove_detail(tmp_path: Path):
     report = check_task(0, diff=FakeGitDiff(), path=path)
     remove_check = next(c for c in report.checks if c.name == "files_to_remove")
     assert "1/2" in remove_check.detail
-    assert remove_check.status is CheckStatus.FAILED
+    assert remove_check.status is CheckStatus.FAIL
 
 
 def test_check_task_skipped_detail_text(tmp_path: Path):
@@ -1082,7 +1082,7 @@ def test_check_task_skipped_detail_text(tmp_path: Path):
     save_promise(p, path)
     report = check_task(0, diff=FakeGitDiff(), path=path)
     for c in report.checks:
-        if c.status is CheckStatus.SKIPPED:
+        if c.status is CheckStatus.SKIP:
             assert c.detail in ("none declared", "none expected")
 
 
@@ -1304,7 +1304,7 @@ def test_check_line_counts_expected_one_is_not_skipped():
     diff = FakeGitDiff(stats={"f.py": (1, 0)})
     results = _check_line_counts(task, diff, "HEAD")
     added = next(r for r in results if r.name == "lines_added")
-    assert added.status is not CheckStatus.SKIPPED
+    assert added.status is not CheckStatus.SKIP
 
 
 def test_check_line_counts_expected_one_removed_is_not_skipped():
@@ -1317,7 +1317,7 @@ def test_check_line_counts_expected_one_removed_is_not_skipped():
     diff = FakeGitDiff(stats={"f.py": (0, 1)})
     results = _check_line_counts(task, diff, "HEAD")
     removed = next(r for r in results if r.name == "lines_removed")
-    assert removed.status is not CheckStatus.SKIPPED
+    assert removed.status is not CheckStatus.SKIP
 
 
 def test_check_line_counts_missing_file_adds_zero_not_one():
@@ -1360,7 +1360,7 @@ def test_check_task_skipped_files_to_create_check_name(tmp_path: Path):
     report = check_task(0, diff=FakeGitDiff(), path=path)
     create_check = report.checks[0]
     assert create_check.name == "files_to_create"
-    assert create_check.status is CheckStatus.SKIPPED
+    assert create_check.status is CheckStatus.SKIP
 
 
 def test_status_exact_mark_format(tmp_path: Path):

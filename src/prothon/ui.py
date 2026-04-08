@@ -7,9 +7,9 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from prothon.compliance import ComplianceReport
+from prothon.compliance import CheckStatus, ComplianceReport
 from prothon.models import Promise
-from prothon.promise_verify import CheckStatus, TaskCheckReport
+from prothon.promise_verify import TaskCheckReport
 
 console = Console()
 
@@ -88,9 +88,9 @@ def render_check_report(report: TaskCheckReport) -> Table:
     table.add_column("Detail")
 
     _status_styles = {
-        CheckStatus.PASSED: ("PASS", "green"),
-        CheckStatus.FAILED: ("FAIL", "red"),
-        CheckStatus.SKIPPED: ("SKIP", "yellow"),
+        CheckStatus.PASS: ("PASS", "green"),
+        CheckStatus.FAIL: ("FAIL", "red"),
+        CheckStatus.SKIP: ("SKIP", "yellow"),
     }
     for c in report.checks:
         label, style = _status_styles[c.status]

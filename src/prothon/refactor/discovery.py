@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 
 from prothon.checks import check_patterns_doc
-from prothon.compliance import CheckStatus as ComplianceStatus
+from prothon.compliance import CheckStatus
 from prothon.refactor.models import DriftCategory, DriftFinding, Severity
 from prothon.refactor.testability import _has_testable_logic, _is_testable_class
 
@@ -74,7 +74,7 @@ def _check_patterns_compliance(root: Path) -> list[DriftFinding]:
     findings = []
     results = check_patterns_doc(patterns_path)
     for res in results:
-        if res.status == ComplianceStatus.FAIL:
+        if res.status == CheckStatus.FAIL:
             findings.append(
                 DriftFinding(
                     title=f"PATTERNS.md drift: {res.requirement.requirement_id or 'Formatting'}",

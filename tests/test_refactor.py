@@ -483,7 +483,7 @@ def test_collect_cross_module_similarities_shared_name(tmp_path: Path):
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("")
     (src / "a.py").write_text("def validate(data, strict=False):\n    pass\n")
-    (src / "b.py").write_text("def validate(data, mode='fast'):\n    pass\n")
+    (src / "b.py").write_text("def validate(data, strict=True):\n    pass\n")
 
     groups = collect_cross_module_similarities(tmp_path)
     assert len(groups) == 2  # One entry per function, both named "validate"
@@ -522,8 +522,8 @@ def test_collect_cross_module_similarities_no_src(tmp_path: Path):
     assert collect_cross_module_similarities(tmp_path) == []
 
 
-def test_collect_pattern_usage_is_file_guard(tmp_path: Path):
-    """Detects path.is_file() guard patterns with return."""
+def test_collect_pattern_usage_is_file_guard_not_detected(tmp_path: Path):
+    """path.is_file() guards are not flagged as PATH_EXISTS_GUARD."""
     src = tmp_path / "src" / "pkg"
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("")
@@ -536,11 +536,11 @@ def test_collect_pattern_usage_is_file_guard(tmp_path: Path):
     )
 
     occurrences = collect_pattern_usage(tmp_path)
-    assert any(o.pattern_type == PatternType.PATH_EXISTS_GUARD for o in occurrences)
+    assert not any(o.pattern_type == PatternType.PATH_EXISTS_GUARD for o in occurrences)
 
 
-def test_collect_pattern_usage_is_dir_guard(tmp_path: Path):
-    """Detects path.is_dir() guard patterns with return."""
+def test_collect_pattern_usage_is_dir_guard_not_detected(tmp_path: Path):
+    """path.is_dir() guards are not flagged as PATH_EXISTS_GUARD."""
     src = tmp_path / "src" / "pkg"
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("")
@@ -553,11 +553,13 @@ def test_collect_pattern_usage_is_dir_guard(tmp_path: Path):
     )
 
     occurrences = collect_pattern_usage(tmp_path)
-    assert any(o.pattern_type == PatternType.PATH_EXISTS_GUARD for o in occurrences)
+    assert not any(o.pattern_type == PatternType.PATH_EXISTS_GUARD for o in occurrences)
 
 
-def test_collect_pattern_usage_try_except_io_in_handler(tmp_path: Path):
-    """Detects try/except file I/O even when I/O call is in the except handler."""
+def test_collect_pattern_usage_try_except_io_only_in_handler_not_detected(
+    tmp_path: Path,
+):
+    """File I/O only in except handler (not try body) is not flagged."""
     src = tmp_path / "src" / "pkg"
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("")
@@ -565,14 +567,15 @@ def test_collect_pattern_usage_try_except_io_in_handler(tmp_path: Path):
         "from pathlib import Path\n\n"
         "def safe_read(p: Path):\n"
         "    try:\n"
-        "        return p.read_text()\n"
+        "        result = 1 + 1\n"
         "    except OSError:\n"
-        "        return ''\n"
+        "        return p.read_text()\n"
     )
 
     occurrences = collect_pattern_usage(tmp_path)
-    assert len(occurrences) == 1
-    assert occurrences[0].pattern_type == PatternType.TRY_EXCEPT_FILE_IO
+    assert not any(
+        o.pattern_type == PatternType.TRY_EXCEPT_FILE_IO for o in occurrences
+    )
 
 
 def test_collect_module_metrics_imported_by_zero_when_not_imported(tmp_path: Path):

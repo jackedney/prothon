@@ -270,16 +270,18 @@ def _scan_file_patterns(tree: ast.AST, py_file: Path) -> list[PatternOccurrence]
     results: list[PatternOccurrence] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Try):
-            for body_node in ast.walk(node):
-                if isinstance(body_node, ast.Call) and _is_file_io_call(body_node):
-                    results.append(
-                        PatternOccurrence(
-                            pattern_type=PatternType.TRY_EXCEPT_FILE_IO,
-                            file_path=py_file,
-                            line_number=node.lineno,
-                        )
+            if any(
+                isinstance(body_node, ast.Call) and _is_file_io_call(body_node)
+                for stmt in node.body
+                for body_node in ast.walk(stmt)
+            ):
+                results.append(
+                    PatternOccurrence(
+                        pattern_type=PatternType.TRY_EXCEPT_FILE_IO,
+                        file_path=py_file,
+                        line_number=node.lineno,
                     )
-                    break
+                )
 
         if (
             isinstance(node, ast.If)
@@ -311,11 +313,11 @@ def _is_file_io_call(node: ast.Call) -> bool:
 
 
 def _is_path_exists_check(node: ast.expr) -> bool:
-    """Check if an expression is a path.exists()/is_file()/is_dir() or negated form."""
+    """Check if an expression is a path.exists() call or its negated form."""
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return _is_path_exists_check(node.operand)
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-        return node.func.attr in ("exists", "is_file", "is_dir")
+        return node.func.attr == "exists"
     return False
 
 
@@ -337,12 +339,13 @@ def collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]:
     if not src_dir.exists():
         return []
 
-    func_map: dict[str, list[SimilarityGroup]] = {}
+    func_map: dict[tuple[str, tuple[str, ...]], list[SimilarityGroup]] = {}
     for py_file in src_dir.rglob("*.py"):
         if py_file.name == "__init__.py":
             continue
         for entry in _extract_public_signatures(py_file):
-            func_map.setdefault(entry.function_name, []).append(entry)
+            key = (entry.function_name, tuple(entry.parameters))
+            func_map.setdefault(key, []).append(entry)
 
     # Only return functions that appear in multiple files
     results: list[SimilarityGroup] = []
@@ -366,9 +369,20 @@ def _extract_public_signatures(py_file: Path) -> list[SimilarityGroup]:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             if node.name.startswith("_"):
                 continue
-            params = [
-                arg.arg for arg in node.args.args if arg.arg not in {"self", "cls"}
-            ]
+            skip = {"self", "cls"}
+            params: list[str] = []
+            for arg in node.args.posonlyargs:
+                if arg.arg not in skip:
+                    params.append(arg.arg)
+            for arg in node.args.args:
+                if arg.arg not in skip:
+                    params.append(arg.arg)
+            if node.args.vararg:
+                params.append(f"*{node.args.vararg.arg}")
+            for arg in node.args.kwonlyargs:
+                params.append(arg.arg)
+            if node.args.kwarg:
+                params.append(f"**{node.args.kwarg.arg}")
             entries.append(
                 SimilarityGroup(
                     function_name=node.name,

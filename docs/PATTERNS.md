@@ -328,7 +328,7 @@ When parallel subagents mark tasks complete simultaneously, the promise TOML fil
 
 ```python
 def _run_session_command(
-    cmd: Callable[..., int | None], root: Path, agent: str | None,
+    cmd: Callable[..., int | None], agent: str | None,
     model: str | None, provider: str | None,
 ) -> None: ...
 ```

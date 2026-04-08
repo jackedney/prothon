@@ -9,18 +9,24 @@ from prothon.refactor.models import DriftFinding
 
 
 def generate_refactor_promise(root: Path, findings: list[DriftFinding]) -> Promise:
-    try:
-        base_commit = rev_parse_head(cwd=root)
-    except Exception:
-        base_commit = "HEAD"
+    base_commit = rev_parse_head(cwd=root)
 
     metadata = Metadata(
         base_commit=base_commit,
         created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     )
 
+    sorted_findings = sorted(
+        findings,
+        key=lambda f: (
+            bool(f.doc_sections),
+            any("DESIGN.md" in s or "PATTERNS.md" in s for s in f.doc_sections),
+        ),
+        reverse=True,
+    )
+
     tasks = []
-    for finding in findings:
+    for finding in sorted_findings:
         files_to_modify = []
         files_to_create = []
 

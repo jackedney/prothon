@@ -216,7 +216,23 @@ def ci_bump_command(
 
     expected_version = bump_fn(base_version)
 
-    if branch_version == expected_version:
+    project_name = nested_get(doc, "project", "name")
+    if not project_name:
+        raise ProthonError("[project] name not found in pyproject.toml")
+
+    module_name = project_name.replace("-", "_")
+    init_path = find_init_path(root, project_name, module_name)
+
+    init_version: str | None = None
+    if init_path:
+        init_content = init_path.read_text(encoding="utf-8")
+        version_match = re.search(
+            r'__version__\s*=\s*["\']([^"\']+)["\']', init_content
+        )
+        if version_match:
+            init_version = version_match.group(1)
+
+    if branch_version == expected_version and init_version == expected_version:
         console.print(f"Version already at {expected_version}, skipping.")
         return
 
@@ -225,15 +241,6 @@ def ci_bump_command(
     if dry_run:
         console.print("Dry run: Skipping file updates and tagging.")
         return
-
-    update_pyproject_version(pyproject_path, expected_version)
-
-    project_name = nested_get(doc, "project", "name")
-    if not project_name:
-        raise ProthonError("[project] name not found in pyproject.toml")
-
-    module_name = project_name.replace("-", "_")
-    init_path = find_init_path(root, project_name, module_name)
 
     if init_path:
         update_init_version(init_path, expected_version)
@@ -244,6 +251,8 @@ def ci_bump_command(
             f"or src/{project_name}",
             style="yellow",
         )
+
+    update_pyproject_version(pyproject_path, expected_version)
 
     if not no_tag:
         try:

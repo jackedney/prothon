@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
 from prothon.checks.workflows import (
     _check_marker,
     check_execute_logic,
@@ -17,59 +20,41 @@ from prothon.compliance import CheckStatus
 
 
 # ---------------------------------------------------------------------------
-# _check_marker — require_all semantics
+# _check_marker — property-based require_all semantics
 # ---------------------------------------------------------------------------
 
 
-def test_check_marker_any_single_match():
-    """PASS when require_all=False and at least one marker matches."""
+@given(
+    text=st.text(min_size=0, max_size=200),
+    markers=st.lists(
+        st.text(min_size=1, max_size=20), min_size=1, max_size=5, unique=True
+    ),
+    require_all=st.booleans(),
+)
+@settings(max_examples=100)
+def test_check_marker_property(text, markers, require_all):
+    """_check_marker satisfies require_all semantics for arbitrary text/markers."""
+    present = {m for m in markers if m in text}
+
     result = _check_marker(
-        "has alpha but not beta",
-        ["alpha", "beta"],
+        text,
+        markers,
         "R99",
         "test",
         "evidence.txt",
+        require_all=require_all,
     )
-    assert result.status == CheckStatus.PASS
 
+    if require_all:
+        expected_pass = set(markers) <= present
+    else:
+        expected_pass = bool(present & set(markers))
 
-def test_check_marker_any_none_match():
-    """FAIL when require_all=False and no marker matches."""
-    result = _check_marker(
-        "nothing relevant",
-        ["alpha", "beta"],
-        "R99",
-        "test",
-        "evidence.txt",
-    )
-    assert result.status == CheckStatus.FAIL
-    assert "R99" in result.rationale
-
-
-def test_check_marker_all_everything_present():
-    """PASS when require_all=True and all markers are present."""
-    result = _check_marker(
-        "has alpha and beta",
-        ["alpha", "beta"],
-        "R99",
-        "test",
-        "evidence.txt",
-        require_all=True,
-    )
-    assert result.status == CheckStatus.PASS
-
-
-def test_check_marker_all_partial():
-    """FAIL when require_all=True and only some markers are present."""
-    result = _check_marker(
-        "has alpha only",
-        ["alpha", "beta"],
-        "R99",
-        "test",
-        "evidence.txt",
-        require_all=True,
-    )
-    assert result.status == CheckStatus.FAIL
+    if expected_pass:
+        assert result.status == CheckStatus.PASS
+    else:
+        assert result.status == CheckStatus.FAIL
+        assert "R99" in result.rationale
 
 
 # ---------------------------------------------------------------------------

@@ -121,6 +121,8 @@ def _check_missing_tests(root: Path) -> list[DriftFinding]:
     if not src_dir.exists():
         return []
 
+    test_stems = _build_test_stem_cache(tests_dir)
+
     findings = []
     for py_file in src_dir.rglob("*.py"):
         if py_file.name == "__init__.py":
@@ -129,43 +131,44 @@ def _check_missing_tests(root: Path) -> list[DriftFinding]:
         if not _has_testable_logic(py_file):
             continue
 
-        if not _has_matching_test_file(py_file, tests_dir):
+        if not _has_matching_test_file(py_file, test_stems):
             rel = py_file.relative_to(root)
-            expected_test = tests_dir / f"test_{py_file.stem}.py"
             findings.append(
                 DriftFinding(
                     title=f"Missing tests for {py_file.name}",
-                    rationale=f"No corresponding test file found for {rel}. "
-                    "This module contains functions/classes with logic that should be tested.",
+                    rationale="[HEURISTIC] No corresponding test file found for "
+                    f"{rel}. This module contains functions/classes with logic "
+                    "that should be tested.",
                     category=DriftCategory.MISSING_TESTS,
-                    severity=Severity.MEDIUM,
-                    files_affected=[expected_test],
+                    severity=Severity.LOW,
+                    files_affected=[],
                 )
             )
     return findings
 
 
-def _has_matching_test_file(py_file: Path, tests_dir: Path) -> bool:
+def _build_test_stem_cache(tests_dir: Path) -> set[str]:
     if not tests_dir.exists():
-        return False
+        return set()
 
+    stems: set[str] = set()
+    for test_file in tests_dir.rglob("*.py"):
+        if test_file.name.startswith("test_") or test_file.name.endswith("_test.py"):
+            stems.add(test_file.stem)
+    return stems
+
+
+def _has_matching_test_file(py_file: Path, test_stems: set[str]) -> bool:
     module_stem = py_file.stem
-    for test_file in tests_dir.rglob("test_*.py"):
-        test_stem = test_file.stem
-        if (
-            test_stem == f"test_{module_stem}"
-            or test_stem.endswith(f"_{module_stem}")
-            or module_stem in test_stem.split("_")
-        ):
-            return True
 
-    for test_file in tests_dir.rglob("*_test.py"):
-        test_stem = test_file.stem
-        if (
-            test_stem == f"{module_stem}_test"
-            or test_stem.startswith(f"{module_stem}_")
-            or module_stem in test_stem.split("_")
-        ):
+    if f"test_{module_stem}" in test_stems:
+        return True
+    for stem in test_stems:
+        if stem == f"{module_stem}_test":
+            return True
+        if stem.endswith(f"_{module_stem}") or module_stem in stem.split("_"):
+            return True
+        if stem.startswith(f"{module_stem}_"):
             return True
 
     return False

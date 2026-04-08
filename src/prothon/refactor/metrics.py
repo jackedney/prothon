@@ -220,13 +220,12 @@ def collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]:
     if not src_dir.exists():
         return []
 
-    func_map: dict[tuple[str, tuple[str, ...]], list[SimilarityGroup]] = {}
+    func_map: dict[str, list[SimilarityGroup]] = {}
     for py_file in src_dir.rglob("*.py"):
         if py_file.name == "__init__.py":
             continue
         for entry in _extract_public_signatures(py_file):
-            key = (entry.function_name, tuple(entry.parameters))
-            func_map.setdefault(key, []).append(entry)
+            func_map.setdefault(entry.function_name, []).append(entry)
 
     results: list[SimilarityGroup] = []
     for entries in func_map.values():

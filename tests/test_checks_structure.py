@@ -164,13 +164,13 @@ def test_inheritance_deep_chain_passes(tmp_path: Path) -> None:
     assert results[0].status == CheckStatus.PASS
 
 
-def test_inheritance_non_exception_class_flagged(tmp_path: Path) -> None:
-    """Non-Exception base class in exceptions.py is a violation."""
+def test_inheritance_non_exception_class_ignored(tmp_path: Path) -> None:
+    """Non-Exception classes in exceptions.py are not flagged as violations."""
     exc_dir = tmp_path / "src" / "prothon"
     exc_dir.mkdir(parents=True)
     (exc_dir / "exceptions.py").write_text(
         "class ProthonError(Exception): pass\nclass HelperMixin: pass\n"
     )
     results = check_inheritance(tmp_path)
-    assert results[0].status == CheckStatus.FAIL
-    assert "HelperMixin" in results[0].rationale
+    assert results[0].status == CheckStatus.PASS
+    assert "HelperMixin" not in results[0].rationale

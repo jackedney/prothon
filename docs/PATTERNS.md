@@ -324,26 +324,29 @@ When parallel subagents mark tasks complete simultaneously, the promise TOML fil
 
 **Problem:** The six session commands in `cli.py` (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) each repeat an identical error-handling block: resolve the project root, call the corresponding `commands.*_command()` function inside a `try/except ProthonError`, format the error, and exit. This produces six nearly-identical blocks with ~20 total `raise typer.Exit()` calls across the file. Adding a new session command means copy-pasting the same boilerplate.
 
-**Convention:** Extract a shared private helper in `cli.py` that wraps any `commands.*_command()` call with the standard error boundary and exit-code propagation. Session command handlers call this helper instead of inlining the try/except:
+**Convention:** `cli.py` uses `_run_session_command` to wrap every session command with the standard error boundary. The helper resolves the project root, delegates to the matching `commands.*_command()` function inside a `try/except ProthonError`, and propagates exit codes:
 
 ```python
 def _run_session_command(
-    cmd: Callable[..., int | None], agent: str | None,
-    model: str | None, provider: str | None,
+    cmd: Callable[..., int | None],
+    agent: str | None,
+    model: str | None,
+    provider: str | None,
 ) -> None: ...
 ```
 
-Each session command handler then reduces to a single call:
+Each session command is a thin Typer-decorated function that delegates:
 
 ```python
+@app.command()
 def spec(agent: AgentOption = None, model: ModelOption = None,
          provider: ProviderOption = None) -> None: ...
 ```
 
 **Rationale:**
-- **DRY** — eliminates duplication across all six session commands.
-- **Consistent error handling** — a single point ensures every command follows the same `ProthonError → stderr → exit(1)` path.
-- **Exit-code correctness** — the wrapper handles both `int` return codes (e.g., `spec_command` returns `int`) and `None`-returning commands (e.g., `compliance_command`) uniformly.
+- **DRY** — all six session commands (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) share a single error-handling path, eliminating duplication.
+- **Consistent error handling** — `_run_session_command` ensures every command follows the same `ProthonError → stderr → exit(1)` path.
+- **Exit-code correctness** — the wrapper handles both `int` return codes and `None`-returning commands uniformly.
 - **Extensibility** — adding a new session command requires only wiring the Typer decorator and delegating to the wrapper.
 
 ### Path Existence Guard Pattern

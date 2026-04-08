@@ -14,7 +14,7 @@ src/prothon/
     ast_miner.py        # AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
     assistant.py        # Backend registry, protocol, and launch lifecycle for AI assistants
     cli.py              # Typer app and command definitions
-    commands.py         # Implementation logic for CLI commands (delegates to domain modules)
+    commands.py         # Session orchestration: Skill enum, SPEC hash guards, follow-up triggers, doc commit enforcement, tech-researcher section hashing
     ui.py               # Rich-based terminal UI, tables, and status reporting
     config.py           # Multi-level configuration resolution (CLI, env, toml)
     checks/             # Static compliance checks subpackage (split from static_checks.py)
@@ -48,7 +48,7 @@ src/prothon/
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. Two subpackages break the flat layout: `checks/` groups 28+ static check functions that would otherwise form an 850+ line monolith, and `refactor/` splits an 800+ line module into focused internal modules by concern (data models, metrics gathering, drift discovery, testability heuristics, promise generation).
+`commands.py` serves as the session orchestration layer between `cli.py` (Typer command definitions) and the domain modules. It owns the `Skill` enum (canonical skill name registry), the `SKILL_DOC_MAP` (skill-to-document-file mapping), and the `launch_skill()` lifecycle — which captures a pre-session SPEC.md hash guard to detect unauthorized writes, captures design-section hashes for deterministic tech-researcher triggering, enforces post-session doc commits for any skill that modifies documentation, and dispatches follow-up agent sessions (doc-harmonizer after spec/design/patterns, tech-researcher after design when Technology Choices or Key Decisions sections changed, compliance-checker after execute). Individual command functions (`spec_command`, `design_command`, etc.) call into `launch_skill()` with prerequisite checks. Promise and CI commands delegate directly to their domain modules. This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. Two subpackages break the flat layout: `checks/` groups 28+ static check functions that would otherwise form an 850+ line monolith, and `refactor/` splits an 800+ line module into focused internal modules by concern (data models, metrics gathering, drift discovery, testability heuristics, promise generation).
 
 ### Module Dependencies
 

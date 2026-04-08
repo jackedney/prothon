@@ -6,7 +6,7 @@ from typing import Annotated
 
 import typer
 
-from prothon import commands, scaffold_cli
+from prothon import commands, scaffold_cli, versioning
 from prothon.assistant import _BACKENDS
 from prothon.exceptions import ProthonError
 from prothon.project import find_project_root
@@ -271,7 +271,7 @@ def ci_bump(
     """Bump the project version based on changed files since before_sha."""
     root = _require_project_root()
     try:
-        commands.ci_bump_command(root, before_sha, after_sha, dry_run, no_tag)
+        versioning.ci_bump_command(root, before_sha, after_sha, dry_run, no_tag)
     except ProthonError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
@@ -289,7 +289,7 @@ def ci_detect(
     """Detect the version bump type based on changed files since before_sha."""
     root = _require_project_root()
     try:
-        commands.ci_detect_command(root, before_sha, after_sha)
+        versioning.ci_detect_command(root, before_sha, after_sha)
     except ProthonError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc

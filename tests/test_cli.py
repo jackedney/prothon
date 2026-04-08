@@ -846,6 +846,7 @@ def test_ci_bump_base_version_fallback(project_copy, monkeypatch):
         return original_run_git(*args, **kwargs)
 
     monkeypatch.setattr("prothon.git.run_git", fake_run_git)
+    monkeypatch.setattr("prothon.versioning.run_git", fake_run_git)
     result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
 
     assert result.exit_code == 0

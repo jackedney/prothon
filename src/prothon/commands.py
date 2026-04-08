@@ -7,17 +7,14 @@ import json
 from enum import StrEnum
 from pathlib import Path
 
-from prothon import promise, promise_verify, versioning
+from prothon import promise, promise_verify
 from prothon.assistant import get_backend, launch
 from prothon.config import (
     file_hash,
-    find_init_path,
-    nested_get,
-    read_toml,
     resolve_agent,
     resolve_model,
 )
-from prothon.exceptions import GitError, ProthonError
+from prothon.exceptions import ProthonError
 from prothon.git import commit_file, is_dirty
 from prothon.models import PROMISE_PATH
 from prothon.project import find_project_root
@@ -286,110 +283,6 @@ def compliance_command(
 
     console.print("\n", render_compliance_report(report))
     console.print("\n" + report.format_summary())
-
-
-def ci_bump_command(
-    root: Path,
-    before_sha: str,
-    after_sha: str = "HEAD",
-    dry_run: bool = False,
-    no_tag: bool = False,
-) -> None:
-    """Implementation for the ci bump command."""
-    pyproject_path = root / "pyproject.toml"
-
-    doc = read_toml(pyproject_path)
-    if not doc:
-        raise ProthonError("Could not read pyproject.toml")
-
-    auto_version = nested_get(doc, "tool", "prothon", "ci", "auto_version")
-    if auto_version is not None and str(auto_version).lower() in ("false", "0", "no"):
-        console.print("Automatic versioning is disabled in pyproject.toml")
-        return
-
-    bump_type = versioning.detect_bump_type(before_sha, after_sha, cwd=root)
-    if not bump_type:
-        console.print("No version bump needed (no relevant files changed).")
-        return
-
-    branch_version = nested_get(doc, "project", "version")
-    if not branch_version:
-        raise ProthonError("[project] version not found in pyproject.toml")
-
-    from prothon.git import run_git
-
-    import tomlkit
-    import tomlkit.exceptions
-
-    try:
-        base_toml_content = run_git("show", f"{before_sha}:pyproject.toml", cwd=root)
-        base_doc = tomlkit.parse(base_toml_content)
-        base_version = nested_get(base_doc, "project", "version")
-    except (
-        GitError,
-        FileNotFoundError,
-        tomlkit.exceptions.TOMLKitError,
-        KeyError,
-        TypeError,
-        ValueError,
-    ) as exc:
-        console.print(
-            f"Warning: Could not read pyproject.toml from {before_sha}: {exc}",
-            style="yellow",
-        )
-        base_version = None
-
-    if not base_version:
-        console.print(f"Falling back to branch version {branch_version} as base")
-        base_version = branch_version
-
-    bump_fn = getattr(versioning, f"bump_{bump_type}")
-    expected_version = bump_fn(base_version)
-
-    if branch_version == expected_version:
-        console.print(f"Version already at {expected_version}, skipping.")
-        return
-
-    console.print(f"Detected {bump_type} bump: {base_version} -> {expected_version}")
-
-    if dry_run:
-        console.print("Dry run: Skipping file updates and tagging.")
-        return
-
-    versioning.update_pyproject_version(pyproject_path, expected_version)
-
-    project_name = nested_get(doc, "project", "name")
-    if not project_name:
-        raise ProthonError("[project] name not found in pyproject.toml")
-
-    module_name = project_name.replace("-", "_")
-    init_path = find_init_path(root, project_name, module_name)
-
-    if init_path:
-        versioning.update_init_version(init_path, expected_version)
-        console.print(f"Updated {init_path.relative_to(root)}")
-    else:
-        console.print(
-            f"Warning: Could not find __init__.py in src/{module_name} "
-            f"or src/{project_name}",
-            style="yellow",
-        )
-
-    if not no_tag:
-        try:
-            versioning.create_tag(expected_version, cwd=root)
-            console.print(f"Created tag v{expected_version}")
-        except ProthonError as exc:
-            console.print(f"Warning: Tag creation failed: {exc}", style="yellow")
-
-
-def ci_detect_command(root: Path, before_sha: str, after_sha: str = "HEAD") -> None:
-    """Implementation for the ci detect command."""
-    bump_type = versioning.detect_bump_type(before_sha, after_sha, cwd=root)
-    if bump_type:
-        console.print(bump_type)
-    else:
-        console.print("none")
 
 
 def promise_plan_command(root: Path) -> None:

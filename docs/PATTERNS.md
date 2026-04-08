@@ -358,6 +358,14 @@ Before any filesystem operation that assumes a path exists, check using `Path` m
 
 **Rationale:** Fail fast at the boundary rather than deep inside I/O routines; raise domain-specific errors (`ProjectNotFoundError`, `ProjectAlreadyInitError`) that flow through the centralized CLI error boundary with actionable messages.
 
+### File I/O Error Handling Pattern
+
+File I/O operations that read from or write to the filesystem — using methods like `Path.read_text()`, `Path.write_text()`, `Path.read_bytes()`, `Path.write_bytes()`, or `open()` — are wrapped in try/except blocks catching `OSError` and `UnicodeDecodeError`. Rather than propagating OS-level failures upward, the handler returns a safe default value appropriate to the calling context: `None` for optional single-result lookups, an empty string for content-extraction routines, an empty list for collection-returning scanners, or simply continues to the next item in an iteration loop. This pattern appears in 15 locations across 12 modules (`versioning.py`, `adoption.py`, `ast_miner.py`, `config.py`, `commands.py`, `promise.py`, `checks/adoption.py`, `checks/utils.py`, `refactor/metrics.py`, `refactor/testability.py`, `refactor/discovery.py`).
+
+**When to use:** Whenever a function reads or writes a file whose existence or encoding cannot be guaranteed by a prior guard — for example, iterating over a directory of source files, loading a configuration file that may be missing or malformed, or hashing a file that may have been deleted between the existence check and the read. Do not use this pattern when the Path Existence Guard Pattern already validates the path and a missing file should be a hard failure.
+
+**Rationale:** OS-level errors (permission denied, file vanished mid-scan, broken symlink, unexpected encoding) are routine in batch filesystem operations, especially when scanning large directory trees. Silently degrading to a safe default keeps the caller's control flow simple and avoids cascading failures in collection-oriented operations where one bad file should not abort the entire scan. The pattern complements the Path Existence Guard Pattern: guards handle expected preconditions at the boundary, while this pattern handles unexpected failures during the I/O operation itself.
+
 ## Error Handling
 
 ### Centralized CLI Error Boundary

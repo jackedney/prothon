@@ -97,3 +97,31 @@ def test_code_dominant_threshold() -> None:
     assert _is_code_dominant("t" * 10 + big_code, [(1, big_code)]) is True
     small_code = "x" * 10
     assert _is_code_dominant("t" * 100 + small_code, [(1, small_code)]) is False
+
+
+def test_code_dominant_exact_threshold_is_not_dominant() -> None:
+    """Returns False at exactly 70% (strict greater-than)."""
+    content = "x" * 100
+    code_blocks = [(1, "y" * 70)]
+    assert _is_code_dominant(content, code_blocks) is False
+
+
+def test_analyze_nested_classes(tmp_path: Path) -> None:
+    """Inner classes appear in base_classes alongside outer classes."""
+    f = tmp_path / "mod.py"
+    f.write_text("class Outer:\n    class Inner: pass\n")
+    result = analyze_python_file(f)
+    assert "Outer" in result["base_classes"]
+    assert "Inner" in result["base_classes"]
+
+
+def test_extract_python_blocks_multiple_line_numbers() -> None:
+    """Multiple blocks each get their own start line number."""
+    content = (
+        "# Header\n\n```python\nblock1\n```\n\n"
+        "Text between.\n\n```python\nblock2\n```\n"
+    )
+    blocks = _extract_python_blocks(content)
+    assert len(blocks) == 2
+    assert blocks[0][0] == 3
+    assert blocks[1][0] == 9

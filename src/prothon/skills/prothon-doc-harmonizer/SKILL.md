@@ -31,13 +31,17 @@ You are the Doc Harmonizer. Detect and resolve conflicts between doc hierarchy l
 
 ## Process
 
-1. **Read all docs** — Read SPEC.md, DESIGN.md (if exists), and PATTERNS.md (if exists) in full.
-2. **Cross-reference top-down** — For each statement in DESIGN.md, verify it does not contradict any SPEC.md requirement. For each statement in PATTERNS.md, verify it does not contradict SPEC.md or DESIGN.md.
-3. **Identify conflicts** — List every contradiction found, with:
+1. **Read all docs** — Read SPEC.md, DESIGN.md (if exists), PATTERNS.md (if exists), and all files in `docs/references/` (if the directory exists) in full.
+2. **Cross-reference top-down** — For each statement in DESIGN.md, verify it does not contradict any SPEC.md requirement. For each statement in PATTERNS.md, verify it does not contradict SPEC.md or DESIGN.md. For each signature in docs/references/, verify it does not contradict DESIGN.md interfaces or PATTERNS.md conventions.
+3. **Cross-reference progressive disclosure** — Check consistency between PATTERNS.md and docs/references/:
+   - If PATTERNS.md references `docs/references/modules.md`, verify the file exists and its content is consistent.
+   - If docs/references/modules.md duplicates information that is fully specified in DESIGN.md interface contracts, flag it as a candidate for cross-referencing (to avoid drift between DESIGN.md and the reference file).
+   - If DESIGN.md's Module Structure lists a module that has no corresponding section in docs/references/modules.md, flag the gap.
+4. **Identify conflicts** — List every contradiction found, with:
    - The conflicting statements (quoted, with file and section)
    - Which document has higher authority
    - The proposed resolution (amend the lower doc)
-4. **Report** — Present findings in this format:
+5. **Report** — Present findings in this format:
 
 ```
 ## Harmonization Report

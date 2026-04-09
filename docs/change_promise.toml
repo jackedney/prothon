@@ -1,0 +1,152 @@
+[metadata]
+base_commit = "036d8117bffb48fa1dcab9a4420363a931601205"
+created_at = "2026-04-09T13:03:38Z"
+
+# Wave 0: Documentation Quality (DESIGN -> PATTERNS)
+# These tasks update documentation before any code changes.
+
+[[tasks]]
+title = "Add Progressive Disclosure Documentation architecture to DESIGN.md"
+task_id = "d1-design"
+goal = "Document the progressive disclosure system as a first-class prothon platform feature in DESIGN.md. Add a new 'Progressive Disclosure Documentation' architecture section describing the split between PATTERNS.md (core patterns, conventions, rationale) and docs/references/ (per-module signature references). Update the PATTERNS.md Content Contract to describe the two-tier structure. Update the Scaffolding Contract and Adoption Contract to include docs/references/ creation. Update the Compliance Report Contract to include progressive disclosure validation."
+success_criteria = "DESIGN.md contains a new 'Progressive Disclosure Documentation' section with full architecture description. PATTERNS.md Content Contract, Scaffolding Contract, Adoption Contract, and Compliance Report Contract sections are updated to reference docs/references/."
+files_to_create = []
+files_to_modify = ["docs/DESIGN.md"]
+files_to_remove = []
+expected_lines_added = 9
+expected_lines_removed = 1
+context_files = ["docs/SPEC.md", "docs/PATTERNS.md"]
+doc_sections = ["DESIGN.md:Architecture", "DESIGN.md:Interfaces"]
+reference_skills = []
+dependencies = []
+completed = true
+attempts = 1
+max_attempts = 3
+
+[[tasks]]
+title = "Restructure commands.py description in DESIGN.md"
+task_id = "d3-design"
+goal = "Break the 52-line monolith paragraph describing commands.py (DESIGN.md Module Structure section, line 51) into a structured list matching the format of other module descriptions. Each responsibility (Skill enum, SKILL_DOC_MAP, launch lifecycle, SPEC.md hash guard, post-session commits, follow-up dispatch) gets one bullet."
+success_criteria = "commands.py description in Module Structure is a structured list, not a monolith paragraph. No information is lost."
+files_to_create = []
+files_to_modify = ["docs/DESIGN.md"]
+files_to_remove = []
+expected_lines_added = 15
+expected_lines_removed = 1
+context_files = ["docs/DESIGN.md"]
+doc_sections = ["DESIGN.md:Architecture"]
+reference_skills = []
+dependencies = []
+completed = true
+attempts = 0
+max_attempts = 3
+
+[[tasks]]
+title = "Refactor PATTERNS.md for progressive disclosure and fix R26 compliance"
+task_id = "d1p1-patterns"
+goal = "Refactor PATTERNS.md: (1) Move all Module API Surface signatures to docs/references/modules.md. (2) Replace the Module API Surface section with a brief reference pointing to docs/references/modules.md and explaining the progressive disclosure structure. (3) Remove data model signatures that duplicate DESIGN.md contracts (CheckResult, Promise, Task, CheckStatus, etc.) — replace with references to the corresponding DESIGN.md section. (4) Merge the Refactor Wave Pattern and File Locking pattern into a single 'Parallel Refactor Execution' pattern. (5) Fix the R26 compliance issue — ensure all remaining code blocks are signature-only."
+success_criteria = "PATTERNS.md is under 200 lines. All Module API Surface signatures are in docs/references/modules.md. No signatures duplicate DESIGN.md contracts. Refactor Wave and File Locking patterns are merged. All code blocks comply with R26 (signature-only). A brief section explains the progressive disclosure loading strategy."
+files_to_create = ["docs/references/modules.md"]
+files_to_modify = ["docs/PATTERNS.md"]
+files_to_remove = []
+expected_lines_added = 300
+expected_lines_removed = 280
+context_files = ["docs/DESIGN.md", "docs/SPEC.md"]
+doc_sections = ["PATTERNS.md"]
+reference_skills = []
+dependencies = ["d1-design", "d3-design"]
+completed = true
+attempts = 0
+max_attempts = 3
+
+# Wave 1: Code Changes (depend on Wave 0 doc updates)
+
+[[tasks]]
+title = "Update Copier template to generate docs/references/ in prothon new"
+task_id = "c-template"
+goal = "Update the Copier project template to create a docs/references/ directory (with a .gitkeep) in all scaffolded projects. The template should produce a PATTERNS.md that follows the progressive disclosure format — core patterns and conventions only, with a note pointing to docs/references/ for per-module signature references."
+success_criteria = "Running copier from the template produces a project with docs/references/.gitkeep and a PATTERNS.md that uses the progressive disclosure format."
+files_to_create = ["template/docs/references/.gitkeep"]
+files_to_modify = ["template/docs/PATTERNS.md"]
+files_to_remove = []
+expected_lines_added = 30
+expected_lines_removed = 10
+context_files = ["docs/DESIGN.md", "docs/PATTERNS.md", "docs/references/modules.md"]
+doc_sections = ["DESIGN.md:Progressive Disclosure Documentation", "DESIGN.md:Interfaces:Scaffolding Contract"]
+reference_skills = ["tech-copier"]
+dependencies = ["d1p1-patterns"]
+completed = false
+attempts = 0
+max_attempts = 3
+
+[[tasks]]
+title = "Update adoption to create docs/references/ in prothon init"
+task_id = "c-adoption"
+goal = "Update adoption.py and adoption_templates.py to create docs/references/ directory during prothon init. The generated PATTERNS.md stub should use the progressive disclosure format. If AST mining discovers signatures, they should be written to docs/references/modules.md instead of inline in PATTERNS.md."
+success_criteria = "Running prothon init creates docs/references/.gitkeep. The generated PATTERNS.md follows the progressive disclosure format. AST-mined signatures go to docs/references/modules.md."
+files_to_create = []
+files_to_modify = ["src/prothon/adoption.py", "src/prothon/adoption_templates.py"]
+files_to_remove = []
+expected_lines_added = 40
+expected_lines_removed = 10
+context_files = ["docs/DESIGN.md", "docs/PATTERNS.md", "src/prothon/adoption.py", "src/prothon/adoption_templates.py", "src/prothon/ast_miner.py"]
+doc_sections = ["DESIGN.md:Progressive Disclosure Documentation", "DESIGN.md:Interfaces:Adoption Contract"]
+reference_skills = []
+dependencies = ["d1p1-patterns"]
+completed = false
+attempts = 0
+max_attempts = 3
+
+[[tasks]]
+title = "Update compliance checks to validate progressive disclosure structure"
+task_id = "c-compliance"
+goal = "Update compliance checks in checks/docs.py or checks/structure.py to verify: (1) docs/references/ directory exists when PATTERNS.md references it, (2) PATTERNS.md does not contain inline module signatures (those belong in docs/references/), (3) docs/references/modules.md follows signature-only constraints (R25-R26). Add a new check function check_progressive_disclosure()."
+success_criteria = "Compliance checker validates progressive disclosure structure. New check_progressive_disclosure() function exists and returns PASS/FAIL results."
+files_to_create = []
+files_to_modify = ["src/prothon/checks/docs.py", "src/prothon/checks/__init__.py"]
+files_to_remove = []
+expected_lines_added = 50
+expected_lines_removed = 5
+context_files = ["docs/DESIGN.md", "src/prothon/checks/docs.py", "src/prothon/checks/__init__.py", "src/prothon/compliance.py"]
+doc_sections = ["DESIGN.md:Progressive Disclosure Documentation", "PATTERNS.md"]
+reference_skills = []
+dependencies = ["d1p1-patterns"]
+completed = false
+attempts = 0
+max_attempts = 3
+
+[[tasks]]
+title = "Update bundled skills for progressive disclosure"
+task_id = "c-skills"
+goal = "Update the patterns-writer, execute, and compliance bundled skills (in src/prothon/skills/) to understand the progressive disclosure structure: patterns-writer writes core patterns to PATTERNS.md and signatures to docs/references/modules.md; execute loads docs/references/<module>.md as context_files per task; compliance checks the split structure. Update the doc-harmonizer skill to harmonize across both PATTERNS.md and docs/references/."
+success_criteria = "patterns-writer skill instructions reference docs/references/ for signature output. execute skill instructions reference docs/references/ for context loading. compliance skill instructions include progressive disclosure checks. doc-harmonizer skill instructions cover docs/references/."
+files_to_create = []
+files_to_modify = ["src/prothon/skills/prothon-patterns-writer/SKILL.md", "src/prothon/skills/prothon-execute/SKILL.md", "src/prothon/skills/prothon-compliance-checker/SKILL.md", "src/prothon/skills/prothon-doc-harmonizer/SKILL.md"]
+files_to_remove = []
+expected_lines_added = 60
+expected_lines_removed = 20
+context_files = ["docs/DESIGN.md", "docs/PATTERNS.md", "docs/references/modules.md"]
+doc_sections = ["DESIGN.md:Progressive Disclosure Documentation", "DESIGN.md:Interfaces:Documentation Safety Contract"]
+reference_skills = []
+dependencies = ["d1p1-patterns"]
+completed = false
+attempts = 0
+max_attempts = 3
+
+[[tasks]]
+title = "Add tests for refactor subpackage: discovery.py, metrics.py, promise_gen.py"
+task_id = "c2-tests"
+goal = "Add test coverage for the three untested refactor modules: (1) test_refactor_discovery.py — test discover_drift() returns correct findings for each category, test category checkers independently, test testability heuristics; (2) test_refactor_metrics.py — test collect_module_metrics(), collect_pattern_usage(), collect_cross_module_similarities() with fixture source trees; (3) test_refactor_promise_gen.py — test generate_refactor_promise() maps findings to tasks correctly, test task ordering by wave level."
+success_criteria = "Tests exist for discovery.py, metrics.py, and promise_gen.py. All tests pass. Tests follow project testing patterns (fakes, no heavy deps, fast)."
+files_to_create = ["tests/test_refactor_discovery.py", "tests/test_refactor_metrics.py", "tests/test_refactor_promise_gen.py"]
+files_to_modify = []
+files_to_remove = []
+expected_lines_added = 250
+expected_lines_removed = 0
+context_files = ["docs/PATTERNS.md", "src/prothon/refactor/discovery.py", "src/prothon/refactor/metrics.py", "src/prothon/refactor/promise_gen.py", "src/prothon/refactor/models.py", "tests/test_refactor.py", "tests/test_refactor_impl.py", "tests/fakes.py"]
+doc_sections = ["PATTERNS.md:Testing Patterns"]
+reference_skills = ["tech-pytest"]
+dependencies = []
+completed = true
+attempts = 0
+max_attempts = 3

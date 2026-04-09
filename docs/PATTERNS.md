@@ -42,7 +42,9 @@ To maintain context efficiency for AI assistants, generated reference skills fol
 
 Changes must flow top-down through the documentation hierarchy: **DESIGN -> PATTERNS -> CODE**. Architectural shifts or convention changes are documented and approved first. Implementation tasks then reference the specific documentation heading they are aligning with.
 
-When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock (via a sibling `.toml.lock` file) to prevent lost updates. This concurrency mechanism supports the wave principle by allowing independent tasks within a wave to execute in parallel while maintaining data integrity.
+When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock (via a sibling `.toml.lock` file) to prevent lost updates.
+
+This concurrency mechanism supports the wave principle by allowing independent tasks within a wave to execute in parallel while maintaining data integrity. The lock covers the full read-modify-write cycle so no completion is overwritten by a racing subagent.
 
 ### Session Command Wrapper Pattern
 

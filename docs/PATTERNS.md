@@ -26,13 +26,13 @@ Four groups, separated by blank lines, each group alphabetical: (1) `from __futu
 
 Each module exposes a minimal public API. Internal helpers use the `_` prefix.
 
-Per-module API surface signatures live in `docs/references/modules.md`, organized by module in the same order they appear in DESIGN.md's Module Structure section. Subagents load these signatures as needed via `context_files` entries in `change_promise.toml`, keeping the core patterns document concise. Modules whose contracts are fully described in DESIGN.md (compliance.py, models.py, promise_verify.py, git.py) are noted with a cross-reference rather than duplicated. See the Tech-Researcher section in DESIGN.md for the full progressive disclosure architecture.
+Per-module API surface signatures live in `docs/references/modules.md`, organized by subsystem grouping. Subagents load these signatures as needed via `context_files` entries in `change_promise.toml`, keeping the core patterns document concise. Modules whose contracts are fully described in DESIGN.md interface contracts (compliance.py, models.py, promise_verify.py, git.py) are noted with a cross-reference rather than duplicated. See the Progressive Disclosure Documentation section in DESIGN.md for the full architecture.
 
 ## Design Patterns
 
 ### Tiered Compliance Evidence Pattern
 
-Compliance verification uses a hybrid strategy to map requirements to source code. **Static Analysis** (Regex/AST) performs fast, deterministic checks for structural rules and doc formats. **Semantic Analysis** (LLM-based) handles high-level functional requirements. Both feed into **Evidence Mapping**, where every result is paired with a `file:line` citation and a brief rationale.
+Compliance checks use a hybrid evidence strategy — see DESIGN.md → Compliance Checker for the full architecture. The code convention is: every check produces a `CheckResult` with a tri-state status (`PASS`, `FAIL`, `SKIP`), a `file:line` evidence citation, and a brief rationale. Static checks (Regex/AST) handle structural rules; semantic checks (LLM subagents) handle high-level requirements.
 
 ### Progressive Disclosure Skill Pattern
 

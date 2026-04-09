@@ -94,7 +94,10 @@ refactor.*
   └── refactor.promise_gen.generate_refactor_promise() → models.Task, Metadata, Promise, git.rev_parse_head()
 
 scaffold_cli.py
-  └── scaffold.generate(), init_existing()
+  └── scaffold.generate()
+
+scaffold_cli.py (init)
+  └── adoption.init_existing()
 
 promise.py
   ├── models.Task, Metadata, Promise, PROMISE_PATH

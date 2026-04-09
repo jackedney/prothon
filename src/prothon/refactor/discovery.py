@@ -8,6 +8,8 @@ from prothon.compliance import CheckStatus
 from prothon.refactor.models import DriftCategory, DriftFinding, Severity
 from prothon.refactor.testability import _has_testable_logic, _is_testable_class
 
+LARGE_FILE_LINE_THRESHOLD = 500
+
 
 def discover_drift(root: Path) -> list[DriftFinding]:
     findings = []
@@ -97,7 +99,7 @@ def _check_large_files(root: Path) -> list[DriftFinding]:
     for py_file in src_dir.rglob("*.py"):
         try:
             lines = py_file.read_text(encoding="utf-8").splitlines()
-            if len(lines) > 500:
+            if len(lines) > LARGE_FILE_LINE_THRESHOLD:
                 findings.append(
                     DriftFinding(
                         title=f"Large file: {py_file.name}",

@@ -162,6 +162,32 @@ def detect_bump_type(
     return None
 
 
+def _read_init_version(init_path: Path) -> str | None:
+    content = init_path.read_text(encoding="utf-8")
+    match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+    return match.group(1) if match else None
+
+
+def _resolve_base_version(before_sha: str, root: Path) -> str | None:
+    try:
+        base_toml_content = run_git("show", f"{before_sha}:pyproject.toml", cwd=root)
+        base_doc = tomlkit.parse(base_toml_content)
+        return nested_get(base_doc, "project", "version")
+    except (
+        GitError,
+        FileNotFoundError,
+        TOMLKitError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        console.print(
+            f"Warning: Could not read pyproject.toml from {before_sha}: {exc}",
+            style="yellow",
+        )
+        return None
+
+
 def ci_bump_command(
     root: Path,
     before_sha: str,
@@ -190,30 +216,12 @@ def ci_bump_command(
     if not branch_version:
         raise ProthonError("[project] version not found in pyproject.toml")
 
-    try:
-        base_toml_content = run_git("show", f"{before_sha}:pyproject.toml", cwd=root)
-        base_doc = tomlkit.parse(base_toml_content)
-        base_version = nested_get(base_doc, "project", "version")
-    except (
-        GitError,
-        FileNotFoundError,
-        TOMLKitError,
-        KeyError,
-        TypeError,
-        ValueError,
-    ) as exc:
-        console.print(
-            f"Warning: Could not read pyproject.toml from {before_sha}: {exc}",
-            style="yellow",
-        )
-        base_version = None
-
+    base_version = _resolve_base_version(before_sha, root)
     if not base_version:
         console.print(f"Falling back to branch version {branch_version} as base")
         base_version = branch_version
 
     bump_fn = globals()[f"bump_{bump_type}"]
-
     expected_version = bump_fn(base_version)
 
     project_name = nested_get(doc, "project", "name")
@@ -223,14 +231,7 @@ def ci_bump_command(
     module_name = project_name.replace("-", "_")
     init_path = find_init_path(root, project_name, module_name)
 
-    init_version: str | None = None
-    if init_path:
-        init_content = init_path.read_text(encoding="utf-8")
-        version_match = re.search(
-            r'__version__\s*=\s*["\']([^"\']+)["\']', init_content
-        )
-        if version_match:
-            init_version = version_match.group(1)
+    init_version = _read_init_version(init_path) if init_path else None
 
     if branch_version == expected_version and init_version == expected_version:
         console.print(f"Version already at {expected_version}, skipping.")

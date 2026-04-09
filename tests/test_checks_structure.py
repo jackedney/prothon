@@ -172,5 +172,6 @@ def test_inheritance_non_exception_class_ignored(tmp_path: Path) -> None:
         "class ProthonError(Exception): pass\nclass HelperMixin: pass\n"
     )
     results = check_inheritance(tmp_path)
+    assert len(results) == 1
     assert results[0].status == CheckStatus.PASS
     assert "HelperMixin" not in results[0].rationale

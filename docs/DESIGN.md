@@ -39,7 +39,7 @@ src/prothon/
         discovery.py       # discover_drift() and Wave 1 category checkers
         testability.py     # Testable logic detection heuristics (AST-based)
         promise_gen.py     # generate_refactor_promise()
-    scaffold.py         # Template rendering, copier answers, project adoption
+    scaffold.py         # Template rendering, copier answers
     scaffold_cli.py     # Scaffolding-specific CLI commands and interactive prompts
     skills.py           # Skill discovery, symlink management
     versioning.py       # Semantic version detection, bumping, git tagging, CI version bump orchestration (ci_bump_command, ci_detect_command)
@@ -48,7 +48,15 @@ src/prothon/
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-`commands.py` serves as the session orchestration layer between `cli.py` (Typer command definitions) and the domain modules. It owns the `Skill` enum (canonical skill name registry), the `SKILL_DOC_MAP` (skill-to-document-file mapping), and the `launch_skill()` lifecycle — which captures a pre-session SPEC.md hash guard to detect unauthorized writes, captures design-section hashes for deterministic tech-researcher triggering, enforces post-session doc commits for any skill that modifies documentation, and dispatches follow-up agent sessions (doc-harmonizer after spec/design/patterns, tech-researcher after design when Technology Choices or Key Decisions sections changed, compliance-checker after execute). Individual command functions (`spec_command`, `design_command`, etc.) call into `launch_skill()` with prerequisite checks. Promise subcommand handlers (`promise_plan_command`, `promise_status_command`, etc.) delegate to the `promise` and `promise_verify` modules. This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. Two subpackages break the flat layout: `checks/` groups 28+ static check functions that would otherwise form an 850+ line monolith, and `refactor/` splits an 800+ line module into focused internal modules by concern (data models, metrics gathering, drift discovery, testability heuristics, promise generation).
+`commands.py` serves as the session orchestration layer between `cli.py` (Typer command definitions) and the domain modules. Its responsibilities are:
+
+- **Skill enum** — canonical skill name registry
+- **SKILL_DOC_MAP** — skill-to-document-file mapping
+- **launch_skill() lifecycle** — pre-session SPEC.md hash guard to detect unauthorized writes, design-section hashes for deterministic tech-researcher triggering, post-session doc commits for any skill that modifies documentation, and follow-up agent dispatch (doc-harmonizer after spec/design/patterns, tech-researcher after design when Technology Choices or Key Decisions sections changed, compliance-checker after execute)
+- **Session command functions** — `spec_command`, `design_command`, etc., calling into `launch_skill()` with prerequisite checks
+- **Promise subcommand handlers** — `promise_plan_command`, `promise_status_command`, etc., delegating to the `promise` and `promise_verify` modules
+
+This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. Two subpackages break the flat layout: `checks/` groups 28+ static check functions that would otherwise form an 850+ line monolith, and `refactor/` splits an 800+ line module into focused internal modules by concern (data models, metrics gathering, drift discovery, testability heuristics, promise generation).
 
 ### Module Dependencies
 
@@ -86,7 +94,10 @@ refactor.*
   └── refactor.promise_gen.generate_refactor_promise() → models.Task, Metadata, Promise, git.rev_parse_head()
 
 scaffold_cli.py
-  └── scaffold.generate(), init_existing()
+  └── scaffold.generate()
+
+scaffold_cli.py (init)
+  └── adoption.init_existing()
 
 promise.py
   ├── models.Task, Metadata, Promise, PROMISE_PATH
@@ -347,14 +358,15 @@ Registered backends:
 | `claude-code` | Claude Code | `claude` | `~/.claude/skills/` | A (native skills) |
 | `opencode` | opencode | `opencode` | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) | A (native skills) |
 | `gemini` | Gemini CLI | `gemini` | `~/.gemini/skills/` | A (native skills) |
+| `ob1` | OB1 | `ob1` | `~/.ob1/skills/` | A (native skills) |
 
 Canonical-to-backend subagent type mapping:
 
-| Canonical name | Claude Code | opencode | Gemini CLI |
-|---------------|-------------|----------|------------|
-| `general-purpose` | `general-purpose` | `general` | `generalist_agent` |
-| `explore` | `Explore` | `explore` | `codebase_investigator` |
-| `plan` | `Plan` | `plan` | `generalist_agent` |
+| Canonical name | Claude Code | opencode | Gemini CLI | OB1 |
+|---------------|-------------|----------|------------|-----|
+| `general-purpose` | `general-purpose` | `general` | `generalist_agent` | `general` |
+| `explore` | `Explore` | `explore` | `codebase_investigator` | `explore` |
+| `plan` | `Plan` | `plan` | `generalist_agent` | `plan` |
 
 A shared launch lifecycle handles: binary existence check (via `shutil.which()`), skill syncing, environment merging (`os.environ` + `env_overrides()`), subprocess execution, and return code reporting. When the binary is missing, the error message includes the backend's `install_hint`.
 
@@ -376,7 +388,7 @@ Resolution is implemented as a `resolve_agent(cli_value)` function in `config.py
 
 The `--agent` option is per-command, defined on each command that launches an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) via a shared `AgentOption` annotated type. This allows natural usage like `prothon patterns --agent opencode`. Commands that don't launch a session (`new`, `init`, `promise *`) don't have the option. The `PROTHON_AGENT` environment variable is handled via Typer's `envvar=` parameter on the shared option definition.
 
-Valid backend keys match the registry: `claude-code`, `opencode`, `gemini`. When an invalid key is provided, the error message lists all registered backends. When the resolved backend's binary is missing, the error message includes the backend's `install_hint`.
+Valid backend keys match the registry: `claude-code`, `opencode`, `gemini`, `ob1`. When an invalid key is provided, the error message lists all registered backends. When the resolved backend's binary is missing, the error message includes the backend's `install_hint`.
 
 Config file format examples:
 

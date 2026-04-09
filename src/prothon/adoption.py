@@ -13,6 +13,7 @@ from prothon.adoption_templates import (
     _DESIGN_SCAFFOLD,
     _GITLAB_VERSION_BUMP,
     _PATTERNS_SCAFFOLD,
+    _REFERENCES_MODULES_HEADER,
     _SPEC_SCAFFOLD,
     _VERSION_BUMP_WORKFLOW,
     _VERSION_TAG_WORKFLOW,
@@ -116,19 +117,27 @@ def _create_docs(root: Path) -> list[Path]:
     docs_dir = root / "docs"
     docs_dir.mkdir(parents=True, exist_ok=True)
 
-    # Extract idioms using AST Miner if src/ exists
+    refs_dir = docs_dir / "references"
+    refs_dir.mkdir(parents=True, exist_ok=True)
+    gitkeep = refs_dir / ".gitkeep"
+    if not gitkeep.exists():
+        gitkeep.touch()
+        created.append(gitkeep)
+
     src_dir = root / "src"
-    miner_patterns = ""
     if src_dir.is_dir():
         miner = ASTPatternMiner()
         idioms = miner.scan_directory(src_dir)
         if idioms:
-            miner_patterns = "\n" + idioms
+            modules_path = refs_dir / "modules.md"
+            if not modules_path.exists():
+                modules_path.write_text(_REFERENCES_MODULES_HEADER + idioms)
+                created.append(modules_path)
 
     docs = {
         "SPEC.md": _SPEC_SCAFFOLD,
         "DESIGN.md": _DESIGN_SCAFFOLD,
-        "PATTERNS.md": _PATTERNS_SCAFFOLD + miner_patterns,
+        "PATTERNS.md": _PATTERNS_SCAFFOLD,
     }
     for name, content in docs.items():
         path = docs_dir / name

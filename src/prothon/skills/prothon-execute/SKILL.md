@@ -31,16 +31,18 @@ You are stateless between invocations. Determine "what to do next" by inspecting
 3. **Identify gaps** — Diff the docs against the code to find implementation gaps.
 4. **Select next phase** — Pick a small, testable chunk of work (3–7 tasks) that moves the project toward alignment. Prioritize foundational dependencies (e.g., data models before CLI).
 5. **Inventory reference skills** — List all skill directories in `.agents/skills/` matching `tech-*`, `style-*`, `optim-*`, and `domain-*`.
-6. **Get HEAD SHA** — Run: `git rev-parse HEAD`.
-7. **Write `docs/change_promise.toml` (Writing Plans)** — Create this file covering ONLY the selected phase. Break work into bite-sized tasks (2-5 minutes of work each).
+6. **Inventory reference docs** — List all files in `docs/references/`. These are progressive disclosure documents containing per-module API signatures and topic-specific reference material.
+7. **Get HEAD SHA** — Run: `git rev-parse HEAD`.
+8. **Write `docs/change_promise.toml` (Writing Plans)** — Create this file covering ONLY the selected phase. Break work into bite-sized tasks (2-5 minutes of work each).
    - Document exactly which files to touch for each task.
    - Embed complete code concepts or context rather than vague descriptions ("add validation").
    - DRY. YAGNI. TDD. Every `[[tasks]]` entry MUST include all fields.
    - **Test files are optional.** Only include a test file in `files_to_create` when the task introduces testable business logic. Trivial modules (constants, type definitions, pass-throughs) don't need tests.
+   - **Reference files as context** — When a task modifies a specific module, include the corresponding reference file in `context_files`. For example, if modifying `src/prothon/promise.py`, include `"docs/references/modules.md"` in `context_files` so the subagent can load the promise.py signatures section. If the reference file doesn't exist, omit it.
 
 ```toml
 [metadata]
-base_commit = "<SHA from step 6>"
+base_commit = "<SHA from step 7>"
 created_at = "<ISO 8601 timestamp>"
 
 [[tasks]]
@@ -52,7 +54,7 @@ files_to_modify = ["src/app.py"]
 files_to_remove = []
 expected_lines_added = 120
 expected_lines_removed = 5
-context_files = ["src/middleware.py", "src/config.py"]
+context_files = ["src/middleware.py", "src/config.py", "docs/references/modules.md"]
 doc_sections = ["DESIGN.md#Authentication", "PATTERNS.md#Error-Handling"]
 reference_skills = ["tech-fastapi", "style-python"]
 dependencies = []
@@ -71,7 +73,7 @@ For each task in the promise (respecting dependency order):
 
 1. **Orchestrate Retries & Two-Stage Review** — While `attempts < max_attempts` and task is not `completed`:
    a) **Record attempt** — Run: `uvx prothon promise record-attempt {task_index}` (counts every attempt, including the one about to start).
-   b) **Launch Implementer Subagent** — Spawn a **fresh** subagent using `./implementer-prompt.md`. Keep this session alive until both reviewers approve. If it asks questions before implementing, answer them.
+   b) **Launch Implementer Subagent** — Spawn a **fresh** subagent using `./implementer-prompt.md`. When the task's `context_files` includes a `docs/references/` file (e.g., `docs/references/modules.md`), the subagent should read the relevant section for the module it's modifying to understand the existing API surface before making changes. Keep this session alive until both reviewers approve. If it asks questions before implementing, answer them.
    c) **Launch Spec Reviewer Subagent** — Once the implementer finishes, spawn a **fresh** subagent using `./spec-reviewer-prompt.md` to confirm the code matches the specification.
       - If it reports gaps/issues, send the feedback to the **still-open Implementer Subagent** to fix. Re-launch a fresh spec reviewer until approved.
    d) **Launch Code Quality Reviewer Subagent** — Once spec compliance is approved, spawn a **fresh** subagent using `./code-quality-reviewer-prompt.md`.

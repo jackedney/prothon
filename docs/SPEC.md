@@ -15,7 +15,7 @@ Prothon is a CLI tool that scaffolds opinionated Python projects and provides a 
 5. The scaffolded project must include pre-commit hooks that enforce toolchain checks on every commit, excluding mutation testing.
 6. The scaffolded project must include CI workflows for both GitHub Actions and GitLab CI/CD, plus a pre-commit CI workflow. CI must run the full set of toolchain checks, but mutation testing must be executed as a separate or non-blocking job to ensure it does not delay the main development feedback loop.
 7. The scaffolded project must initialize a git repository with an initial commit.
-8. The scaffolded project must include agent instruction files that teach AI assistants the documentation hierarchy and development workflow.
+8. The scaffolded project must include agent instruction files that teach AI assistants the documentation hierarchy, development workflow, and progressive disclosure skill structure.
 9. The scaffolded project must include empty doc scaffolds for SPEC.md, DESIGN.md, and PATTERNS.md.
 
 ### Project Adoption

@@ -26,307 +26,31 @@ Four groups, separated by blank lines, each group alphabetical: (1) `from __futu
 
 Each module exposes a minimal public API. Internal helpers use the `_` prefix.
 
-**cli.py:**
-```python
-app: typer.Typer        # Main CLI entry point
-promise_app: typer.Typer  # `prothon promise` subcommands
-ci_app: typer.Typer       # `prothon ci` subcommands
-```
-
-**commands.py:**
-```python
-def spec_command(root: Path, agent: str | None, model: str | None, provider: str | None) -> int: ...
-def design_command(root: Path, agent: str | None, model: str | None, provider: str | None) -> int: ...
-def patterns_command(root: Path, agent: str | None, model: str | None, provider: str | None) -> int: ...
-def execute_command(root: Path, agent: str | None, model: str | None, provider: str | None) -> int: ...
-def compliance_command(root: Path, agent: str | None, model: str | None, provider: str | None) -> None: ...
-def refactor_command(root: Path, agent: str | None, model: str | None, provider: str | None) -> int: ...
-```
-
-**ui.py:**
-```python
-def render_check_report(report: TaskCheckReport) -> Table: ...
-def render_compliance_report(report: ComplianceReport) -> Table: ...
-def render_plan(p: Promise) -> Table: ...
-def render_status(promise: Promise) -> Table: ...
-```
-
-**config.py:**
-```python
-def file_hash(path: Path) -> str | None: ...
-def find_init_path(root: Path, project_name: str, module_name: str) -> Path | None: ...
-def read_toml(path: Path) -> dict: ...
-def nested_get(doc: dict, *keys: str) -> str | None: ...
-def resolve_agent(cli_value: str | None = None) -> str: ...
-def resolve_model(cli_model: str | None, cli_provider: str | None) -> str | None: ...
-```
-
-**assistant.py:**
-```python
-def register_backend(name: str, cls: type) -> None: ...
-def get_backend(name: str = "claude-code") -> AssistantBackend: ...
-def launch(backend: AssistantBackend, skill_name: str, cwd: Path, model: str | None = None) -> int: ...
-```
-
-**checks/ (subpackage):**
-
-The `checks` package re-exports all public symbols via `__all__`. The primary entry point is `run_static_checks`; individual `check_*` functions and `analyze_python_file` are also available for targeted use.
-
-```python
-def run_static_checks(root: Path) -> ComplianceReport: ...
-def analyze_python_file(path: Path) -> dict[str, Any]: ...
-def check_adoption_intelligence(root: Path) -> list[CheckResult]: ...
-def check_agent_files(root: Path) -> list[CheckResult]: ...
-def check_doc_existence(root: Path) -> list[CheckResult]: ...
-def check_doc_harmonizer(root: Path) -> list[CheckResult]: ...
-def check_execute_logic(root: Path) -> list[CheckResult]: ...
-def check_inheritance(root: Path) -> list[CheckResult]: ...
-def check_package_structure(root: Path) -> list[CheckResult]: ...
-def check_patterns_doc(patterns_path: Path) -> list[CheckResult]: ...
-def check_pre_commit(root: Path) -> list[CheckResult]: ...
-def check_refactor_logic(root: Path) -> list[CheckResult]: ...
-def check_semantic_versioning(root: Path) -> list[CheckResult]: ...
-def check_skills_dir(root: Path) -> list[CheckResult]: ...
-def check_tech_researcher(root: Path) -> list[CheckResult]: ...
-```
-
-**refactor/ (subpackage):**
-
-The `refactor` package re-exports all public symbols via `__init__.py`. The primary entry points are the discovery and promise generation functions; individual metrics and model types are also available for targeted use.
-
-```python
-def discover_drift(root: Path) -> list[DriftFinding]: ...
-def collect_module_metrics(root: Path) -> list[ModuleMetrics]: ...
-def collect_pattern_usage(root: Path) -> list[PatternOccurrence]: ...
-def collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]: ...
-def generate_refactor_promise(root: Path, findings: list[DriftFinding]) -> Promise: ...
-```
-
-**scaffold.py:**
-```python
-def get_template_dir() -> Path: ...
-def generate(dest: Path, data: dict | None = None) -> None: ...
-```
-
-**scaffold_cli.py:**
-```python
-def new_project(destination: str = ".") -> None: ...
-def init_project(cwd: Path | None = None) -> None: ...
-```
-
-**git.py:**
-```python
-DiffStat = dict[str, tuple[int, int]]
-
-class GitDiffProvider(Protocol):
-    def diff_names(self, base_commit: str, *paths: str) -> set[str]: ...
-    def diff_numstat(self, base_commit: str, *paths: str) -> DiffStat: ...
-
-def run_git(*args: str, cwd: Path | None = None) -> str: ...
-
-class SubprocessGitDiff:
-    def diff_names(self, base_commit: str, *paths: str) -> set[str]: ...
-    def diff_numstat(self, base_commit: str, *paths: str) -> DiffStat: ...
-
-def rev_parse_head(cwd: Path | None = None) -> str: ...
-def is_dirty(path: Path, cwd: Path | None = None) -> bool: ...
-def commit_file(path: Path, message: str, cwd: Path | None = None) -> None: ...
-```
-
-**versioning.py:**
-```python
-def parse_version(v: str) -> tuple[int, int, int]: ...
-def bump_major(v: str) -> str: ...
-def bump_minor(v: str) -> str: ...
-def bump_patch(v: str) -> str: ...
-def update_pyproject_version(path: Path, new_version: str) -> None: ...
-def update_init_version(path: Path, new_version: str) -> None: ...
-def create_tag(version: str, cwd: Path | None = None) -> None: ...
-def detect_bump_type(before_sha: str, after_sha: str, cwd: Path | None = None) -> str | None: ...
-def ci_bump_command(root: Path, before_sha: str, after_sha: str = "HEAD", dry_run: bool = False, no_tag: bool = False) -> None: ...
-def ci_detect_command(root: Path, before_sha: str, after_sha: str = "HEAD") -> None: ...
-```
-
-**promise_verify.py:**
-
-`CheckStatus` is imported from `compliance.py` (shared canonical source).
-
-```python
-DEFAULT_TOLERANCE = 30
-
-@dataclass
-class FileCheckDetail:
-    path: str
-    expected_state: str
-    actual_state: str
-    status: CheckStatus
-
-@dataclass
-class CheckResult:
-    name: str
-    status: CheckStatus
-    detail: str
-    file_details: list[FileCheckDetail] = field(default_factory=list)
-
-@dataclass
-class TaskCheckReport:
-    task_index: int
-    title: str
-    task_id: str
-    checks: list[CheckResult] = field(default_factory=list)
-    @property
-    def passed(self) -> bool: ...
-    def format(self) -> str: ...
-
-def check_task(task_index: int, *, diff: GitDiffProvider | None = None, path: Path | None = None, promise: Promise | None = None) -> TaskCheckReport: ...
-```
-
-**adoption.py:**
-```python
-def init_existing(cwd: Path | None = None, data: dict[str, str] | None = None) -> list[Path]: ...
-```
-
-**ast_miner.py:**
-```python
-class IdiomMatcher:
-    def __init__(self) -> None: ...
-    def is_idiom_name(self, name: str) -> bool: ...
-    def is_idiom_node(self, node: ast.AST) -> bool: ...
-    def is_idiom_decorator(self, node: ast.AST) -> bool: ...
-
-class ASTPatternMiner:
-    def __init__(self, matcher: IdiomMatcher | None = None) -> None: ...
-    def scan_directory(self, root: Path) -> str: ...
-    def extract_from_file(self, path: Path) -> str: ...
-```
-
-**project.py:**
-```python
-def find_project_root(start: Path | None = None) -> Path: ...
-```
-
-**exceptions.py:**
-```python
-class ProthonError(Exception): ...
-class ProjectNotFoundError(ProthonError): ...
-class ProjectAlreadyInitError(ProthonError): ...
-class PromiseError(ProthonError): ...
-class AssistantNotFoundError(ProthonError): ...
-class UnknownBackendError(ProthonError): ...
-class ComplianceError(ProthonError): ...
-class GitError(ProthonError): ...
-class VersionError(ProthonError): ...
-class MaxAttemptsExceeded(PromiseError): ...
-```
-
-**skills.py:**
-```python
-def bundled_skills_dir() -> Path: ...
-def sync_skills(target: Path | None = None) -> None: ...
-```
-
-**compliance.py:**
-```python
-class CheckStatus(Enum):
-    PASS = "PASS"
-    FAIL = "FAIL"
-    SKIP = "SKIP"
-
-class CheckType(Enum):
-    STATIC = "STATIC"
-    SEMANTIC = "SEMANTIC"
-
-@dataclass
-class Requirement:
-    source: str
-    statement: str
-    requirement_id: str | None = None
-
-@dataclass
-class CheckResult:
-    requirement: Requirement
-    status: CheckStatus
-    check_type: CheckType = CheckType.STATIC
-    evidence: str = ""
-    rationale: str = ""
-    def __str__(self) -> str: ...
-    def to_dict(self) -> dict[str, Any]: ...
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "CheckResult": ...
-
-@dataclass
-class ComplianceReport:
-    results: list[CheckResult] = field(default_factory=list)
-    @property
-    def passed(self) -> bool: ...
-    @property
-    def score(self) -> float: ...
-    @property
-    def failures(self) -> list[CheckResult]: ...
-    def results_by_source(self, source: str) -> list[CheckResult]: ...
-    def results_by_type(self, check_type: CheckType) -> list[CheckResult]: ...
-    @property
-    def static_results(self) -> list[CheckResult]: ...
-    @property
-    def semantic_results(self) -> list[CheckResult]: ...
-    def merge(self, other: "ComplianceReport") -> None: ...
-    def add_from_dicts(self, findings: list[dict[str, Any]]) -> None: ...
-    def format_summary(self) -> str: ...
-```
-
-**models.py:**
-```python
-PROMISE_PATH = Path("docs/change_promise.toml")
-
-@dataclass
-class Task:
-    title: str
-    task_id: str = field(default_factory=_generate_id)
-    goal: str = ""
-    success_criteria: str = ""
-    files_to_create: list[str] = field(default_factory=list)
-    files_to_modify: list[str] = field(default_factory=list)
-    files_to_remove: list[str] = field(default_factory=list)
-    expected_lines_added: int = 0
-    expected_lines_removed: int = 0
-    context_files: list[str] = field(default_factory=list)
-    doc_sections: list[str] = field(default_factory=list)
-    reference_skills: list[str] = field(default_factory=list)
-    dependencies: list[str] = field(default_factory=list)
-    completed: bool = False
-    attempts: int = 0
-    max_attempts: int = 3
-
-@dataclass
-class Metadata:
-    base_commit: str = ""
-    created_at: str = ""
-
-@dataclass
-class Promise:
-    metadata: Metadata = field(default_factory=Metadata)
-    tasks: list[Task] = field(default_factory=list)
-```
+Per-module API surface signatures live in `docs/references/modules.md`, organized by subsystem grouping. Subagents load these signatures as needed via `context_files` entries in `change_promise.toml`, keeping the core patterns document concise. Modules whose contracts are fully described in DESIGN.md interface contracts (compliance.py, models.py, promise_verify.py, git.py) are noted with a cross-reference rather than duplicated. See the Progressive Disclosure Documentation section in DESIGN.md for the full architecture.
 
 ## Design Patterns
 
 ### Tiered Compliance Evidence Pattern
-Compliance verification uses a hybrid strategy to map requirements to source code. **Static Analysis** (Regex/AST) performs fast, deterministic checks for structural rules and doc formats. **Semantic Analysis** (LLM-based) handles high-level functional requirements. Both feed into **Evidence Mapping**, where every result is paired with a `file:line` citation and a brief rationale.
+
+Compliance checks use a hybrid evidence strategy — see DESIGN.md → Compliance Checker for the full architecture. The code convention is: every check produces a `CheckResult` with a tri-state status (`PASS`, `FAIL`, `SKIP`), a `file:line` evidence citation, and a brief rationale. Static checks (Regex/AST) handle structural rules; semantic checks (LLM subagents) handle high-level requirements.
 
 ### Progressive Disclosure Skill Pattern
+
 To maintain context efficiency for AI assistants, generated reference skills follow a three-level hierarchy. **Level 1** (YAML frontmatter) provides trigger phrases for discovery. **Level 2** (`SKILL.md` body) contains core instructions. **Level 3** (`references/` subdirectory) holds detailed API specs and heavy examples, loaded only when needed.
 
-### Refactor Wave Pattern
+### Parallel Refactor Execution
+
 Changes must flow top-down through the documentation hierarchy: **DESIGN -> PATTERNS -> CODE**. Architectural shifts or convention changes are documented and approved first. Implementation tasks then reference the specific documentation heading they are aligning with.
 
-### File Locking and Atomic Persistence
-When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates, using a sibling `.toml.lock` file.
+When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock (via a sibling `.toml.lock` file) to prevent lost updates.
+
+This concurrency mechanism supports the wave principle by allowing independent tasks within a wave to execute in parallel while maintaining data integrity. The lock covers the full read-modify-write cycle so no completion is overwritten by a racing subagent.
 
 ### Session Command Wrapper Pattern
 
-**Problem:** The six session commands in `cli.py` (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) each repeat an identical error-handling block: resolve the project root, call the corresponding `commands.*_command()` function inside a `try/except ProthonError`, format the error, and exit. This produces six nearly-identical blocks with ~20 total `raise typer.Exit()` calls across the file. Adding a new session command means copy-pasting the same boilerplate.
+**Problem:** The six session commands in `cli.py` (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) each repeat an identical error-handling block: resolve the project root, call the corresponding `commands.*_command()` function inside a `try/except ProthonError`, format the error, and exit.
 
-**Convention:** `cli.py` uses `_run_session_command` to wrap every session command with the standard error boundary. The helper resolves the project root, delegates to the matching `commands.*_command()` function inside a `try/except ProthonError`, and propagates exit codes:
+**Convention:** `cli.py` uses `_run_session_command` to wrap every session command with the standard error boundary:
 
 ```python
 def _run_session_command(
@@ -345,11 +69,7 @@ def spec(agent: AgentOption = None, model: ModelOption = None,
          provider: ProviderOption = None) -> None: ...
 ```
 
-**Rationale:**
-- **DRY** — all six session commands (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) share a single error-handling path, eliminating duplication.
-- **Consistent error handling** — `_run_session_command` ensures every command follows the same `ProthonError → stderr → exit(1)` path.
-- **Exit-code correctness** — the wrapper handles both `int` return codes and `None`-returning commands uniformly.
-- **Extensibility** — adding a new session command requires only wiring the Typer decorator and delegating to the wrapper.
+**Rationale:** All six commands share a single error-handling path (DRY), every command follows the same `ProthonError → stderr → exit(1)` path (consistency), the wrapper handles both `int` and `None` return codes uniformly (correctness), and new session commands require only the Typer decorator plus delegation (extensibility).
 
 ### Path Existence Guard Pattern
 
@@ -374,15 +94,19 @@ File I/O operations that read from or write to the filesystem — using methods 
 ## Error Handling
 
 ### Centralized CLI Error Boundary
+
 The `cli.py` module acts as the single catch-all boundary for `ProthonError` and its subclasses. Library modules raise exceptions; the CLI catches them, presents a formatted message, and terminates with a non-zero exit code.
 
 ### Terminal Failure Pattern
+
 When a subagent reaches `max_attempts` for a task without passing verification and quality gates, it reports a terminal failure. The orchestrator records the failure and asks the user for a decision (skip, retry, or abort) to prevent infinite loops. As a programmatic backstop independent of skill-prompt compliance, `record_attempt()` enforces the `max_attempts` limit by raising `MaxAttemptsExceeded` (a subclass of `PromiseError`) when `attempts >= max_attempts`, preventing the counter from incrementing further.
 
 ### Data-Driven Doc Consistency Failures
+
 Contradictions found by the `doc-harmonizer` are treated as data, not exceptions. They are presented as a structured report of `Conflict` objects, enabling interactive resolution and approval before any documents are amended.
 
 ### Model/Provider Resolution Errors
+
 Configuration resolution for `opencode` enforces that both model and provider must be present if one is provided. Violations raise a `ProthonError` explaining the required format, ensuring early failure.
 
 ## Testing Patterns
@@ -424,13 +148,17 @@ Tests must be cheap to run. The full suite should complete in seconds, not minut
 - Parallel-safe: structure tests so `pytest-xdist` works (no shared mutable state between tests)
 
 ### Protocol Fakes Over Mocks
+
 Test dependencies are managed using simple fake implementations that satisfy protocols (e.g., `FakeGitDiff` for `GitDiffProvider`). This ensures tests break when interfaces change and avoids fragile standard mocks.
 
 ### Subagent Mocking Pattern
+
 Orchestration logic is tested using a `FakeAssistantBackend` that simulates subagent responses, return codes, and file modifications. This enables exhaustive testing of retry loops and decision-making without hitting real APIs.
 
 ### Conflict Injection Pattern
+
 The `doc-harmonizer` is verified by injecting known contradictions between SPEC, DESIGN, and PATTERNS. Tests confirm the harmonizer detects the conflict, identifies the higher-authority document, and proposes the correct resolution.
 
 ### Concurrency Stress Testing
+
 The `.toml.lock` exclusive locking mechanism is verified using multiprocessing to simulate concurrent subagents. Tests ensure all updates are serialized and no data is lost.

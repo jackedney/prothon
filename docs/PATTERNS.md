@@ -24,7 +24,9 @@ Four groups, separated by blank lines, each group alphabetical: (1) `from __futu
 
 ### Module API Surface
 
-Each module exposes a minimal public API. Internal helpers use the `_` prefix. Per-module API surface signatures live in `docs/references/modules.md`, organized by module. Subagents load these signatures as needed via `context_files` entries in `change_promise.toml`, keeping the core patterns document concise. Modules whose contracts are fully described in DESIGN.md (compliance.py, models.py, promise_verify.py, git.py) are noted with a cross-reference rather than duplicated. See the Tech-Researcher section in DESIGN.md for the full progressive disclosure architecture.
+Each module exposes a minimal public API. Internal helpers use the `_` prefix.
+
+Per-module API surface signatures live in `docs/references/modules.md`, organized by module in the same order they appear in DESIGN.md's Module Structure section. Subagents load these signatures as needed via `context_files` entries in `change_promise.toml`, keeping the core patterns document concise. Modules whose contracts are fully described in DESIGN.md (compliance.py, models.py, promise_verify.py, git.py) are noted with a cross-reference rather than duplicated. See the Tech-Researcher section in DESIGN.md for the full progressive disclosure architecture.
 
 ## Design Patterns
 

@@ -7,6 +7,7 @@ from prothon.checks import check_patterns_doc
 from prothon.compliance import CheckStatus
 from prothon.refactor.models import DriftCategory, DriftFinding, Severity
 from prothon.refactor.testability import _has_testable_logic, _is_testable_class
+from prothon.ui import console
 
 LARGE_FILE_LINE_THRESHOLD = 500
 
@@ -27,7 +28,7 @@ def _check_docs_hierarchy(root: Path) -> list[DriftFinding]:
     design_path = docs_dir / "DESIGN.md"
     patterns_path = docs_dir / "PATTERNS.md"
 
-    if not spec_path.exists():
+    if not spec_path.is_file():
         findings.append(
             DriftFinding(
                 title="Missing SPEC.md",
@@ -40,7 +41,7 @@ def _check_docs_hierarchy(root: Path) -> list[DriftFinding]:
             )
         )
 
-    if spec_path.exists() and not design_path.exists():
+    if spec_path.is_file() and not design_path.is_file():
         findings.append(
             DriftFinding(
                 title="Missing DESIGN.md",
@@ -53,7 +54,7 @@ def _check_docs_hierarchy(root: Path) -> list[DriftFinding]:
             )
         )
 
-    if design_path.exists() and not patterns_path.exists():
+    if design_path.is_file() and not patterns_path.is_file():
         findings.append(
             DriftFinding(
                 title="Missing PATTERNS.md",
@@ -74,7 +75,13 @@ def _check_patterns_compliance(root: Path) -> list[DriftFinding]:
         return []
 
     findings = []
-    results = check_patterns_doc(patterns_path)
+    try:
+        results = check_patterns_doc(patterns_path)
+    except Exception as exc:
+        console.print(
+            f"Warning: PATTERNS.md compliance check failed: {exc}", style="yellow"
+        )
+        return findings
     for res in results:
         if res.status == CheckStatus.FAIL:
             findings.append(
@@ -96,7 +103,7 @@ def _check_large_files(root: Path) -> list[DriftFinding]:
         return []
 
     findings = []
-    for py_file in src_dir.rglob("*.py"):
+    for py_file in sorted(src_dir.rglob("*.py")):
         try:
             lines = py_file.read_text(encoding="utf-8").splitlines()
             if len(lines) > LARGE_FILE_LINE_THRESHOLD:
@@ -126,7 +133,7 @@ def _check_missing_tests(root: Path) -> list[DriftFinding]:
     test_stems = _build_test_stem_cache(tests_dir)
 
     findings = []
-    for py_file in src_dir.rglob("*.py"):
+    for py_file in sorted(src_dir.rglob("*.py")):
         if py_file.name == "__init__.py":
             continue
 
@@ -154,7 +161,7 @@ def _build_test_stem_cache(tests_dir: Path) -> set[str]:
         return set()
 
     stems: set[str] = set()
-    for test_file in tests_dir.rglob("*.py"):
+    for test_file in sorted(tests_dir.rglob("*.py")):
         if test_file.name.startswith("test_") or test_file.name.endswith("_test.py"):
             stems.add(test_file.stem)
     return stems

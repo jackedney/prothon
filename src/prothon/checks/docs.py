@@ -112,26 +112,66 @@ def check_doc_existence(root: Path) -> list[CheckResult]:
     return results
 
 
-def _check_refs_directory(
-    content: str, refs_dir: Path, results: list[CheckResult]
-) -> bool:
-    """Verify docs/references/ exists when PATTERNS.md references it.
+def _check_r25_r26(target: Path, results: list[CheckResult]) -> None:
+    if not target.exists():
+        return
+    content = target.read_text()
+    code_blocks = _extract_python_blocks(content)
+    r25 = Requirement(
+        source="SPEC",
+        requirement_id="R25",
+        statement=f"{target.name} rationale expressed in natural language, not code.",
+    )
+    r26 = Requirement(
+        source="SPEC",
+        requirement_id="R26",
+        statement=f"{target.name} code examples limited to signatures only.",
+    )
+    if not code_blocks:
+        results.append(CheckResult(r25, CheckStatus.PASS, evidence=str(target)))
+        results.append(CheckResult(r26, CheckStatus.PASS, evidence=str(target)))
+        return
+    if _is_code_dominant(content, code_blocks):
+        results.append(
+            CheckResult(
+                r25,
+                CheckStatus.FAIL,
+                evidence=f"{target}:1",
+                rationale=f"Code blocks dominate {target.name}.",
+            )
+        )
+    else:
+        results.append(CheckResult(r25, CheckStatus.PASS, evidence=str(target)))
+    for line_no, block in code_blocks:
+        if not _is_signature_only(block):
+            results.append(
+                CheckResult(
+                    r26,
+                    CheckStatus.FAIL,
+                    evidence=f"{target}:{line_no}",
+                    rationale="Code block contains implementation logic.",
+                )
+            )
+            return
+    results.append(CheckResult(r26, CheckStatus.PASS, evidence=str(target)))
 
-    Returns True if the directory exists (or wasn't needed), False on failure.
-    """
-    mentions_refs = "docs/references/" in content
-    mentions_pd = "progressive disclosure" in content.lower()
 
+def check_progressive_disclosure(root: Path) -> list[CheckResult]:
+    results: list[CheckResult] = []
+    patterns_path = root / "docs" / "PATTERNS.md"
+    if not patterns_path.exists():
+        return results
+    content = patterns_path.read_text()
+    refs_dir = root / "docs" / "references"
+    mentions = (
+        "docs/references/" in content or "progressive disclosure" in content.lower()
+    )
     r44 = Requirement(
         source="SPEC",
         requirement_id="R44",
-        statement=(
-            "Progressive Disclosure structure: concise SKILL.md with deep "
-            "details in a references/ directory."
-        ),
+        statement="Progressive Disclosure structure with a references/ directory.",
     )
-
-    if not (mentions_refs or mentions_pd):
+    if not mentions:
         results.append(
             CheckResult(
                 r44,
@@ -139,143 +179,33 @@ def _check_refs_directory(
                 rationale="No progressive disclosure references in PATTERNS.md",
             )
         )
-        return True
-
+        return results
     if not refs_dir.is_dir():
         results.append(
             CheckResult(
                 r44,
                 CheckStatus.FAIL,
                 evidence=str(refs_dir),
-                rationale=(
-                    "PATTERNS.md references docs/references/ but the "
-                    "directory does not exist."
-                ),
+                rationale="PATTERNS.md references docs/references/ but directory missing.",
             )
         )
-        return False
-
+        return results
     results.append(CheckResult(r44, CheckStatus.PASS, evidence=str(refs_dir)))
-    return True
-
-
-def _check_modules_ref(
-    content: str, refs_dir: Path, results: list[CheckResult]
-) -> None:
-    """Verify docs/references/modules.md exists when referenced."""
-    if "modules.md" not in content:
-        return
-
-    modules_ref = refs_dir / "modules.md"
-    if modules_ref.exists():
-        return
-
-    req = Requirement(
-        source="DESIGN",
-        requirement_id="R44",
-        statement="Referenced file docs/references/modules.md must exist.",
-    )
-    results.append(
-        CheckResult(
-            req,
-            CheckStatus.FAIL,
-            evidence=str(modules_ref),
-            rationale=(
-                "PATTERNS.md references docs/references/modules.md "
-                "but the file does not exist."
-            ),
-        )
-    )
-
-
-def _check_refs_r25(refs_dir: Path, results: list[CheckResult]) -> None:
-    """Check R25 (natural language rationale) for docs/references/ files."""
-    r25 = Requirement(
-        source="SPEC",
-        requirement_id="R25",
-        statement="docs/references/ code blocks must have natural language rationale.",
-    )
-
-    for ref_file in sorted(refs_dir.glob("*.md")):
-        ref_content = ref_file.read_text()
-        code_blocks = _extract_python_blocks(ref_content)
-        if not code_blocks:
-            continue
-
-        if _is_code_dominant(ref_content, code_blocks):
-            results.append(
-                CheckResult(
-                    r25,
-                    CheckStatus.FAIL,
-                    evidence=f"{ref_file}:1",
-                    rationale=(
-                        "Code blocks dominate reference file; rationale "
-                        "should be natural language."
-                    ),
-                )
+    if "modules.md" in content and not (refs_dir / "modules.md").exists():
+        results.append(
+            CheckResult(
+                Requirement(
+                    source="DESIGN",
+                    requirement_id="R44",
+                    statement="Referenced file docs/references/modules.md must exist.",
+                ),
+                CheckStatus.FAIL,
+                evidence=str(refs_dir / "modules.md"),
+                rationale="Referenced modules.md missing.",
             )
-            return
-
-    results.append(CheckResult(r25, CheckStatus.PASS, evidence=str(refs_dir)))
-
-
-def _check_refs_r26(refs_dir: Path, results: list[CheckResult]) -> None:
-    """Check R26 (signature-only) for docs/references/ files."""
-    r26 = Requirement(
-        source="SPEC",
-        requirement_id="R26",
-        statement="docs/references/ code examples must be signatures only.",
-    )
-
+        )
     for ref_file in sorted(refs_dir.glob("*.md")):
-        ref_content = ref_file.read_text()
-        code_blocks = _extract_python_blocks(ref_content)
-        for line_no, block in code_blocks:
-            if not _is_signature_only(block):
-                results.append(
-                    CheckResult(
-                        r26,
-                        CheckStatus.FAIL,
-                        evidence=f"{ref_file}:{line_no}",
-                        rationale=(
-                            "Reference file code block contains "
-                            "implementation logic or imports."
-                        ),
-                    )
-                )
-                return
-
-    results.append(CheckResult(r26, CheckStatus.PASS, evidence=str(refs_dir)))
-
-
-def check_progressive_disclosure(root: Path) -> list[CheckResult]:
-    """Validate the progressive disclosure documentation structure.
-
-    Checks that docs/references/ exists when PATTERNS.md references it,
-    referenced files within it are present, and all code blocks in reference
-    files comply with R25-R26 (signature-only).
-
-    Returns:
-        List of CheckResult for progressive disclosure requirements.
-    """
-    results: list[CheckResult] = []
-    patterns_path = root / "docs" / "PATTERNS.md"
-
-    if not patterns_path.exists():
-        return results
-
-    content = patterns_path.read_text()
-    refs_dir = root / "docs" / "references"
-
-    if not _check_refs_directory(content, refs_dir, results):
-        return results
-
-    _check_modules_ref(content, refs_dir, results)
-
-    if refs_dir.is_dir():
-        _check_refs_r25(refs_dir, results)
-        _check_refs_r26(refs_dir, results)
-
+        _check_r25_r26(ref_file, results)
     return results
 
 

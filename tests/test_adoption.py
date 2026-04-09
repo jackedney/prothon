@@ -138,10 +138,11 @@ def test_init_existing_preserves_prothon_ci(tmp_path: Path) -> None:
 # -- _create_docs --
 
 
-def test_create_docs_writes_three_scaffolds(tmp_path: Path) -> None:
-    """_create_docs writes SPEC.md, DESIGN.md, and PATTERNS.md."""
+def test_create_docs_writes_scaffolds_with_gitkeep(tmp_path: Path) -> None:
+    """_create_docs writes references/.gitkeep, SPEC.md, DESIGN.md, and PATTERNS.md."""
     created = _create_docs(tmp_path)
-    assert len(created) == 3
+    assert len(created) == 4
+    assert (tmp_path / "docs" / "references" / ".gitkeep").exists()
     assert (tmp_path / "docs" / "SPEC.md").read_text() == _SPEC_SCAFFOLD
     assert (tmp_path / "docs" / "DESIGN.md").read_text() == _DESIGN_SCAFFOLD
 
@@ -158,15 +159,16 @@ def test_create_docs_skips_existing(tmp_path: Path) -> None:
 
 
 def test_create_docs_appends_ast_patterns(tmp_path: Path) -> None:
-    """_create_docs appends AST-mined idioms to PATTERNS.md when src/ exists."""
+    """_create_docs writes AST-mined idioms to docs/references/modules.md."""
     src = tmp_path / "src"
     src.mkdir()
     (src / "__init__.py").write_text("")
     (src / "example.py").write_text("def hello() -> str:\n    return 'hi'\n")
     _create_docs(tmp_path)
-    assert (
-        (tmp_path / "docs" / "PATTERNS.md").read_text().startswith(_PATTERNS_SCAFFOLD)
-    )
+    patterns = (tmp_path / "docs" / "PATTERNS.md").read_text()
+    assert patterns == _PATTERNS_SCAFFOLD
+    modules = (tmp_path / "docs" / "references" / "modules.md").read_text()
+    assert "def hello()" in modules
 
 
 # -- _create_agents_and_links --

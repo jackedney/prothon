@@ -7,6 +7,7 @@ from prothon.checks.docs import (
     check_doc_existence,
     check_doc_harmonizer,
     check_patterns_doc,
+    check_progressive_disclosure,
 )
 from prothon.checks.research import check_semantic_versioning, check_tech_researcher
 from prothon.checks.structure import (
@@ -37,6 +38,7 @@ __all__ = [
     "check_package_structure",
     "check_patterns_doc",
     "check_pre_commit",
+    "check_progressive_disclosure",
     "check_refactor_logic",
     "check_semantic_versioning",
     "check_skills_dir",
@@ -64,6 +66,7 @@ def run_static_checks(root: Path) -> ComplianceReport:
     report.results.extend(check_refactor_logic(root))
     report.results.extend(check_tech_researcher(root))
     report.results.extend(check_doc_harmonizer(root))
+    report.results.extend(check_progressive_disclosure(root))
     report.results.extend(check_semantic_versioning(root))
 
     for res in report.results:

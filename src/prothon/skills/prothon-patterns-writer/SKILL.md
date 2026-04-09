@@ -15,6 +15,7 @@ You are the Patterns Writer. Define implementation conventions (testability, mai
 - **Prose-first.** Rationale and logic must be in natural language.
 - **One section per message.** Present only one topic (e.g., Error Handling) at a time.
 - **Ask before proposing.** Get style preferences first.
+- **Progressive disclosure.** Core patterns go in `docs/PATTERNS.md`; per-module API signatures go in `docs/references/modules.md`. Never inline full module API surfaces in PATTERNS.md.
 
 ## Prerequisites
 
@@ -43,7 +44,7 @@ STOP and wait.
 
 **Step 5.** Present complete summary for final confirmation.
 
-**Step 6.** Write and commit `docs/PATTERNS.md` locally.
+**Step 6.** Write and commit `docs/PATTERNS.md` and `docs/references/modules.md` locally.
 
 **Cadence:** One section per message. Every output must end with a question or feedback request.
 
@@ -54,8 +55,8 @@ STOP and wait.
 3. **Read SPEC.md and DESIGN.md** — Re-read the current docs to understand any changes since patterns were last written.
 4. **Analyze existing code** — If code exists in `src/`, study its current patterns to understand what's changed.
 5. **Work through changes** — For each section being modified, follow the same one-at-a-time conversational flow from Path A step 4. Present one section, wait for the user's response, then move on. Preserve content the user doesn't want to change.
-6. **Write PATTERNS.md** — Write the updated content to `docs/PATTERNS.md`. Then immediately commit:
-   - `git add docs/PATTERNS.md`
+6. **Write PATTERNS.md and docs/references/modules.md** — Write the updated content to both files. Then immediately commit:
+   - `git add docs/PATTERNS.md docs/references/modules.md`
    - `git commit -m "docs: update PATTERNS.md via patterns-writer"`
    - Do NOT push — local commit only.
 
@@ -67,9 +68,21 @@ You MUST refuse to include anything that contradicts:
 
 Every pattern must align with a DESIGN.md choice. If a pattern would work better with a different technology, flag it to the user as a potential DESIGN revision rather than silently deviating.
 
+### Progressive Disclosure Documentation
+
+PATTERNS.md and `docs/references/` form a two-tier documentation structure:
+
+- **`docs/PATTERNS.md`** (~150–200 lines) — Core patterns, conventions, rationale, and testing guidance. Pattern descriptions use prose to explain *what*, *when*, and *why*. Code examples are signature-only. This file must NOT contain inline module API surfaces (e.g., exhaustive function signatures for every source module). Instead, the Module API Surface section references `docs/references/modules.md`.
+- **`docs/references/modules.md`** — Per-module public API signatures organized by module, in the same order they appear in DESIGN.md's Module Structure section. Each section contains signature-only code blocks. Modules whose contracts are fully specified in DESIGN.md are noted with a cross-reference rather than duplicated.
+
+**What goes in PATTERNS.md:** Design patterns, naming conventions, error handling strategies, testing guidance, import ordering, file I/O patterns, concurrency patterns — anything that describes *how to write code*.
+**What goes in docs/references/modules.md:** Per-module function and method signatures — the *interface contract* for each source module.
+
+**Why this split:** PATTERNS.md is loaded into every skill session for context. Keeping it concise (150–200 lines) minimizes token cost. Module signatures are loaded selectively by subagents via `context_files` entries in `change_promise.toml` only when modifying specific modules.
+
 ### Content Form Rules (R25-R26)
 
-PATTERNS.md has strict content form constraints:
+Both PATTERNS.md and `docs/references/` files have strict content form constraints:
 
 - **Natural language first** — Pattern rationale, behavioral logic, and design decisions must be expressed in prose, not code. Each pattern section explains *what* the pattern achieves, *when* to use it, and *why* it was chosen.
 - **Signature-only code examples** — Code blocks are limited to function and method signatures: name, parameter types, and return type. No function bodies, control flow, import blocks, or implementation logic may appear in code form.
@@ -121,21 +134,25 @@ For large projects, PATTERNS.md may become unwieldy. If the file exceeds roughly
 ```
 docs/
 ├── PATTERNS.md              <- shared/global patterns
+├── references/
+│   ├── modules.md           <- per-module API signatures
+│   ├── api.md               <- API-specific reference
+│   └── models.md            <- data model reference
 ├── patterns/
 │   ├── api.md               <- API-specific patterns
 │   ├── models.md            <- data model patterns
 │   └── tests.md             <- testing patterns
 ```
 
-Each subdirectory file follows the same authority rules (must align with DESIGN.md and SPEC.md).
+Each subdirectory file follows the same authority rules (must align with DESIGN.md and SPEC.md). The `docs/references/` directory holds per-module and per-topic signatures; the `docs/patterns/` directory holds expanded pattern detail when PATTERNS.md would be too long.
 
 ## Output
 
-A populated `docs/PATTERNS.md` with all sections filled in, concrete examples, and clear rationale for each choice.
+A populated `docs/PATTERNS.md` with all sections filled in, concrete signature-only examples, and clear rationale for each choice. Plus a populated `docs/references/modules.md` with per-module public API signatures organized by module.
 
 ## After Writing
 
-Once PATTERNS.md is written to disk and committed:
+Once PATTERNS.md and docs/references/modules.md are written to disk and committed:
 
 1. **Follow-up quality gates** — The prothon CLI automatically triggers doc-harmonizer after this skill completes. You do not need to spawn it manually.
 

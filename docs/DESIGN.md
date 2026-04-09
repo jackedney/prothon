@@ -39,7 +39,7 @@ src/prothon/
         discovery.py       # discover_drift() and Wave 1 category checkers
         testability.py     # Testable logic detection heuristics (AST-based)
         promise_gen.py     # generate_refactor_promise()
-    scaffold.py         # Template rendering, copier answers, project adoption
+    scaffold.py         # Template rendering, copier answers
     scaffold_cli.py     # Scaffolding-specific CLI commands and interactive prompts
     skills.py           # Skill discovery, symlink management
     versioning.py       # Semantic version detection, bumping, git tagging, CI version bump orchestration (ci_bump_command, ci_detect_command)
@@ -358,14 +358,15 @@ Registered backends:
 | `claude-code` | Claude Code | `claude` | `~/.claude/skills/` | A (native skills) |
 | `opencode` | opencode | `opencode` | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) | A (native skills) |
 | `gemini` | Gemini CLI | `gemini` | `~/.gemini/skills/` | A (native skills) |
+| `ob1` | OB1 | `ob1` | `~/.ob1/skills/` | A (native skills) |
 
 Canonical-to-backend subagent type mapping:
 
-| Canonical name | Claude Code | opencode | Gemini CLI |
-|---------------|-------------|----------|------------|
-| `general-purpose` | `general-purpose` | `general` | `generalist_agent` |
-| `explore` | `Explore` | `explore` | `codebase_investigator` |
-| `plan` | `Plan` | `plan` | `generalist_agent` |
+| Canonical name | Claude Code | opencode | Gemini CLI | OB1 |
+|---------------|-------------|----------|------------|-----|
+| `general-purpose` | `general-purpose` | `general` | `generalist_agent` | `general` |
+| `explore` | `Explore` | `explore` | `codebase_investigator` | `explore` |
+| `plan` | `Plan` | `plan` | `generalist_agent` | `plan` |
 
 A shared launch lifecycle handles: binary existence check (via `shutil.which()`), skill syncing, environment merging (`os.environ` + `env_overrides()`), subprocess execution, and return code reporting. When the binary is missing, the error message includes the backend's `install_hint`.
 
@@ -387,7 +388,7 @@ Resolution is implemented as a `resolve_agent(cli_value)` function in `config.py
 
 The `--agent` option is per-command, defined on each command that launches an assistant session (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) via a shared `AgentOption` annotated type. This allows natural usage like `prothon patterns --agent opencode`. Commands that don't launch a session (`new`, `init`, `promise *`) don't have the option. The `PROTHON_AGENT` environment variable is handled via Typer's `envvar=` parameter on the shared option definition.
 
-Valid backend keys match the registry: `claude-code`, `opencode`, `gemini`. When an invalid key is provided, the error message lists all registered backends. When the resolved backend's binary is missing, the error message includes the backend's `install_hint`.
+Valid backend keys match the registry: `claude-code`, `opencode`, `gemini`, `ob1`. When an invalid key is provided, the error message lists all registered backends. When the resolved backend's binary is missing, the error message includes the backend's `install_hint`.
 
 Config file format examples:
 

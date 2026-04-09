@@ -8,13 +8,13 @@ from rich.console import Console
 
 from prothon.compliance import (
     CheckResult as ComplianceCheckResult,
-    CheckStatus as ComplianceStatus,
+    CheckStatus,
     CheckType,
     ComplianceReport,
     Requirement,
 )
 from prothon.models import Metadata, Promise, Task
-from prothon.promise_verify import CheckResult, CheckStatus, TaskCheckReport
+from prothon.promise_verify import CheckResult, TaskCheckReport
 from prothon.ui import (
     render_check_report,
     render_compliance_report,
@@ -205,7 +205,7 @@ class TestRenderStatus:
 
 def _make_check(
     name: str = "files_to_create",
-    status: CheckStatus = CheckStatus.PASSED,
+    status: CheckStatus = CheckStatus.PASS,
     detail: str = "all good",
 ) -> CheckResult:
     return CheckResult(name=name, status=status, detail=detail)
@@ -219,7 +219,7 @@ class TestRenderCheckReport:
             task_index=0,
             title="Create widget",
             task_id="abc",
-            checks=[_make_check(status=CheckStatus.PASSED)],
+            checks=[_make_check(status=CheckStatus.PASS)],
         )
         text = _render_to_str(render_check_report(report))
         assert "PASS" in text
@@ -230,7 +230,7 @@ class TestRenderCheckReport:
             task_index=1,
             title="Broken task",
             task_id="def",
-            checks=[_make_check(status=CheckStatus.FAILED, detail="missing file")],
+            checks=[_make_check(status=CheckStatus.FAIL, detail="missing file")],
         )
         text = _render_to_str(render_check_report(report))
         assert "DISCREPANCY" in text
@@ -242,7 +242,7 @@ class TestRenderCheckReport:
             task_index=0,
             title="Skip task",
             task_id="ghi",
-            checks=[_make_check(status=CheckStatus.SKIPPED, detail="none declared")],
+            checks=[_make_check(status=CheckStatus.SKIP, detail="none declared")],
         )
         text = _render_to_str(render_check_report(report))
         assert "SKIP" in text
@@ -254,9 +254,9 @@ class TestRenderCheckReport:
             title="Mixed",
             task_id="jkl",
             checks=[
-                _make_check(name="files_to_create", status=CheckStatus.PASSED),
-                _make_check(name="files_to_modify", status=CheckStatus.FAILED),
-                _make_check(name="lines_added", status=CheckStatus.SKIPPED),
+                _make_check(name="files_to_create", status=CheckStatus.PASS),
+                _make_check(name="files_to_modify", status=CheckStatus.FAIL),
+                _make_check(name="lines_added", status=CheckStatus.SKIP),
             ],
         )
         text = _render_to_str(render_check_report(report))
@@ -287,8 +287,8 @@ class TestRenderCheckReport:
             title="All bad",
             task_id="z",
             checks=[
-                _make_check(name="a", status=CheckStatus.FAILED, detail="nope"),
-                _make_check(name="b", status=CheckStatus.FAILED, detail="also nope"),
+                _make_check(name="a", status=CheckStatus.FAIL, detail="nope"),
+                _make_check(name="b", status=CheckStatus.FAIL, detail="also nope"),
             ],
         )
         text = _render_to_str(render_check_report(report))
@@ -305,7 +305,7 @@ def _make_compliance_result(
     source: str = "SPEC",
     statement: str = "Must have tests",
     requirement_id: str | None = "R1",
-    status: ComplianceStatus = ComplianceStatus.PASS,
+    status: CheckStatus = CheckStatus.PASS,
     check_type: CheckType = CheckType.STATIC,
     evidence: str = "tests/test_foo.py:1",
 ) -> ComplianceCheckResult:
@@ -345,8 +345,8 @@ class TestRenderComplianceReport:
 
     def test_all_fail(self) -> None:
         results = [
-            _make_compliance_result(statement="Bad A", status=ComplianceStatus.FAIL),
-            _make_compliance_result(statement="Bad B", status=ComplianceStatus.FAIL),
+            _make_compliance_result(statement="Bad A", status=CheckStatus.FAIL),
+            _make_compliance_result(statement="Bad B", status=CheckStatus.FAIL),
         ]
         report = ComplianceReport(results=results)
         text = _render_to_str(render_compliance_report(report))
@@ -354,9 +354,9 @@ class TestRenderComplianceReport:
 
     def test_mixed_status(self) -> None:
         results = [
-            _make_compliance_result(statement="OK", status=ComplianceStatus.PASS),
-            _make_compliance_result(statement="Bad", status=ComplianceStatus.FAIL),
-            _make_compliance_result(statement="Skip", status=ComplianceStatus.SKIP),
+            _make_compliance_result(statement="OK", status=CheckStatus.PASS),
+            _make_compliance_result(statement="Bad", status=CheckStatus.FAIL),
+            _make_compliance_result(statement="Skip", status=CheckStatus.SKIP),
         ]
         report = ComplianceReport(results=results)
         text = _render_to_str(render_compliance_report(report))

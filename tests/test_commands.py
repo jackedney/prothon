@@ -10,7 +10,6 @@ from tests.fakes import FakeAssistantBackend, Recorder
 from prothon.commands import (
     Skill,
     SKILL_DOC_MAP,
-    ci_bump_command,
     enforce_commit,
     launch_skill,
     promise_check_command,
@@ -24,6 +23,7 @@ from prothon.commands import (
     trigger_follow_ups,
 )
 from prothon.exceptions import GitError, ProthonError
+from prothon.versioning import ci_bump_command
 
 _FAKE_CONSOLE = type("C", (), {"print": staticmethod(lambda *a, **kw: None)})()
 
@@ -212,7 +212,7 @@ class TestCiBumpCommand:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setattr(
-            "prothon.commands.read_toml",
+            "prothon.versioning.read_toml",
             lambda _: {"tool": {"prothon": {"ci": {"auto_version": "false"}}}},
         )
         ci_bump_command(tmp_path, before_sha="abc")
@@ -220,7 +220,7 @@ class TestCiBumpCommand:
     def test_raises_when_pyproject_unreadable(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setattr("prothon.commands.read_toml", lambda _: {})
+        monkeypatch.setattr("prothon.versioning.read_toml", lambda _: {})
         with pytest.raises(ProthonError, match="Could not read pyproject.toml"):
             ci_bump_command(tmp_path, before_sha="abc")
 
@@ -228,11 +228,11 @@ class TestCiBumpCommand:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setattr(
-            "prothon.commands.read_toml",
+            "prothon.versioning.read_toml",
             lambda _: {"project": {"version": "1.0.0", "name": "foo"}},
         )
         monkeypatch.setattr(
-            "prothon.commands.versioning.detect_bump_type", lambda *a, **kw: None
+            "prothon.versioning.detect_bump_type", lambda *a, **kw: None
         )
         ci_bump_command(tmp_path, before_sha="abc")
 
@@ -240,20 +240,18 @@ class TestCiBumpCommand:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setattr(
-            "prothon.commands.read_toml",
+            "prothon.versioning.read_toml",
             lambda _: {"project": {"version": "1.0.0", "name": "foo"}},
         )
         monkeypatch.setattr(
-            "prothon.commands.versioning.detect_bump_type", lambda *a, **kw: "patch"
+            "prothon.versioning.detect_bump_type", lambda *a, **kw: "patch"
         )
         monkeypatch.setattr(
             "prothon.git.run_git", Recorder(side_effect=GitError("no base"))
         )
-        monkeypatch.setattr("prothon.commands.versioning.bump_patch", lambda v: "1.0.1")
+        monkeypatch.setattr("prothon.versioning.bump_patch", lambda v: "1.0.1")
         update_rec = Recorder()
-        monkeypatch.setattr(
-            "prothon.commands.versioning.update_pyproject_version", update_rec
-        )
+        monkeypatch.setattr("prothon.versioning.update_pyproject_version", update_rec)
         ci_bump_command(tmp_path, before_sha="abc", dry_run=True)
         assert update_rec.call_count == 0
 

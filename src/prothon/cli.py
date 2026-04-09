@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from prothon import commands, scaffold_cli
+from prothon import commands, scaffold_cli, versioning
 from prothon.assistant import _BACKENDS
 from prothon.exceptions import ProthonError
 from prothon.project import find_project_root
@@ -67,9 +68,24 @@ app.add_typer(ci_app)
 
 
 def _require_project_root() -> Path:
-    """Find and return the project root or exit with error."""
     try:
         return find_project_root()
+    except ProthonError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
+
+def _run_session_command(
+    cmd: Callable[..., int | None],
+    agent: str | None,
+    model: str | None,
+    provider: str | None,
+) -> None:
+    root = _require_project_root()
+    try:
+        result = cmd(root, agent, model, provider)
+        if isinstance(result, int) and result != 0:
+            raise typer.Exit(result)
     except ProthonError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
@@ -106,14 +122,7 @@ def spec(
     provider: ProviderOption = None,
 ) -> None:
     """Write or revise SPEC.md — extract requirements through probing questions."""
-    root = _require_project_root()
-    try:
-        rc = commands.spec_command(root, agent, model, provider)
-        if rc != 0:
-            raise typer.Exit(rc)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    _run_session_command(commands.spec_command, agent, model, provider)
 
 
 @app.command()
@@ -123,14 +132,7 @@ def design(
     provider: ProviderOption = None,
 ) -> None:
     """Write or revise DESIGN.md — research technologies and architecture."""
-    root = _require_project_root()
-    try:
-        rc = commands.design_command(root, agent, model, provider)
-        if rc != 0:
-            raise typer.Exit(rc)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    _run_session_command(commands.design_command, agent, model, provider)
 
 
 @app.command()
@@ -140,14 +142,7 @@ def patterns(
     provider: ProviderOption = None,
 ) -> None:
     """Write or revise PATTERNS.md — define code conventions and testing approaches."""
-    root = _require_project_root()
-    try:
-        rc = commands.patterns_command(root, agent, model, provider)
-        if rc != 0:
-            raise typer.Exit(rc)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    _run_session_command(commands.patterns_command, agent, model, provider)
 
 
 @app.command()
@@ -157,14 +152,7 @@ def execute(
     provider: ProviderOption = None,
 ) -> None:
     """Align source code to documentation — plan and implement with subagents."""
-    root = _require_project_root()
-    try:
-        rc = commands.execute_command(root, agent, model, provider)
-        if rc != 0:
-            raise typer.Exit(rc)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    _run_session_command(commands.execute_command, agent, model, provider)
 
 
 @app.command()
@@ -174,12 +162,7 @@ def compliance(
     provider: ProviderOption = None,
 ) -> None:
     """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
-    root = _require_project_root()
-    try:
-        commands.compliance_command(root, agent, model, provider)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    _run_session_command(commands.compliance_command, agent, model, provider)
 
 
 @app.command()
@@ -189,14 +172,7 @@ def refactor(
     provider: ProviderOption = None,
 ) -> None:
     """Perform documentation-driven full-stack refactoring with the refactor agent."""
-    root = _require_project_root()
-    try:
-        rc = commands.refactor_command(root, agent, model, provider)
-        if rc != 0:
-            raise typer.Exit(rc)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
+    _run_session_command(commands.refactor_command, agent, model, provider)
 
 
 # --- Promise subcommands ---
@@ -295,7 +271,7 @@ def ci_bump(
     """Bump the project version based on changed files since before_sha."""
     root = _require_project_root()
     try:
-        commands.ci_bump_command(root, before_sha, after_sha, dry_run, no_tag)
+        versioning.ci_bump_command(root, before_sha, after_sha, dry_run, no_tag)
     except ProthonError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc
@@ -313,7 +289,7 @@ def ci_detect(
     """Detect the version bump type based on changed files since before_sha."""
     root = _require_project_root()
     try:
-        commands.ci_detect_command(root, before_sha, after_sha)
+        versioning.ci_detect_command(root, before_sha, after_sha)
     except ProthonError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from exc

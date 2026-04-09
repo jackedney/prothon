@@ -7,11 +7,17 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from prothon.compliance import ComplianceReport
+from prothon.compliance import CheckStatus, ComplianceReport
 from prothon.models import Promise
-from prothon.promise_verify import CheckStatus, TaskCheckReport
+from prothon.promise_verify import TaskCheckReport
 
 console = Console()
+
+_STATUS_STYLES = {
+    CheckStatus.PASS: ("PASS", "green"),
+    CheckStatus.FAIL: ("FAIL", "red"),
+    CheckStatus.SKIP: ("SKIP", "yellow"),
+}
 
 
 def render_plan(p: Promise) -> Table:
@@ -87,13 +93,8 @@ def render_check_report(report: TaskCheckReport) -> Table:
     table.add_column("Result", width=6)
     table.add_column("Detail")
 
-    _status_styles = {
-        CheckStatus.PASSED: ("PASS", "green"),
-        CheckStatus.FAILED: ("FAIL", "red"),
-        CheckStatus.SKIPPED: ("SKIP", "yellow"),
-    }
     for c in report.checks:
-        label, style = _status_styles[c.status]
+        label, style = _STATUS_STYLES[c.status]
         table.add_row(c.name, Text(label, style=style), c.detail)
 
     return table
@@ -109,16 +110,8 @@ def render_compliance_report(report: ComplianceReport) -> Table:
     table.add_column("Status", width=6)
     table.add_column("Evidence", no_wrap=False)
 
-    from prothon.compliance import CheckStatus as ComplianceStatus
-
-    _status_styles = {
-        ComplianceStatus.PASS: ("PASS", "green"),
-        ComplianceStatus.FAIL: ("FAIL", "red"),
-        ComplianceStatus.SKIP: ("SKIP", "yellow"),
-    }
-
     for res in report.results:
-        label, style = _status_styles[res.status]
+        label, style = _STATUS_STYLES[res.status]
         table.add_row(
             res.check_type.value,
             res.requirement.source,

@@ -177,8 +177,8 @@ def check_inheritance(root: Path) -> list[CheckResult]:
 
     violations = [
         name
-        for name in base_classes
-        if name != "ProthonError" and name not in inheritors
+        for name, bases in base_classes.items()
+        if name != "ProthonError" and name not in inheritors and bases
     ]
 
     if not violations:

@@ -3,22 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 
+from prothon.compliance import CheckStatus
 from prothon.exceptions import PromiseError
 from prothon.git import GitDiffProvider, SubprocessGitDiff
 from prothon.models import Promise, Task
 
 DEFAULT_TOLERANCE = 30
-
-
-class CheckStatus(Enum):
-    """Tri-state result for a single verification check."""
-
-    PASSED = "PASS"
-    FAILED = "FAIL"
-    SKIPPED = "SKIP"
 
 
 @dataclass
@@ -52,12 +44,12 @@ class TaskCheckReport:
 
     @property
     def passed(self) -> bool:
-        return not any(c.status is CheckStatus.FAILED for c in self.checks)
+        return not any(c.status is CheckStatus.FAIL for c in self.checks)
 
     def format(self) -> str:
         """Return a human-readable summary of the check results."""
         overall = "PASS" if self.passed else "DISCREPANCY"
-        failures = sum(1 for c in self.checks if c.status is CheckStatus.FAILED)
+        failures = sum(1 for c in self.checks if c.status is CheckStatus.FAIL)
         lines = [f'TASK {self.task_index}: "{self.title}"']
         for c in self.checks:
             lines.append(f"  {c.name + ':':20s} {c.status.value} ({c.detail})")
@@ -84,7 +76,7 @@ def _within_tolerance(expected: int, actual: int) -> bool:
 def _check_line_count(name: str, expected: int, actual: int) -> CheckResult:
     """Build a CheckResult for a line-count metric."""
     ok = _within_tolerance(expected, actual)
-    status = CheckStatus.PASSED if ok else CheckStatus.FAILED
+    status = CheckStatus.PASS if ok else CheckStatus.FAIL
     detail = f"expected ~{expected}, actual {actual}"
     if not ok:
         detail += " \u2014 outside \u00b130%/\u00b130 tolerance"
@@ -105,7 +97,7 @@ def _check_line_counts(
     if not add_files or task.expected_lines_added <= 0:
         results.append(
             CheckResult(
-                name="lines_added", status=CheckStatus.SKIPPED, detail="none expected"
+                name="lines_added", status=CheckStatus.SKIP, detail="none expected"
             )
         )
     else:
@@ -117,7 +109,7 @@ def _check_line_counts(
     if not remove_files or task.expected_lines_removed <= 0:
         results.append(
             CheckResult(
-                name="lines_removed", status=CheckStatus.SKIPPED, detail="none expected"
+                name="lines_removed", status=CheckStatus.SKIP, detail="none expected"
             )
         )
     else:
@@ -201,7 +193,7 @@ def _check_files_to_create(task: Task, base_path: Path) -> CheckResult:
     if not task.files_to_create:
         return CheckResult(
             name="files_to_create",
-            status=CheckStatus.SKIPPED,
+            status=CheckStatus.SKIP,
             detail="none declared",
         )
     existing = [
@@ -212,7 +204,7 @@ def _check_files_to_create(task: Task, base_path: Path) -> CheckResult:
     all_exist = len(existing) == len(task.files_to_create)
     return CheckResult(
         name="files_to_create",
-        status=CheckStatus.PASSED if all_exist else CheckStatus.FAILED,
+        status=CheckStatus.PASS if all_exist else CheckStatus.FAIL,
         detail=f"{len(existing)}/{len(task.files_to_create)} exist",
     )
 
@@ -224,7 +216,7 @@ def _check_files_to_modify(
     if not task.files_to_modify:
         return CheckResult(
             name="files_to_modify",
-            status=CheckStatus.SKIPPED,
+            status=CheckStatus.SKIP,
             detail="none declared",
         )
     diff_names = diff.diff_names(base_commit, *task.files_to_modify)
@@ -232,7 +224,7 @@ def _check_files_to_modify(
     all_modified = len(modified) == len(task.files_to_modify)
     return CheckResult(
         name="files_to_modify",
-        status=CheckStatus.PASSED if all_modified else CheckStatus.FAILED,
+        status=CheckStatus.PASS if all_modified else CheckStatus.FAIL,
         detail=f"{len(modified)}/{len(task.files_to_modify)} modified",
     )
 
@@ -242,7 +234,7 @@ def _check_files_to_remove(task: Task, base_path: Path) -> CheckResult:
     if not task.files_to_remove:
         return CheckResult(
             name="files_to_remove",
-            status=CheckStatus.SKIPPED,
+            status=CheckStatus.SKIP,
             detail="none declared",
         )
     removed = [
@@ -253,6 +245,6 @@ def _check_files_to_remove(task: Task, base_path: Path) -> CheckResult:
     all_removed = len(removed) == len(task.files_to_remove)
     return CheckResult(
         name="files_to_remove",
-        status=CheckStatus.PASSED if all_removed else CheckStatus.FAILED,
+        status=CheckStatus.PASS if all_removed else CheckStatus.FAIL,
         detail=f"{len(removed)}/{len(task.files_to_remove)} removed",
     )

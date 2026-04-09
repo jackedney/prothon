@@ -3,15 +3,19 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from prothon.refactor import (
     DriftCategory,
     DriftFinding,
     Severity,
+    discover_drift,
+    generate_refactor_promise,
+)
+from prothon.refactor.discovery import (
     _check_large_files,
     _check_missing_tests,
     _check_patterns_compliance,
-    discover_drift,
-    generate_refactor_promise,
 )
 
 
@@ -126,13 +130,18 @@ def test_generate_refactor_promise(tmp_path: Path):
         files_affected=[tmp_path / "affected.py"],
     )
 
-    promise = generate_refactor_promise(tmp_path, [finding])
+    with patch(
+        "prothon.refactor.promise_gen.rev_parse_head",
+        return_value="abc123",
+    ):
+        promise = generate_refactor_promise(tmp_path, [finding])
 
     assert len(promise.tasks) == 1
     task = promise.tasks[0]
     assert task.title == "Test Finding"
     assert task.goal == "Test Rationale"
     assert "affected.py" in task.files_to_create  # Doesn't exist yet
+    assert promise.metadata.base_commit == "abc123"
 
 
 def test_check_patterns_compliance_no_violations(tmp_path: Path):
@@ -212,17 +221,21 @@ def test_check_missing_tests_skips_init(tmp_path: Path):
     assert "Missing tests for __init__.py" not in titles
 
 
-def test_generate_refactor_promise_git_error_fallback(tmp_path: Path):
-    """When rev_parse_head raises, base_commit falls back to 'HEAD'."""
+def test_generate_refactor_promise_git_error_propagates(tmp_path: Path):
+    """When rev_parse_head raises, the exception propagates."""
     finding = DriftFinding(
         title="Test",
         rationale="Rationale",
     )
 
-    with patch("prothon.refactor.rev_parse_head", side_effect=RuntimeError("no git")):
-        promise = generate_refactor_promise(tmp_path, [finding])
-
-    assert promise.metadata.base_commit == "HEAD"
+    with (
+        patch(
+            "prothon.refactor.promise_gen.rev_parse_head",
+            side_effect=RuntimeError("no git"),
+        ),
+        pytest.raises(RuntimeError, match="no git"),
+    ):
+        generate_refactor_promise(tmp_path, [finding])
 
 
 def test_discover_drift_fully_compliant(tmp_path: Path):
@@ -269,8 +282,8 @@ def test_checkers_set_category_and_severity(tmp_path: Path):
     assert len(large_findings[0].evidence) == 1
 
 
-def test_missing_tests_finding_uses_concrete_test_path(tmp_path: Path):
-    """Missing tests finding should point at a concrete test file, not the tests dir."""
+def test_missing_tests_finding_is_heuristic(tmp_path: Path):
+    """Missing tests finding uses heuristic matching with empty files_affected."""
     src = tmp_path / "src" / "pkg"
     src.mkdir(parents=True)
     tests = tmp_path / "tests"
@@ -281,7 +294,6 @@ def test_missing_tests_finding_uses_concrete_test_path(tmp_path: Path):
 
     findings = _check_missing_tests(tmp_path)
     assert len(findings) == 1
-    affected = findings[0].files_affected
-    assert len(affected) == 1
-    assert affected[0] == tests / "test_feature.py"
-    assert affected[0].name == "test_feature.py"
+    assert findings[0].files_affected == []
+    assert "[HEURISTIC]" in findings[0].rationale
+    assert findings[0].severity == Severity.LOW

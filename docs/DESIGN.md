@@ -4,7 +4,7 @@
 
 ### Module Structure
 
-Mostly flat module layout under `src/prothon/`, with one subpackage (`checks/`) grouping static compliance checks. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
+Mostly flat module layout under `src/prothon/`, with two subpackages (`checks/` and `refactor/`) grouping related functionality. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
 
 ```text
 src/prothon/
@@ -14,7 +14,7 @@ src/prothon/
     ast_miner.py        # AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
     assistant.py        # Backend registry, protocol, and launch lifecycle for AI assistants
     cli.py              # Typer app and command definitions
-    commands.py         # Implementation logic for CLI commands (delegates to domain modules)
+    commands.py         # Session orchestration: Skill enum, SKILL_DOC_MAP, launch lifecycle, promise subcommand handlers
     ui.py               # Rich-based terminal UI, tables, and status reporting
     config.py           # Multi-level configuration resolution (CLI, env, toml)
     checks/             # Static compliance checks subpackage (split from static_checks.py)
@@ -25,24 +25,30 @@ src/prothon/
         workflows.py    # Execute/refactor workflow checks (R27-R42)
         research.py     # Tech researcher and versioning checks (R43-R55)
         adoption.py     # Adoption intelligence check (R13)
-    compliance.py       # Compliance data types (CheckResult, CheckStatus, ComplianceReport)
+    compliance.py       # Compliance data types (CheckResult, CheckStatus, ComplianceReport); canonical source for shared CheckStatus enum
     exceptions.py       # Custom exception hierarchy
     git.py              # Thin typed wrapper around git CLI via subprocess
     models.py           # Shared data models (Task, Metadata, Promise) for the promise system
     promise.py          # Promise TOML I/O and lifecycle management
     promise_verify.py   # Git diff analysis and task verification logic
     project.py          # Project root detection, shared project context
-    refactor.py         # Drift discovery and refactor promise generation
+    refactor/              # Drift discovery and refactor promise generation subpackage
+        __init__.py        # Re-exports all 5 public functions
+        models.py          # DriftCategory, Severity, PatternType, DriftFinding, ModuleMetrics, PatternOccurrence, SimilarityGroup
+        metrics.py         # collect_module_metrics(), collect_pattern_usage(), collect_cross_module_similarities()
+        discovery.py       # discover_drift() and Wave 1 category checkers
+        testability.py     # Testable logic detection heuristics (AST-based)
+        promise_gen.py     # generate_refactor_promise()
     scaffold.py         # Template rendering, copier answers, project adoption
     scaffold_cli.py     # Scaffolding-specific CLI commands and interactive prompts
     skills.py           # Skill discovery, symlink management
-    versioning.py       # Semantic version detection, bumping, git tagging
+    versioning.py       # Semantic version detection, bumping, git tagging, CI version bump orchestration (ci_bump_command, ci_detect_command)
     skills/             # Bundled skill assets (non-Python, 8 directories)
 
 template/               # Bundled Copier project template (Jinja2), at project root
 ```
 
-This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. The `checks/` subpackage is the single exception to the flat layout — it groups 28+ static check functions that would otherwise form an 850+ line monolith.
+`commands.py` serves as the session orchestration layer between `cli.py` (Typer command definitions) and the domain modules. It owns the `Skill` enum (canonical skill name registry), the `SKILL_DOC_MAP` (skill-to-document-file mapping), and the `launch_skill()` lifecycle — which captures a pre-session SPEC.md hash guard to detect unauthorized writes, captures design-section hashes for deterministic tech-researcher triggering, enforces post-session doc commits for any skill that modifies documentation, and dispatches follow-up agent sessions (doc-harmonizer after spec/design/patterns, tech-researcher after design when Technology Choices or Key Decisions sections changed, compliance-checker after execute). Individual command functions (`spec_command`, `design_command`, etc.) call into `launch_skill()` with prerequisite checks. Promise subcommand handlers (`promise_plan_command`, `promise_status_command`, etc.) delegate to the `promise` and `promise_verify` modules. This layout is driven by the number of subsystems in the SPEC (scaffolding, adoption, doc agents, execution, compliance, promise system, refactor, tech research, versioning, skill management — requirements 1-17, 22, 27-37, 38-61) each mapping to one or more modules. Two subpackages break the flat layout: `checks/` groups 28+ static check functions that would otherwise form an 850+ line monolith, and `refactor/` splits an 800+ line module into focused internal modules by concern (data models, metrics gathering, drift discovery, testability heuristics, promise generation).
 
 ### Module Dependencies
 
@@ -58,7 +64,7 @@ commands.py
   ├── config.resolve_agent(), resolve_model(), file_hash(), find_init_path(), ...
   ├── git.commit_file(), is_dirty()
   ├── models.PROMISE_PATH
-  ├── promise.*, promise_verify.*, versioning.*
+  ├── promise.*, promise_verify.*
   ├── project.find_project_root()
   ├── checks.run_static_checks()
   └── ui.render_check_report(), render_compliance_report(), render_plan(), render_status()
@@ -72,6 +78,13 @@ adoption.py
 checks.*
   └── compliance.CheckResult, CheckStatus, CheckType, ComplianceReport, Requirement
 
+refactor.*
+  ├── refactor.models.DriftCategory, Severity, PatternType, DriftFinding, ModuleMetrics, PatternOccurrence, SimilarityGroup
+  ├── refactor.metrics.collect_module_metrics(), collect_pattern_usage(), collect_cross_module_similarities()
+  ├── refactor.discovery.discover_drift() → checks.check_patterns_doc(), compliance.CheckStatus
+  ├── refactor.testability._has_testable_logic(), _is_testable_function(), _is_testable_class(), _is_trivial_function()
+  └── refactor.promise_gen.generate_refactor_promise() → models.Task, Metadata, Promise, git.rev_parse_head()
+
 scaffold_cli.py
   └── scaffold.generate(), init_existing()
 
@@ -79,12 +92,20 @@ promise.py
   ├── models.Task, Metadata, Promise, PROMISE_PATH
   └── promise_verify.check_task()
 
+promise_verify.py
+  ├── compliance.CheckStatus
+  ├── exceptions.PromiseError
+  ├── git.GitDiffProvider, SubprocessGitDiff
+  └── models.Promise, Task
+
 assistant.py
   └── skills.sync_skills(target)
 
 versioning.py
   ├── git.* (for tag operations)
-  └── tomlkit (for version file updates)
+  ├── tomlkit (for version file updates)
+  ├── config.read_toml(), config.nested_get(), config.find_init_path()
+  └── ui.console
 ```
 
 All modules
@@ -110,7 +131,7 @@ Each assistant backend encapsulates its binary name, invocation flags, skill syn
 
 AI coding CLIs fall into two structural categories based on how they ingest skills:
 
-- **Category A (native skill directories)** — Claude Code, opencode, Gemini CLI, and OB1 have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
+- **Category A (native skill directories)** — Claude Code, opencode, and Gemini CLI have filesystem-based skill discovery. Prothon symlinks bundled skills into their discovery directory and invokes them by name (via slash commands or prompts).
 - **Category B (prompt injection)** — Tools like Codex CLI, Goose, and Aider have no native skill directory. Skill content must be injected into the prompt or written to a backend-specific instruction file. No Category B backends are currently registered; the abstraction accommodates them for future expansion.
 
 A registry maps assistant names to backend classes. Claude Code, opencode, and Gemini CLI are registered. Adding a new assistant requires one backend implementation (~15-25 lines) and one registry entry. No caller changes needed. A `register_backend()` function provides a public extension hook for programmatic use and testing. Entry points are deferred until third-party demand materialises. This serves requirements 57-58 (Claude Code, opencode, and Gemini CLI support; assistant selection).
@@ -222,11 +243,11 @@ Because independent tasks can run in parallel (per requirements 28 and 30), `com
 | tomlkit (>=0.13,<1.0) | TOML read/write with comment and formatting preservation | R27-R28: change promise contract | tomllib+tomli-w, toml |
 | rich (via typer) | Table rendering for promise plans, status, and compliance reports | R35: compliance report with PASS/FAIL/SKIP status | tabulate, click echo/style |
 | subprocess (stdlib) | Git CLI interaction via thin typed wrapper | R7: git init, R31: promise verification | GitPython, pygit2, dulwich |
-| claude-code | AI assistant backend | R57: Claude Code support | opencode, gemini, ob1 |
-| opencode | AI assistant backend | R57-R58, R61: opencode support | claude-code, gemini, ob1 |
-| gemini-cli | AI assistant backend | R57: Gemini CLI support | claude-code, opencode, ob1 |
+| claude-code | AI assistant backend | R57: Claude Code support | opencode, gemini |
+| opencode | AI assistant backend | R57-R58, R61: opencode support | claude-code, gemini |
+| gemini-cli | AI assistant backend | R57: Gemini CLI support | claude-code, opencode |
 | jinja2 (>=3.1) | Template rendering for adoption scaffolds (AGENTS.md, doc stubs) | R13-R16: project adoption | string.Template, mako |
-| ob1 | AI assistant backend | R57: OB1 support (pluggable) | claude-code, opencode, gemini |
+
 
 ### Rationale
 
@@ -268,6 +289,8 @@ All commands that launch an assistant session (`spec`, `design`, `patterns`, `ex
 | `prothon promise complete N` | Zero-based task index | Updated `change_promise.toml` (marks task complete) | promise.py |
 | `prothon promise record-attempt N` | Zero-based task index | Updated `change_promise.toml` (increments attempt counter) | promise.py |
 | `prothon promise cleanup` | None | Removes `change_promise.toml` | promise.py |
+| `prothon ci bump` | `--before-sha`, `--after-sha`, `--dry-run`, `--no-tag` | Updated `pyproject.toml` version, `__init__.py` version, git tag | versioning.py |
+| `prothon ci detect` | `--before-sha`, `--after-sha` | Bump type string (`major`, `minor`, `patch`, or `none`) | versioning.py |
 
 ### Promise Contract Format
 
@@ -299,7 +322,7 @@ max_attempts = <int>
 
 ### Promise Verification Contract
 
-Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (members: `PASSED`, `FAILED`, `SKIPPED` with values `"PASS"`, `"FAIL"`, `"SKIP"`), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). SKIPPED indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAILED entries — SKIPPED results do not affect the outcome.
+Each task verification produces a `TaskCheckReport` containing a list of `CheckResult` entries. Each `CheckResult` has a `CheckStatus` enum (imported from `compliance.py`; members: `PASS`, `FAIL`, `SKIP`), a summary string, and a list of `FileCheckDetail` records providing per-file granularity (path, expected state, actual state, status). `CheckStatus` is defined canonically in `compliance.py` and shared across both promise verification and compliance checking to avoid duplicate definitions. SKIP indicates a check was not applicable (e.g. no files declared for that category). A report passes if it contains no FAIL entries — SKIP results do not affect the outcome.
 
 Dependency resolution uses `task_id` lookup: each entry in a task's `dependencies` list is matched against the `task_id` field of other tasks in the promise file, not against positional indices. This ensures dependencies remain valid when tasks are reordered, inserted, or removed during planning.
 
@@ -324,15 +347,14 @@ Registered backends:
 | `claude-code` | Claude Code | `claude` | `~/.claude/skills/` | A (native skills) |
 | `opencode` | opencode | `opencode` | `~/.config/opencode/skills/` (respects `$XDG_CONFIG_HOME`) | A (native skills) |
 | `gemini` | Gemini CLI | `gemini` | `~/.gemini/skills/` | A (native skills) |
-| `ob1` | OB1 | `ob1` | `~/.ob1/skills/` | A (native skills) |
 
 Canonical-to-backend subagent type mapping:
 
-| Canonical name | Claude Code | opencode | Gemini CLI | OB1 |
-|---------------|-------------|----------|------------|-----|
-| `general-purpose` | `general-purpose` | `general` | `generalist_agent` | `general` |
-| `explore` | `Explore` | `explore` | `codebase_investigator` | `explore` |
-| `plan` | `Plan` | `plan` | `generalist_agent` | `plan` |
+| Canonical name | Claude Code | opencode | Gemini CLI |
+|---------------|-------------|----------|------------|
+| `general-purpose` | `general-purpose` | `general` | `generalist_agent` |
+| `explore` | `Explore` | `explore` | `codebase_investigator` |
+| `plan` | `Plan` | `plan` | `generalist_agent` |
 
 A shared launch lifecycle handles: binary existence check (via `shutil.which()`), skill syncing, environment merging (`os.environ` + `env_overrides()`), subprocess execution, and return code reporting. When the binary is missing, the error message includes the backend's `install_hint`.
 
@@ -496,17 +518,17 @@ The discovery phase checks six categories of drift across two waves:
 | 1 | `doc_hierarchy` | Missing core documentation files in the SPEC → DESIGN → PATTERNS chain | "Missing PATTERNS.md" when DESIGN.md exists |
 | 1 | `patterns_compliance` | PATTERNS.md formatting violations detected by `check_patterns_doc()` | Code blocks containing implementation logic instead of signatures |
 | 1 | `large_files` | Source files in `src/` exceeding 500 lines | "Large file: commands.py" with line count rationale |
-| 1 | `missing_tests` | Source modules with testable logic that lack corresponding test files | "Missing tests for refactor.py" when no `test_refactor*.py` exists |
+| 1 | `missing_tests` | Source modules with testable logic that lack corresponding test files | "Missing tests for refactor.discovery" when no `test_refactor*.py` exists |
 
 **Wave 0 evidence gathering:**
 
 Wave 0 findings are LLM-driven but grounded in programmatic evidence. Three evidence-gathering functions provide structured data for the agent to reason over:
 
-`collect_module_metrics(root: Path) -> list[ModuleMetrics]` — For each Python module under `src/`, collects: line count, public function count, import count (both inbound and outbound). Returns a list of `ModuleMetrics` dataclasses. This surfaces modules that have outgrown their design boundary or become coupling hubs.
+`collect_module_metrics(root: Path) -> list[ModuleMetrics]` (in `refactor.metrics`) — For each Python module under `src/`, collects: line count, public function count, import count (both inbound and outbound). Returns a list of `ModuleMetrics` dataclasses (defined in `refactor.models`). This surfaces modules that have outgrown their design boundary or become coupling hubs.
 
-`collect_pattern_usage(root: Path) -> list[PatternOccurrence]` — AST scan across all modules under `src/` for recurring structural patterns: try/except guards around file I/O, check-then-act conditionals, path existence checks before reads, and similar shapes. Returns occurrences grouped by pattern type. This surfaces candidates for uncodified patterns.
+`collect_pattern_usage(root: Path) -> list[PatternOccurrence]` (in `refactor.metrics`) — AST scan across all modules under `src/` for recurring structural patterns. Returns a flat list of `PatternOccurrence` dataclasses (defined in `refactor.models`). The current detector recognizes two `PatternType` values: `TRY_EXCEPT_FILE_IO` (try/except guards around file I/O calls) and `PATH_EXISTS_GUARD` (path existence checks before reads with a guard action). This surfaces candidates for uncodified patterns.
 
-`collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]` — Identifies public functions across different modules that share a name. Each `SimilarityGroup` entry includes the function name, file path, and parameter names, allowing consumers to further assess signature similarity. Returns entries for functions that appear in more than one file. This surfaces logic duplication candidates.
+`collect_cross_module_similarities(root: Path) -> list[SimilarityGroup]` (in `refactor.metrics`) — Identifies public functions across different modules that share a name. Each `SimilarityGroup` entry (from `refactor.models`) includes the function name, file path, and parameter names, allowing consumers to further assess signature similarity. Returns entries for functions that appear in more than one file. This surfaces logic duplication candidates.
 
 The agent receives these metrics alongside the full documentation and produces `design_quality` and `pattern_quality` findings. SPEC.md is read for context but never modified.
 
@@ -516,13 +538,13 @@ After Wave 0 tasks (documentation improvements) are executed and committed, the 
 
 **Wave 1 discovery specification:**
 
-`discover_drift(root: Path) -> list[DriftFinding]` — Scans the project at `root` and returns all findings across the four Wave 1 drift categories. Each category checker runs independently and returns zero or more findings. The function concatenates all results in category order (doc hierarchy, patterns compliance, large files, missing tests). All returned findings have their `category` field set to the corresponding category identifier and `severity` set based on the checker's assessment.
+`discover_drift(root: Path) -> list[DriftFinding]` (in `refactor.discovery`) — Scans the project at `root` and returns all findings across the four Wave 1 drift categories. Each category checker runs independently and returns zero or more findings. The function concatenates all results in category order (doc hierarchy, patterns compliance, large files, missing tests). All returned findings have their `category` field set to the corresponding category identifier and `severity` set based on the checker's assessment.
 
-Testable logic detection uses AST analysis to skip modules containing only constants, type aliases, trivial pass-through functions, data classes without methods, and abstract/protocol classes. Test file matching supports `test_<module>.py`, `test_*_<module>.py`, and `*_<module>_test.py` naming conventions.
+Testable logic detection (in `refactor.testability`) uses AST analysis to skip modules containing only constants, type aliases, trivial pass-through functions, data classes without methods, and abstract/protocol classes. Test file matching supports `test_<module>.py`, `test_*_<module>.py`, and `*_<module>_test.py` naming conventions.
 
 **Promise generation specification:**
 
-`generate_refactor_promise(root: Path, findings: list[DriftFinding]) -> Promise` — Converts selected findings into a Promise object suitable for writing to `docs/change_promise.toml`. Each finding maps to exactly one task. The mapping is:
+`generate_refactor_promise(root: Path, findings: list[DriftFinding]) -> Promise` (in `refactor.promise_gen`) — Converts selected findings into a Promise object suitable for writing to `docs/change_promise.toml`. Each finding maps to exactly one task. The mapping is:
 
 | DriftFinding field | Task field |
 |--------------------|------------|

@@ -570,7 +570,19 @@ def test_ci_bump_idempotent(project_copy, monkeypatch):
     pyproject.write_text(
         content.replace(f'version = "{current_v}"', f'version = "{new_v}"')
     )
-    run_git("add", "pyproject.toml")
+
+    # Also bump __init__.py so both sources match
+    init_file = dest / "src" / "test_project" / "__init__.py"
+    if init_file.exists():
+        init_content = init_file.read_text()
+        init_content = re.sub(
+            r'__version__\s*=\s*["\'][^"\']+["\']',
+            f'__version__ = "{new_v}"',
+            init_content,
+        )
+        init_file.write_text(init_content)
+
+    run_git("add", "pyproject.toml", "src/test_project/__init__.py")
     run_git("commit", "-m", "chore: manual bump")
 
     result = runner.invoke(app, ["ci", "bump", "--before-sha", before])
@@ -846,6 +858,7 @@ def test_ci_bump_base_version_fallback(project_copy, monkeypatch):
         return original_run_git(*args, **kwargs)
 
     monkeypatch.setattr("prothon.git.run_git", fake_run_git)
+    monkeypatch.setattr("prothon.versioning.run_git", fake_run_git)
     result = runner.invoke(app, ["ci", "bump", "--before-sha", before, "--no-tag"])
 
     assert result.exit_code == 0

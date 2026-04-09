@@ -16,13 +16,16 @@ from prothon.refactor import (
     DriftFinding,
     PatternType,
     Severity,
-    _has_matching_test_file,
-    _has_testable_logic,
     collect_cross_module_similarities,
     collect_module_metrics,
     collect_pattern_usage,
     generate_refactor_promise,
 )
+from prothon.refactor.discovery import (
+    _build_test_stem_cache,
+    _has_matching_test_file,
+)
+from prothon.refactor.testability import _has_testable_logic
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +141,8 @@ def test_matching_test_file_exact(tmp_path: Path):
     tests = tmp_path / "tests"
     tests.mkdir()
     (tests / "test_core.py").write_text("")
-    assert _has_matching_test_file(tmp_path / "core.py", tests) is True
+    stems = _build_test_stem_cache(tests)
+    assert _has_matching_test_file(tmp_path / "core.py", stems) is True
 
 
 def test_matching_test_file_suffix_pattern(tmp_path: Path):
@@ -146,7 +150,8 @@ def test_matching_test_file_suffix_pattern(tmp_path: Path):
     tests = tmp_path / "tests"
     tests.mkdir()
     (tests / "test_refactor_impl.py").write_text("")
-    assert _has_matching_test_file(tmp_path / "refactor.py", tests) is True
+    stems = _build_test_stem_cache(tests)
+    assert _has_matching_test_file(tmp_path / "refactor.py", stems) is True
 
 
 def test_matching_test_file_pytest_suffix(tmp_path: Path):
@@ -154,7 +159,8 @@ def test_matching_test_file_pytest_suffix(tmp_path: Path):
     tests = tmp_path / "tests"
     tests.mkdir()
     (tests / "core_test.py").write_text("")
-    assert _has_matching_test_file(tmp_path / "core.py", tests) is True
+    stems = _build_test_stem_cache(tests)
+    assert _has_matching_test_file(tmp_path / "core.py", stems) is True
 
 
 def test_matching_test_file_no_match(tmp_path: Path):
@@ -162,12 +168,14 @@ def test_matching_test_file_no_match(tmp_path: Path):
     tests = tmp_path / "tests"
     tests.mkdir()
     (tests / "test_unrelated.py").write_text("")
-    assert _has_matching_test_file(tmp_path / "core.py", tests) is False
+    stems = _build_test_stem_cache(tests)
+    assert _has_matching_test_file(tmp_path / "core.py", stems) is False
 
 
 def test_matching_test_file_no_tests_dir(tmp_path: Path):
     """Missing tests directory returns False."""
-    assert _has_matching_test_file(tmp_path / "core.py", tmp_path / "tests") is False
+    stems = _build_test_stem_cache(tmp_path / "tests")
+    assert _has_matching_test_file(tmp_path / "core.py", stems) is False
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +197,7 @@ def test_generate_promise_existing_vs_new_files(tmp_path: Path):
         )
     ]
 
-    with patch("prothon.refactor.rev_parse_head", return_value="abc123"):
+    with patch("prothon.refactor.promise_gen.rev_parse_head", return_value="abc123"):
         promise = generate_refactor_promise(tmp_path, findings)
 
     task = promise.tasks[0]
@@ -199,7 +207,7 @@ def test_generate_promise_existing_vs_new_files(tmp_path: Path):
 
 def test_generate_promise_empty_findings(tmp_path: Path):
     """Empty findings list produces a promise with no tasks."""
-    with patch("prothon.refactor.rev_parse_head", return_value="abc123"):
+    with patch("prothon.refactor.promise_gen.rev_parse_head", return_value="abc123"):
         promise = generate_refactor_promise(tmp_path, [])
 
     assert promise.tasks == []
@@ -217,7 +225,7 @@ def test_generate_promise_files_outside_root_skipped(tmp_path: Path):
         )
     ]
 
-    with patch("prothon.refactor.rev_parse_head", return_value="abc"):
+    with patch("prothon.refactor.promise_gen.rev_parse_head", return_value="abc"):
         promise = generate_refactor_promise(tmp_path, findings)
 
     task = promise.tasks[0]
@@ -231,7 +239,7 @@ def test_generate_promise_multiple_findings(tmp_path: Path):
         DriftFinding(title=f"Finding {i}", rationale=f"Reason {i}") for i in range(3)
     ]
 
-    with patch("prothon.refactor.rev_parse_head", return_value="abc"):
+    with patch("prothon.refactor.promise_gen.rev_parse_head", return_value="abc"):
         promise = generate_refactor_promise(tmp_path, findings)
 
     assert len(promise.tasks) == 3
@@ -493,10 +501,10 @@ def test_collect_cross_module_similarities_shared_name(tmp_path: Path):
     assert files == {src / "a.py", src / "b.py"}
 
 
-def test_collect_cross_module_similarities_different_signature_not_grouped(
+def test_collect_cross_module_similarities_different_signature_grouped(
     tmp_path: Path,
 ):
-    """Same-name functions with different signatures are not grouped."""
+    """Same-name functions with different signatures are grouped together."""
     src = tmp_path / "src" / "pkg"
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("")
@@ -504,11 +512,12 @@ def test_collect_cross_module_similarities_different_signature_not_grouped(
     (src / "b.py").write_text("def validate(data, mode='fast'):\n    pass\n")
 
     groups = collect_cross_module_similarities(tmp_path)
-    assert groups == []
+    assert len(groups) == 2
+    assert all(g.function_name == "validate" for g in groups)
 
 
-def test_collect_cross_module_similarities_varargs_distinguished(tmp_path: Path):
-    """Functions with varargs/kwargs are distinguished from plain params."""
+def test_collect_cross_module_similarities_varargs_grouped(tmp_path: Path):
+    """Functions with varargs/kwargs are grouped with plain params by name."""
     src = tmp_path / "src" / "pkg"
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("")
@@ -516,7 +525,8 @@ def test_collect_cross_module_similarities_varargs_distinguished(tmp_path: Path)
     (src / "b.py").write_text("def process(data, *args, **kwargs):\n    pass\n")
 
     groups = collect_cross_module_similarities(tmp_path)
-    assert groups == []
+    assert len(groups) == 2
+    assert all(g.function_name == "process" for g in groups)
 
 
 def test_collect_cross_module_similarities_private_excluded(tmp_path: Path):

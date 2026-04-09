@@ -90,7 +90,10 @@ def check_skills_dir(root: Path) -> list[CheckResult]: ...
 def check_tech_researcher(root: Path) -> list[CheckResult]: ...
 ```
 
-**refactor.py:**
+**refactor/ (subpackage):**
+
+The `refactor` package re-exports all public symbols via `__init__.py`. The primary entry points are the discovery and promise generation functions; individual metrics and model types are also available for targeted use.
+
 ```python
 def discover_drift(root: Path) -> list[DriftFinding]: ...
 def collect_module_metrics(root: Path) -> list[ModuleMetrics]: ...
@@ -140,16 +143,16 @@ def update_pyproject_version(path: Path, new_version: str) -> None: ...
 def update_init_version(path: Path, new_version: str) -> None: ...
 def create_tag(version: str, cwd: Path | None = None) -> None: ...
 def detect_bump_type(before_sha: str, after_sha: str, cwd: Path | None = None) -> str | None: ...
+def ci_bump_command(root: Path, before_sha: str, after_sha: str = "HEAD", dry_run: bool = False, no_tag: bool = False) -> None: ...
+def ci_detect_command(root: Path, before_sha: str, after_sha: str = "HEAD") -> None: ...
 ```
 
 **promise_verify.py:**
+
+`CheckStatus` is imported from `compliance.py` (shared canonical source).
+
 ```python
 DEFAULT_TOLERANCE = 30
-
-class CheckStatus(Enum):
-    PASSED = "PASS"
-    FAILED = "FAIL"
-    SKIPPED = "SKIP"
 
 @dataclass
 class FileCheckDetail:
@@ -319,6 +322,55 @@ Changes must flow top-down through the documentation hierarchy: **DESIGN -> PATT
 ### File Locking and Atomic Persistence
 When parallel subagents mark tasks complete simultaneously, the promise TOML file is a shared resource. `complete_task()` wraps its load → modify → save cycle in an exclusive file lock to prevent lost updates, using a sibling `.toml.lock` file.
 
+### Session Command Wrapper Pattern
+
+**Problem:** The six session commands in `cli.py` (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) each repeat an identical error-handling block: resolve the project root, call the corresponding `commands.*_command()` function inside a `try/except ProthonError`, format the error, and exit. This produces six nearly-identical blocks with ~20 total `raise typer.Exit()` calls across the file. Adding a new session command means copy-pasting the same boilerplate.
+
+**Convention:** `cli.py` uses `_run_session_command` to wrap every session command with the standard error boundary. The helper resolves the project root, delegates to the matching `commands.*_command()` function inside a `try/except ProthonError`, and propagates exit codes:
+
+```python
+def _run_session_command(
+    cmd: Callable[..., int | None],
+    agent: str | None,
+    model: str | None,
+    provider: str | None,
+) -> None: ...
+```
+
+Each session command is a thin Typer-decorated function that delegates:
+
+```python
+@app.command()
+def spec(agent: AgentOption = None, model: ModelOption = None,
+         provider: ProviderOption = None) -> None: ...
+```
+
+**Rationale:**
+- **DRY** — all six session commands (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) share a single error-handling path, eliminating duplication.
+- **Consistent error handling** — `_run_session_command` ensures every command follows the same `ProthonError → stderr → exit(1)` path.
+- **Exit-code correctness** — the wrapper handles both `int` return codes and `None`-returning commands uniformly.
+- **Extensibility** — adding a new session command requires only wiring the Typer decorator and delegating to the wrapper.
+
+### Path Existence Guard Pattern
+
+Before any filesystem operation that assumes a path exists, check using `Path` methods (`.is_dir()`, `.is_file()`, `.exists()`) and raise a specific `ProthonError` subclass with an actionable message when the check fails. Used in 12+ locations across the codebase.
+
+*Positive guard* — verify the resource exists before acting. Guard functions accept a `Path`, call `.is_dir()` / `.is_file()` / `.exists()`, and proceed only when the check passes.
+
+*Negative guard* — verify the resource does NOT exist, then fail fast by raising a domain-specific `ProthonError` subclass such as `ProjectNotFoundError` or `ProjectAlreadyInitError` with an actionable message.
+
+**When to use:** Before any filesystem read, write, copy, or iteration that semantically requires the path to be present (or absent). Skip for idempotent operations like `mkdir(parents=True, exist_ok=True)`.
+
+**Rationale:** Fail fast at the boundary rather than deep inside I/O routines; raise domain-specific errors (`ProjectNotFoundError`, `ProjectAlreadyInitError`) that flow through the centralized CLI error boundary with actionable messages.
+
+### File I/O Error Handling Pattern
+
+File I/O operations that read from or write to the filesystem — using methods like `Path.read_text()`, `Path.write_text()`, `Path.read_bytes()`, `Path.write_bytes()`, or `open()` — are wrapped in try/except blocks catching `OSError` and `UnicodeDecodeError`. Rather than propagating OS-level failures upward, the handler returns a safe default value appropriate to the calling context: `None` for optional single-result lookups, an empty string for content-extraction routines, an empty list for collection-returning scanners, or simply continues to the next item in an iteration loop. This pattern appears in 15 locations across 12 modules (`versioning.py`, `adoption.py`, `ast_miner.py`, `config.py`, `commands.py`, `promise.py`, `checks/adoption.py`, `checks/utils.py`, `refactor/metrics.py`, `refactor/testability.py`, `refactor/discovery.py`).
+
+**When to use:** Whenever a function reads or writes a file whose existence or encoding cannot be guaranteed by a prior guard — for example, iterating over a directory of source files, loading a configuration file that may be missing or malformed, or hashing a file that may have been deleted between the existence check and the read. Do not use this pattern when the Path Existence Guard Pattern already validates the path and a missing file should be a hard failure.
+
+**Rationale:** OS-level errors (permission denied, file vanished mid-scan, broken symlink, unexpected encoding) are routine in batch filesystem operations, especially when scanning large directory trees. Silently degrading to a safe default keeps the caller's control flow simple and avoids cascading failures in collection-oriented operations where one bad file should not abort the entire scan. The pattern complements the Path Existence Guard Pattern: guards handle expected preconditions at the boundary, while this pattern handles unexpected failures during the I/O operation itself.
+
 ## Error Handling
 
 ### Centralized CLI Error Boundary
@@ -331,7 +383,7 @@ When a subagent reaches `max_attempts` for a task without passing verification a
 Contradictions found by the `doc-harmonizer` are treated as data, not exceptions. They are presented as a structured report of `Conflict` objects, enabling interactive resolution and approval before any documents are amended.
 
 ### Model/Provider Resolution Errors
-Configuration resolution for `opencode` enforces that both model and provider must be present if one is provided. Violations raise a `ConfigurationError` explaining the required format, ensuring early failure.
+Configuration resolution for `opencode` enforces that both model and provider must be present if one is provided. Violations raise a `ProthonError` explaining the required format, ensuring early failure.
 
 ## Testing Patterns
 

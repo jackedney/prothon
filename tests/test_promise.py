@@ -32,6 +32,15 @@ from prothon.promise_verify import (
 
 from tests.conftest import FakeGitDiff, make_task
 
+
+@pytest.fixture(autouse=True)
+def mock_pre_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock pre-commit execution for all tests to avoid environment dependencies."""
+    monkeypatch.setattr(
+        "prothon.promise_verify.run_pre_commit", lambda _p, **_k: (0, "Passed")
+    )
+
+
 SAMPLE_PROMISE = Promise(
     metadata=Metadata(base_commit="abc1234"),
     tasks=[

@@ -115,3 +115,27 @@ def commit_file(path: Path, message: str, cwd: Path | None = None) -> None:
     """
     run_git("add", "--", str(path), cwd=cwd)
     run_git("commit", "-m", message, "--", str(path), cwd=cwd)
+
+
+def run_pre_commit(paths: list[str], cwd: Path | None = None) -> tuple[int, str]:
+    """Run pre-commit hooks on a specific set of files.
+
+    Returns:
+        A tuple of (returncode, combined_output).
+    """
+    if not paths:
+        return 0, ""
+
+    # Use 'uv run pre-commit' if in a uv-managed project, otherwise 'pre-commit'
+    cmd = ["pre-commit", "run", "--files", *paths]
+    if (cwd or Path.cwd() / "uv.lock").exists():
+        cmd = ["uv", "run", "pre-commit", "run", "--files", *paths]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        env=os.environ,
+    )
+    return result.returncode, result.stdout + result.stderr

@@ -3,12 +3,68 @@ from __future__ import annotations
 from pathlib import Path
 
 from prothon.refactor.discovery import (
+    _check_design_quality,
     _check_docs_hierarchy,
     _check_large_files,
     _check_missing_tests,
+    _check_pattern_quality,
     discover_drift,
 )
-from prothon.refactor.models import DriftCategory, DriftFinding, Severity
+from prothon.refactor.models import (
+    DriftCategory,
+    DriftFinding,
+    ModuleMetrics,
+    Severity,
+    SimilarityGroup,
+)
+
+
+def test_check_design_quality_high_inbound(tmp_path: Path, monkeypatch):
+    """DESIGN_QUALITY finding when a module has >10 inbound imports."""
+    mock_metrics = [
+        ModuleMetrics(
+            path=tmp_path / "src" / "popular.py",
+            line_count=100,
+            public_function_count=5,
+            import_count=2,
+            imported_by_count=11,  # > 10
+        )
+    ]
+    monkeypatch.setattr(
+        "prothon.refactor.discovery.collect_module_metrics", lambda _: mock_metrics
+    )
+
+    findings = _check_design_quality(tmp_path)
+    assert len(findings) == 1
+    assert findings[0].category == DriftCategory.DESIGN_QUALITY
+    assert "High inbound dependency" in findings[0].title
+    assert findings[0].files_affected == [tmp_path / "src" / "popular.py"]
+
+
+def test_check_pattern_quality_duplicates(tmp_path: Path, monkeypatch):
+    """PATTERN_QUALITY finding when identical public signatures exist across modules."""
+    mock_sims = [
+        SimilarityGroup(
+            function_name="common_func",
+            file_path=tmp_path / "src" / "a.py",
+            parameters=["x"],
+        ),
+        SimilarityGroup(
+            function_name="common_func",
+            file_path=tmp_path / "src" / "b.py",
+            parameters=["x"],
+        ),
+    ]
+    monkeypatch.setattr(
+        "prothon.refactor.discovery.collect_cross_module_similarities",
+        lambda _: mock_sims,
+    )
+
+    findings = _check_pattern_quality(tmp_path)
+    assert len(findings) == 1
+    assert findings[0].category == DriftCategory.PATTERN_QUALITY
+    assert "Duplicate public signature: common_func" in findings[0].title
+    assert len(findings[0].files_affected) == 2
 
 
 def test_discover_drift_returns_drift_finding_list(tmp_path: Path):

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from prothon.compliance import CheckStatus
 from prothon.exceptions import PromiseError
-from prothon.git import GitDiffProvider, SubprocessGitDiff
+from prothon.git import GitDiffProvider, SubprocessGitDiff, run_pre_commit
 from prothon.models import Promise, Task
 
 DEFAULT_TOLERANCE = 30
@@ -184,6 +184,16 @@ def check_task(
 
     # Check line counts
     report.checks.extend(_check_line_counts(task, diff, base_commit))
+
+    # SPEC R32: Run pre-commit hooks
+    all_files = sorted({*task.files_to_create, *task.files_to_modify})
+    if all_files:
+        rc, output = run_pre_commit(all_files, cwd=base_path)
+        status = CheckStatus.PASS if rc == 0 else CheckStatus.FAIL
+        detail = "all hooks passed" if rc == 0 else "some hooks failed"
+        report.checks.append(
+            CheckResult(name="pre-commit", status=status, detail=detail)
+        )
 
     return report
 

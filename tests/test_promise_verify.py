@@ -23,6 +23,14 @@ from prothon.promise_verify import (
 from tests.conftest import FakeGitDiff
 
 
+@pytest.fixture(autouse=True)
+def mock_pre_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock pre-commit execution for all tests to avoid environment dependencies."""
+    monkeypatch.setattr(
+        "prothon.promise_verify.run_pre_commit", lambda _p, **_k: (0, "Passed")
+    )
+
+
 # ---------------------------------------------------------------------------
 # Helper to build a Promise with tasks
 # ---------------------------------------------------------------------------
@@ -325,6 +333,27 @@ class TestValidateParams:
 
 class TestCheckTask:
     """Integration tests for check_task using FakeGitDiff."""
+
+    def test_pre_commit_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Task verification FAIL if pre-commit hooks fail (SPEC R32)."""
+        monkeypatch.setattr(
+            "prothon.promise_verify.run_pre_commit", lambda _p, **_k: (1, "Failed")
+        )
+
+        task = Task(title="fail hooks", task_id="t_fail", files_to_modify=["a.py"])
+        pfile = tmp_path / "docs" / "promise.toml"
+        pfile.parent.mkdir()
+        save_promise(_promise_with_tasks(task), pfile)
+
+        diff = FakeGitDiff(names={"a.py"}, stats={"a.py": (10, 0)})
+        report = check_task(0, diff=diff, path=pfile)
+
+        assert report.passed is False
+        check = next(c for c in report.checks if c.name == "pre-commit")
+        assert check.status == CheckStatus.FAIL
+        assert "hooks failed" in check.detail
 
     def test_all_checks_pass(self, tmp_path: Path) -> None:
         # Create the files on disk so files_to_create passes

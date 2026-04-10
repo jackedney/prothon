@@ -422,12 +422,12 @@ def test_check_execute_logic_partial(tmp_path: Path) -> None:
 
 
 def test_check_refactor_logic_all_present(tmp_path: Path) -> None:
-    """PASS results when refactor.py and refactor skill exist with keywords."""
-    prothon = tmp_path / "src" / "prothon"
-    prothon.mkdir(parents=True)
-    (prothon / "refactor.py").write_text("# refactor module\n")
+    """PASS results when refactor subpackage and refactor skill exist with keywords."""
+    refactor_dir = tmp_path / "src" / "prothon" / "refactor"
+    refactor_dir.mkdir(parents=True)
+    (refactor_dir / "__init__.py").write_text("# refactor subpackage\n")
 
-    skill_dir = prothon / "skills" / "prothon-refactor"
+    skill_dir = tmp_path / "src" / "prothon" / "skills" / "prothon-refactor"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
         "# Refactor\n"
@@ -443,7 +443,7 @@ def test_check_refactor_logic_all_present(tmp_path: Path) -> None:
 
 
 def test_check_refactor_logic_nothing_present(tmp_path: Path) -> None:
-    """FAIL for R38 when refactor.py and skill are missing."""
+    """FAIL for R38 when refactor subpackage and skill are missing."""
     results = check_refactor_logic(tmp_path)
     assert len(results) == 1
     assert results[0].requirement.requirement_id == "R38"
@@ -451,10 +451,10 @@ def test_check_refactor_logic_nothing_present(tmp_path: Path) -> None:
 
 
 def test_check_refactor_logic_only_module(tmp_path: Path) -> None:
-    """Only R38 PASS when refactor.py exists but skill is absent."""
-    prothon = tmp_path / "src" / "prothon"
-    prothon.mkdir(parents=True)
-    (prothon / "refactor.py").write_text("# refactor\n")
+    """Only R38 PASS when refactor subpackage exists but skill is absent."""
+    refactor_dir = tmp_path / "src" / "prothon" / "refactor"
+    refactor_dir.mkdir(parents=True)
+    (refactor_dir / "__init__.py").write_text("# refactor\n")
     results = check_refactor_logic(tmp_path)
     assert len(results) == 1
     req_ids = [r.requirement.requirement_id for r in results]

@@ -144,14 +144,14 @@ def check_refactor_logic(root: Path) -> list[CheckResult]:
     """Verify Refactor workflow implementation (SPEC R38-R42)."""
     results = []
 
-    refactor_path = root / "src" / "prothon" / "refactor.py"
+    refactor_path = root / "src" / "prothon" / "refactor" / "__init__.py"
     refactor_skill = (
         root / "src" / "prothon" / "skills" / "prothon-refactor" / "SKILL.md"
     )
 
-    # R38: refactor.py existence
+    # R38: refactor subpackage existence
     status = CheckStatus.PASS if refactor_path.exists() else CheckStatus.FAIL
-    rationale = "" if refactor_path.exists() else "Missing refactor.py."
+    rationale = "" if refactor_path.exists() else "Missing refactor subpackage."
     results.append(
         CheckResult(
             Requirement(

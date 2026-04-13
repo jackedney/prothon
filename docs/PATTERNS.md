@@ -35,7 +35,7 @@ To maintain context efficiency for AI assistants, all projects follow a three-le
 Compliance verification uses a hybrid strategy: static analysis (AST/Regex) handles structural rules like method signatures, while semantic analysis (LLM subagents) verifies high-level behavioral requirements. Every check produces a report with a tri-state status (`PASS`, `FAIL`, `SKIP`), a `file:line` evidence citation, and a brief rationale.
 
 ### Pluggable Assistant Backend Pattern
-To support multiple AI assistants (Claude Code, opencode, Gemini CLI) with identical behavior, the system uses a pluggable backend architecture defined by the `AssistantBackend` protocol. Each backend handles its own CLI command construction and skill synchronization.
+To support multiple AI assistants (Claude Code, opencode, Gemini CLI) with identical behavior, the system uses a data-driven backend architecture. Each backend is a `BackendConfig` record (name, CLI command, install hint, skill sync target path, subagent type map, prompt builder) consumed by a single shared `AssistantBackend` implementation. No per-backend class hierarchy is needed.
 
 ```python
 class AssistantBackend(Protocol):
@@ -58,6 +58,27 @@ To ensure consistent error handling across all six CLI session commands (`spec`,
 ```python
 def _run_session_command(cmd: Callable[..., int | None], agent: str | None, model: str | None, provider: str | None) -> None: ...
 ```
+
+### CLI Factory Pattern
+Session and promise subcommands follow identical structures differing only in the target function and error message. A factory generates these wrappers to eliminate boilerplate, using `typer.command()` registration with a shared try/except boundary.
+
+```python
+def _register_session_command(app: typer.Typer, name: str, cmd: Callable, ...) -> None: ...
+def _register_promise_command(app: typer.Typer, name: str, cmd: Callable, ...) -> None: ...
+```
+
+### Shared Utility Extraction Pattern
+When the same logic appears in three or more modules, extract it to a shared utility. Key shared utilities: `safe_parse_py()` (AST parse with error guard), `xdg_config_home()` (XDG directory resolution), `atomic_write()` (file I/O), `create_agent_symlinks()` (agent link setup), and `check_file_exists()` (compliance check helper).
+
+```python
+def safe_parse_py(path: Path) -> ast.Module | None: ...
+def xdg_config_home() -> Path: ...
+def atomic_write(path: Path, data: bytes) -> None: ...
+def create_agent_symlinks(root: Path, agents_path: Path) -> None: ...
+```
+
+### Skill Token Efficiency Pattern
+Bundled skill files minimize token cost through two strategies: (1) shared operational guards in `skills/_shared/guards.md` referenced by all skills instead of duplicated per-file, and (2) output templates and verbose examples offloaded to `references/` files following the same progressive disclosure pattern the project advocates. Each skill's `SKILL.md` stays focused on instructions, not reference data.
 
 ## Error Handling
 

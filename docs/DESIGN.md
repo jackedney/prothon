@@ -10,23 +10,24 @@ Mostly flat module layout under `src/prothon/`, with two subpackages (`checks/` 
 src/prothon/
     __init__.py
     adoption.py         # Project adoption: overlaying docs-first workflow onto existing projects
-    adoption_templates.py  # Templates and scaffolds used during project adoption
+    adoption_templates.py  # Template file loading for project adoption (CI workflows, doc scaffolds)
     ast_miner.py        # AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
-    assistant.py        # Backend registry, protocol, and launch lifecycle for AI assistants
-    cli.py              # Typer app and command definitions
+    assistant.py        # Backend registry, data-driven BackendConfig, and launch lifecycle for AI assistants
+    cli.py              # Typer app, factory-generated command definitions
     commands.py         # Session orchestration: Skill enum, SKILL_DOC_MAP, launch lifecycle, promise subcommand handlers
     ui.py               # Rich-based terminal UI, tables, and status reporting
-    config.py           # Multi-level configuration resolution (CLI, env, toml)
+    config.py           # Multi-level configuration resolution (CLI, env, toml), shared XDG helper
     checks/             # Static compliance checks subpackage
         __init__.py     # Re-exports all public check functions
-        utils.py        # AST analysis, signature helpers
+        utils.py        # AST analysis, signature helpers, shared safe_parse_py()
         docs.py         # Document-related checks (R24-R26, R44)
         structure.py    # Package structure checks (R3-R5, R15)
         workflows.py    # Execute/refactor workflow checks (R27-R42)
-        research.py     # Tech researcher and versioning checks (R43-R55)
+        research.py     # Tech researcher and versioning checks (R43-C55)
         adoption.py     # Adoption intelligence check (R13)
     compliance.py       # Compliance data types (CheckResult, CheckStatus, ComplianceReport)
     exceptions.py       # Custom exception hierarchy
+    fs.py               # Shared filesystem utilities (atomic_write, create_agent_symlinks)
     git.py              # Thin typed wrapper around git CLI via subprocess
     models.py           # Shared data models (Task, Metadata, Promise)
     promise.py          # Promise TOML I/O and lifecycle management
@@ -44,8 +45,13 @@ src/prothon/
     skills.py           # Skill discovery, symlink management
     versioning.py       # Semantic version detection, bumping, git tagging, CI orchestration
     skills/             # Bundled skill assets (non-Python)
+        _shared/            # Shared operational guards referenced by all skills
+        prothon-execute/    # References _shared/ for guards, uses external prompt files
+        prothon-refactor/   # References _shared/ for guards, shares subagent prompt with execute
+        prothon-tech-researcher/  # Output templates offloaded to references/templates.md
 
 template/               # Bundled Copier project template (Jinja2), at project root
+template/               # Also houses CI workflow templates loaded by adoption_templates.py
 ```
 
 ### Refactor Wave Logic (R38-42)
@@ -58,7 +64,7 @@ The Refactor Workflow is a specialized orchestrator that follows a three-layer w
 
 ### Assistant Abstraction (R56-61)
 
-A pluggable backend system enables identical behavior across supported AI assistants. A shared `launch()` lifecycle handles binary detection, skill syncing, and subprocess execution.
+A pluggable backend system enables identical behavior across supported AI assistants. Backends are defined as data-driven `BackendConfig` declarations — each backend is a config record (name, CLI command, install hint, skill sync target, subagent type map) rather than a full class hierarchy. A shared `launch()` lifecycle handles binary detection, skill syncing, and subprocess execution.
 
 AI coding CLIs fall into two structural categories:
 - **Category A (native skill directories):** Claude Code, opencode, and Gemini CLI. Prothon symlinks bundled skills and invokes them by name.
@@ -86,16 +92,24 @@ The compliance checker uses a **Hybrid Evidence Strategy** to verify that code m
 
 ### Assistant Backend Contract (R57, R61)
 
-Every assistant backend satisfies the `AssistantBackend` protocol:
-- `build_command(skill_name, cwd, model=None)`: Constructs subprocess argv. For Gemini CLI, this uses `--approval-mode=yolo`.
-- `sync_skills()`: Symlinks bundled skills (e.g., `~/.gemini/skills/`).
-- `subagent_type_map()`: Translates canonical types (e.g., `explore`) to backend names (e.g., `codebase_investigator`).
+Every assistant backend satisfies the `AssistantBackend` protocol. Backends are data-driven via `BackendConfig`:
+
+```python
+class AssistantBackend(Protocol):
+    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]: ...
+    def sync_skills(self) -> None: ...
+    def subagent_type_map(self) -> dict[str, str]: ...
+```
 
 | Key | Assistant | Binary | Skill Sync Target |
 |-----|-----------|--------|-------------------|
 | `claude-code` | Claude Code | `claude` | `~/.claude/skills/` |
 | `opencode` | opencode | `opencode` | `~/.config/opencode/skills/` |
 | `gemini` | Gemini CLI | `gemini` | `~/.gemini/skills/` |
+
+### Adoption Template Contract (R13, D1)
+
+`adoption_templates.py` loads CI workflow YAML and doc scaffold content from bundled template files at runtime rather than maintaining inline string copies. The adoption path reuses the same Jinja templates and external YAML files that `template/` provides, eliminating duplicate content.
 
 ### Model Configuration Contract (R61)
 
@@ -132,3 +146,6 @@ The tech-researcher generates skills using a **Progressive Disclosure** structur
 | Doc Safety | Skill-level edit guards | Governs agent behavior at write-time; prevents unauthorized doc modification. |
 | Mutation Testing CI | Non-blocking job | Provides feedback (continue-on-error) without slowing the main dev loop. |
 | Retry Configuration | Two-level resolution | Project defaults with per-task overrides in `change_promise.toml`. |
+| Backend Definitions | Data-driven `BackendConfig` | Each backend is a config record, not a class hierarchy. Reduces boilerplate from ~40 lines per backend to ~5. |
+| CI Templates | External files loaded at runtime | Eliminates inline YAML strings; single source of truth in `template/` directory. |
+| Skill Token Efficiency | Shared guards + progressive disclosure | Operational rules (staging, fresh instances) in `_shared/` referenced by all skills; output templates offloaded to `references/`. |

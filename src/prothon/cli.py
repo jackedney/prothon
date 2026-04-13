@@ -91,6 +91,57 @@ def _run_session_command(
         raise typer.Exit(1) from exc
 
 
+def _register_session_command(
+    app: typer.Typer,
+    name: str,
+    help_text: str,
+    cmd: Callable[..., int | None],
+) -> None:
+    def _command(
+        agent: AgentOption = None,
+        model: ModelOption = None,
+        provider: ProviderOption = None,
+    ) -> None:
+        _run_session_command(cmd, agent, model, provider)
+
+    _command.__name__ = name
+    _command.__doc__ = help_text
+    app.command(name=name)(_command)
+
+
+def _register_promise_command(
+    app: typer.Typer,
+    name: str,
+    help_text: str,
+    cmd: Callable[..., None],
+    has_task_index: bool = False,
+) -> None:
+    if has_task_index:
+
+        def _command(
+            task_index: int = typer.Argument(help="Zero-based task index"),
+        ) -> None:
+            root = _require_project_root()
+            try:
+                cmd(root, task_index)
+            except ProthonError as exc:
+                typer.echo(str(exc), err=True)
+                raise typer.Exit(1) from exc
+    else:
+
+        def _command() -> None:
+            root = _require_project_root()
+            try:
+                cmd(root)
+            except ProthonError as exc:
+                typer.echo(str(exc), err=True)
+                raise typer.Exit(1) from exc
+
+    _command.__name__ = f"promise_{name.replace('-', '_')}"
+    _command.__doc__ = help_text
+    app.command(name)(_command)
+
+
 @app.callback(invoke_without_command=True)
 def callback(ctx: typer.Context) -> None:
     """Python project generator with docs-first AI workflow."""
@@ -115,142 +166,82 @@ def init() -> None:
     scaffold_cli.init_project()
 
 
-@app.command()
-def spec(
-    agent: AgentOption = None,
-    model: ModelOption = None,
-    provider: ProviderOption = None,
-) -> None:
-    """Write or revise SPEC.md — extract requirements through probing questions."""
-    _run_session_command(commands.spec_command, agent, model, provider)
+_register_session_command(
+    app,
+    "spec",
+    "Write or revise SPEC.md — extract requirements through probing questions.",
+    commands.spec_command,
+)
+_register_session_command(
+    app,
+    "design",
+    "Write or revise DESIGN.md — research technologies and architecture.",
+    commands.design_command,
+)
+_register_session_command(
+    app,
+    "patterns",
+    "Write or revise PATTERNS.md — define code conventions and testing approaches.",
+    commands.patterns_command,
+)
+_register_session_command(
+    app,
+    "execute",
+    "Align source code to documentation — plan and implement with subagents.",
+    commands.execute_command,
+)
+_register_session_command(
+    app,
+    "compliance",
+    "Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md).",
+    commands.compliance_command,
+)
+_register_session_command(
+    app,
+    "refactor",
+    "Perform documentation-driven full-stack refactoring with the refactor agent.",
+    commands.refactor_command,
+)
 
-
-@app.command()
-def design(
-    agent: AgentOption = None,
-    model: ModelOption = None,
-    provider: ProviderOption = None,
-) -> None:
-    """Write or revise DESIGN.md — research technologies and architecture."""
-    _run_session_command(commands.design_command, agent, model, provider)
-
-
-@app.command()
-def patterns(
-    agent: AgentOption = None,
-    model: ModelOption = None,
-    provider: ProviderOption = None,
-) -> None:
-    """Write or revise PATTERNS.md — define code conventions and testing approaches."""
-    _run_session_command(commands.patterns_command, agent, model, provider)
-
-
-@app.command()
-def execute(
-    agent: AgentOption = None,
-    model: ModelOption = None,
-    provider: ProviderOption = None,
-) -> None:
-    """Align source code to documentation — plan and implement with subagents."""
-    _run_session_command(commands.execute_command, agent, model, provider)
-
-
-@app.command()
-def compliance(
-    agent: AgentOption = None,
-    model: ModelOption = None,
-    provider: ProviderOption = None,
-) -> None:
-    """Verify source code matches documentation (SPEC.md, DESIGN.md, PATTERNS.md)."""
-    _run_session_command(commands.compliance_command, agent, model, provider)
-
-
-@app.command()
-def refactor(
-    agent: AgentOption = None,
-    model: ModelOption = None,
-    provider: ProviderOption = None,
-) -> None:
-    """Perform documentation-driven full-stack refactoring with the refactor agent."""
-    _run_session_command(commands.refactor_command, agent, model, provider)
-
-
-# --- Promise subcommands ---
-
-
-@promise_app.command("plan")
-def promise_plan() -> None:
-    """Pretty-print the change promise plan."""
-    root = _require_project_root()
-    try:
-        commands.promise_plan_command(root)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-
-
-@promise_app.command("status")
-def promise_status() -> None:
-    """Show completion status of all tasks."""
-    root = _require_project_root()
-    try:
-        commands.promise_status_command(root)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-
-
-@promise_app.command("check")
-def promise_check(
-    task_index: int = typer.Argument(help="Zero-based task index to check"),
-) -> None:
-    """Verify a task's promises against git reality."""
-    root = _require_project_root()
-    try:
-        commands.promise_check_command(root, task_index)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-
-
-@promise_app.command("complete")
-def promise_complete(
-    task_index: int = typer.Argument(help="Zero-based task index to mark complete"),
-) -> None:
-    """Mark a task as completed (attempt count is read from the promise file)."""
-    root = _require_project_root()
-    try:
-        commands.promise_complete_command(root, task_index)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-
-
-@promise_app.command("record-attempt")
-def promise_record_attempt(
-    task_index: int = typer.Argument(help="Zero-based task index to record"),
-) -> None:
-    """Increment the attempt counter for a task."""
-    root = _require_project_root()
-    try:
-        commands.promise_record_attempt_command(root, task_index)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-
-
-@promise_app.command("cleanup")
-def promise_cleanup() -> None:
-    """Remove the promise file after all tasks are complete."""
-    root = _require_project_root()
-    try:
-        commands.promise_cleanup_command(root)
-    except ProthonError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(1) from exc
-
-
-# --- CI subcommands ---
+_register_promise_command(
+    promise_app,
+    "plan",
+    "Pretty-print the change promise plan.",
+    commands.promise_plan_command,
+)
+_register_promise_command(
+    promise_app,
+    "status",
+    "Show completion status of all tasks.",
+    commands.promise_status_command,
+)
+_register_promise_command(
+    promise_app,
+    "check",
+    "Verify a task's promises against git reality.",
+    commands.promise_check_command,
+    has_task_index=True,
+)
+_register_promise_command(
+    promise_app,
+    "complete",
+    "Mark a task as completed (attempt count is read from the promise file).",
+    commands.promise_complete_command,
+    has_task_index=True,
+)
+_register_promise_command(
+    promise_app,
+    "record-attempt",
+    "Increment the attempt counter for a task.",
+    commands.promise_record_attempt_command,
+    has_task_index=True,
+)
+_register_promise_command(
+    promise_app,
+    "cleanup",
+    "Remove the promise file after all tasks are complete.",
+    commands.promise_cleanup_command,
+)
 
 
 @ci_app.command("bump")

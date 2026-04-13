@@ -41,6 +41,11 @@ version-bump:
               ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
               capture_output=True, text=True
           )
+          if result.returncode != 0 or not result.stdout.strip():
+              result = subprocess.run(
+                  ["git", "show", "--name-only", "--pretty=", "HEAD"],
+                  capture_output=True, text=True
+              )
       else:
           result = subprocess.run(
               ["git", "diff", "--name-only", before_sha, current_sha],
@@ -117,14 +122,27 @@ version-bump:
       if files_to_add:
           subprocess.run(["git", "add"] + files_to_add, check=True)
       commit_msg = f"chore: bump version to {new_version} [skip ci]"
-      subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+      status_result = subprocess.run(
+          ["git", "status", "--porcelain", "--untracked-files=no"],
+          capture_output=True, text=True
+      )
+      if status_result.stdout.strip():
+          subprocess.run(["git", "commit", "-m", commit_msg], check=True)
       tag_msg = f"release {new_version}"
-      subprocess.run(["git", "tag", "-a", f"v{new_version}", "-m", tag_msg], check=True)
+      tag_name = f"v{new_version}"
+      tag_check = subprocess.run(
+          ["git", "rev-parse", f"refs/tags/{tag_name}"],
+          capture_output=True, text=True
+      )
+      tag_pushed = tag_check.returncode == 0
+      if not tag_pushed:
+          subprocess.run(["git", "tag", "-a", tag_name, "-m", tag_msg], check=True)
 
       # Push changes and tag
       push_branch = f"HEAD:{os.environ['CI_COMMIT_BRANCH']}"
       subprocess.run(["git", "push", "origin", push_branch], check=True)
-      subprocess.run(["git", "push", "origin", f"v{new_version}"], check=True)
+      if not tag_pushed:
+          subprocess.run(["git", "push", "origin", tag_name], check=True)
 
       msg = (
           f"Successfully bumped version to {new_version} "

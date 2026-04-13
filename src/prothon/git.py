@@ -105,6 +105,8 @@ def run_pre_commit(paths: list[str], cwd: Path | None = None) -> tuple[int, str]
             cwd=cwd,
             env=os.environ,
         )
-    except OSError:
+    except FileNotFoundError:
         return 1, f"Failed to run pre-commit: {cmd[0]} not found"
+    except OSError as exc:
+        return 1, f"Failed to run pre-commit: {exc}"
     return result.returncode, result.stdout + result.stderr

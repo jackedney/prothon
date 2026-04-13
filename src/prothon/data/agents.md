@@ -24,7 +24,7 @@ All code changes — features, bug fixes, refactors — MUST follow this workflo
 - Does this change affect **requirements**? → Start at SPEC
 - Does this change affect **architecture or packages**? → Start at DESIGN
 - Does this change affect **code patterns**? → Start at PATTERNS
-- Is this a **code-only change** with no doc impact? → Skip to step 5
+- Is this a **code-only change** with no doc impact? → Skip to step 3
 
 ### 2. Update Docs Top-Down
 

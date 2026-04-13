@@ -66,8 +66,8 @@ The Refactor Workflow is a specialized orchestrator that follows a three-layer w
 A pluggable backend system enables identical behavior across supported AI assistants. Backends are defined as data-driven `BackendConfig` declarations — each backend is a config record (name, CLI command, install hint, skill sync target, subagent type map) rather than a full class hierarchy. A shared `launch()` lifecycle handles binary detection, skill syncing, and subprocess execution.
 
 AI coding CLIs fall into two structural categories:
-- **Category A (native skill directories):** Claude Code, opencode, and Gemini CLI. Prothon symlinks bundled skills and invokes them by name.
-- **Category B (prompt injection):** Injects skill content directly into the prompt (reserved for future backends).
+- **Category A (native skill directories):** Claude Code, opencode, Gemini CLI, and OB1. Prothon symlinks bundled skills into each assistant's native skill directory and invokes them by name. OB1 uses the `"sentence"` prompt builder, embedding the skill name in a declarative sentence rather than a slash command or flag.
+- **Category B (prompt injection):** Injects skill content directly into the prompt. No backends currently use this category.
 
 ### Compliance Checker (R34-37)
 

@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Mapping, Protocol
 
 from prothon.exceptions import AssistantNotFoundError, ProthonError, UnknownBackendError
 
@@ -41,7 +41,7 @@ class BackendConfig:
     cli_command: str
     install_hint: str
     skills_target: str
-    subagent_map: dict[str, str]
+    subagent_map: Mapping[str, str]
     prompt_builder: str
 
 

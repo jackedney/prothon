@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from prothon.fs import safe_parse_py
 from prothon.refactor.models import (
     ModuleMetrics,
     PatternOccurrence,
@@ -29,11 +30,10 @@ def collect_module_metrics(root: Path) -> list[ModuleMetrics]:
 
 
 def _parse_module_metrics(py_file: Path) -> ModuleMetrics | None:
-    try:
-        source = py_file.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-    except (OSError, UnicodeDecodeError, SyntaxError):
+    tree = safe_parse_py(py_file)
+    if tree is None:
         return None
+    source = py_file.read_text(encoding="utf-8")
 
     lines = source.splitlines()
     public_funcs = sum(
@@ -76,9 +76,8 @@ def _build_fqn_map(
 def _extract_import_targets(
     py_file: Path, src_dir: Path, fqn_to_path: dict[str, Path]
 ) -> set[Path]:
-    try:
-        tree = ast.parse(py_file.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, SyntaxError):
+    tree = safe_parse_py(py_file)
+    if tree is None:
         return set()
 
     rel = py_file.relative_to(src_dir)
@@ -141,10 +140,8 @@ def collect_pattern_usage(root: Path) -> list[PatternOccurrence]:
     for py_file in src_dir.rglob("*.py"):
         if py_file.name == "__init__.py":
             continue
-        try:
-            source = py_file.read_text(encoding="utf-8")
-            tree = ast.parse(source)
-        except (OSError, UnicodeDecodeError, SyntaxError):
+        tree = safe_parse_py(py_file)
+        if tree is None:
             continue
 
         occurrences.extend(_scan_file_patterns(tree, py_file))
@@ -253,10 +250,8 @@ def _canonical_params(args: ast.arguments) -> list[str]:
 
 
 def _extract_public_signatures(py_file: Path) -> list[SimilarityGroup]:
-    try:
-        source = py_file.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-    except (OSError, UnicodeDecodeError, SyntaxError):
+    tree = safe_parse_py(py_file)
+    if tree is None:
         return []
 
     entries: list[SimilarityGroup] = []

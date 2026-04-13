@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 import sys
-import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,6 +11,7 @@ import tomlkit
 import tomlkit.exceptions
 
 from prothon.exceptions import MaxAttemptsExceeded, PromiseError
+from prothon.fs import atomic_write
 from prothon.git import GitDiffProvider
 from prothon.models import PROMISE_PATH, Metadata, Promise, Task, _generate_id
 
@@ -172,22 +171,7 @@ def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
 
     content = tomlkit.dumps(doc)
     data = content.encode("utf-8")
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        written = 0
-        while written < len(data):
-            written += os.write(fd, data[written:])
-        os.fsync(fd)
-    except BaseException:
-        os.close(fd)
-        os.unlink(tmp)
-        raise
-    os.close(fd)
-    try:
-        os.replace(tmp, path)
-    except BaseException:
-        os.unlink(tmp)
-        raise
+    atomic_write(path, data)
 
 
 def complete_task(
@@ -259,22 +243,7 @@ def _update_task_fields(path: Path, task_index: int, updates: dict) -> None:
         tasks[task_index][key] = value
     content = tomlkit.dumps(doc)
     data = content.encode("utf-8")
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        written = 0
-        while written < len(data):
-            written += os.write(fd, data[written:])
-        os.fsync(fd)
-    except BaseException:
-        os.close(fd)
-        os.unlink(tmp)
-        raise
-    os.close(fd)
-    try:
-        os.replace(tmp, path)
-    except BaseException:
-        os.unlink(tmp)
-        raise
+    atomic_write(path, data)
 
 
 def record_attempt(

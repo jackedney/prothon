@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from prothon.fs import safe_parse_py
+
 
 def analyze_python_file(path: Path) -> dict[str, Any]:
     """Analyze a Python file for imports and base classes using AST.
@@ -18,9 +20,8 @@ def analyze_python_file(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"imports": set(), "base_classes": {}}
 
-    try:
-        tree = ast.parse(path.read_text())
-    except (SyntaxError, UnicodeDecodeError):
+    tree = safe_parse_py(path)
+    if tree is None:
         return {"imports": set(), "base_classes": {}}
 
     results: dict[str, Any] = {

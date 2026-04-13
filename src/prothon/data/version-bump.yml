@@ -1,0 +1,82 @@
+name: Version Bump
+
+on:
+  pull_request:
+    branches: [main, master]
+    types: [opened, synchronize]
+
+concurrency:
+  group: version-bump-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  version-bump:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check auto_version config
+        id: config
+        run: |
+          AUTO_VERSION=$(python3 - <<'PYEOF'
+          import sys
+          try:
+              import tomllib
+          except ImportError:
+              try:
+                  import tomli as tomllib
+              except ImportError:
+                  print("true")
+                  sys.exit(0)
+          try:
+              with open("pyproject.toml", "rb") as f:
+                  data = tomllib.load(f)
+              tool = data.get("tool", {})
+              prothon = tool.get("prothon", {})
+              ci = prothon.get("ci", {})
+              val = ci.get("auto_version", True)
+              print("true" if val else "false")
+          except Exception:
+              print("true")
+          PYEOF
+          )
+          echo "auto_version=$AUTO_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        if: steps.config.outputs.auto_version == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        if: steps.config.outputs.auto_version == 'true'
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Bump version
+        if: steps.config.outputs.auto_version == 'true'
+        run: |
+          uvx prothon ci bump --before-sha "origin/${{ github.base_ref }}" --no-tag
+
+      - name: Commit changes
+        if: steps.config.outputs.auto_version == 'true'
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .
+            git commit -m "chore: automatic version bump [skip ci]"
+            git push origin "HEAD:${{ github.head_ref }}"
+          else
+            echo "No changes to commit"
+          fi

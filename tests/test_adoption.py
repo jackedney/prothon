@@ -16,13 +16,13 @@ from prothon.adoption import (
     init_existing,
 )
 from prothon.adoption_templates import (
-    _AGENTS_CONTENT,
     _DESIGN_SCAFFOLD,
-    _GITLAB_VERSION_BUMP,
     _PATTERNS_SCAFFOLD,
     _SPEC_SCAFFOLD,
-    _VERSION_BUMP_WORKFLOW,
-    _VERSION_TAG_WORKFLOW,
+    get_agents_content,
+    get_gitlab_version_bump,
+    get_version_bump_workflow,
+    get_version_tag_workflow,
 )
 from prothon.exceptions import GitError, ProjectAlreadyInitError, ProthonError
 from prothon.git import run_git
@@ -92,7 +92,7 @@ def test_init_existing_creates_agent_files_and_symlinks(tmp_path: Path) -> None:
     """init_existing creates AGENTS.md and CLAUDE/GEMINI/AGENT symlinks."""
     root = _git_project(tmp_path)
     init_existing(cwd=root)
-    assert (root / "AGENTS.md").read_text() == _AGENTS_CONTENT
+    assert (root / "AGENTS.md").read_text() == get_agents_content()
     for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
         assert_symlink_to(root / name, "AGENTS.md")
     assert (root / ".agents" / "skills").is_dir()
@@ -103,9 +103,9 @@ def test_init_existing_creates_ci_workflows(tmp_path: Path) -> None:
     root = _git_project(tmp_path)
     init_existing(cwd=root)
     gh = root / ".github" / "workflows"
-    assert (gh / "version-bump.yml").read_text() == _VERSION_BUMP_WORKFLOW
-    assert (gh / "version-tag.yml").read_text() == _VERSION_TAG_WORKFLOW
-    assert (root / ".gitlab-ci.yml").read_text() == _GITLAB_VERSION_BUMP
+    assert (gh / "version-bump.yml").read_text() == get_version_bump_workflow()
+    assert (gh / "version-tag.yml").read_text() == get_version_tag_workflow()
+    assert (root / ".gitlab-ci.yml").read_text() == get_gitlab_version_bump()
 
 
 def test_init_existing_defaults_cwd(tmp_path: Path) -> None:
@@ -178,7 +178,7 @@ def test_create_agents_and_links_full(tmp_path: Path) -> None:
     """Creates AGENTS.md, symlinks, and .agents/skills/ directory."""
     created = _create_agents_and_links(tmp_path)
     assert (tmp_path / "AGENTS.md") in created
-    assert (tmp_path / "AGENTS.md").read_text() == _AGENTS_CONTENT
+    assert (tmp_path / "AGENTS.md").read_text() == get_agents_content()
     for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
         assert_symlink_to(tmp_path / name, "AGENTS.md")
     assert (tmp_path / ".agents" / "skills").is_dir()
@@ -201,9 +201,9 @@ def test_create_workflows_full(tmp_path: Path) -> None:
     """Creates GitHub workflows and .gitlab-ci.yml."""
     created = _create_workflows(tmp_path)
     gh = tmp_path / ".github" / "workflows"
-    assert (gh / "version-bump.yml").read_text() == _VERSION_BUMP_WORKFLOW
-    assert (gh / "version-tag.yml").read_text() == _VERSION_TAG_WORKFLOW
-    assert (tmp_path / ".gitlab-ci.yml").read_text() == _GITLAB_VERSION_BUMP
+    assert (gh / "version-bump.yml").read_text() == get_version_bump_workflow()
+    assert (gh / "version-tag.yml").read_text() == get_version_tag_workflow()
+    assert (tmp_path / ".gitlab-ci.yml").read_text() == get_gitlab_version_bump()
     assert len(created) == 3
 
 

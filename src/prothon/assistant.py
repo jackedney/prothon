@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -34,172 +35,146 @@ class AssistantBackend(Protocol):
     def subagent_type_map(self) -> dict[str, str]: ...
 
 
-class ClaudeCodeBackend:
-    """Claude Code assistant backend — invokes the ``claude`` CLI."""
+@dataclass(frozen=True)
+class BackendConfig:
+    name: str
+    cli_command: str
+    install_hint: str
+    skills_target: str
+    subagent_map: dict[str, str]
+    prompt_builder: str
 
-    @property
-    def name(self) -> str:
-        return "Claude Code"
 
-    @property
-    def cli_command(self) -> str:
-        return "claude"
-
-    @property
-    def install_hint(self) -> str:
-        return "https://docs.anthropic.com/en/docs/claude-code"
-
-    def build_command(
-        self, skill_name: str, cwd: Path, model: str | None = None
-    ) -> list[str]:
-        """Return subprocess argv for a Claude Code session with *skill_name*."""
-        return [self.cli_command, "--dangerously-skip-permissions", f"/{skill_name}"]
-
-    def sync_skills(self) -> None:
-        """Symlink bundled skills into Claude Code's discovery directory."""
-        from prothon.skills import sync_skills
-
-        sync_skills(target=Path.home() / ".claude" / "skills")
-
-    def env_overrides(self) -> dict[str, str]:
-        """Return extra environment variables for Claude Code sessions."""
-        return {}
-
-    def subagent_type_map(self) -> dict[str, str]:
-        """Return mapping from canonical subagent types to Claude Code names."""
-        return {
+_CONFIGS: dict[str, BackendConfig] = {
+    "claude-code": BackendConfig(
+        name="Claude Code",
+        cli_command="claude",
+        install_hint="https://docs.anthropic.com/en/docs/claude-code",
+        skills_target=".claude/skills",
+        subagent_map={
             "general-purpose": "general-purpose",
             "explore": "Explore",
             "plan": "Plan",
-        }
-
-
-class OpenCodeBackend:
-    """opencode assistant backend — invokes the ``opencode`` CLI."""
-
-    @property
-    def name(self) -> str:
-        return "opencode"
-
-    @property
-    def cli_command(self) -> str:
-        return "opencode"
-
-    @property
-    def install_hint(self) -> str:
-        return "https://opencode.ai"
-
-    def build_command(
-        self, skill_name: str, cwd: Path, model: str | None = None
-    ) -> list[str]:
-        """Return subprocess argv for an opencode session with *skill_name*."""
-        cmd = [self.cli_command, "--prompt", f"/{skill_name}"]
-        if model is not None:
-            cmd.extend(["--model", model])
-        return cmd
-
-    def sync_skills(self) -> None:
-        """Symlink bundled skills into opencode's discovery directory."""
-        from prothon.skills import sync_skills
-
-        raw_xdg = os.environ.get("XDG_CONFIG_HOME")
-        xdg = (
-            Path(raw_xdg)
-            if raw_xdg and Path(raw_xdg).is_absolute()
-            else Path.home() / ".config"
-        )
-        sync_skills(target=xdg / "opencode" / "skills")
-
-    def env_overrides(self) -> dict[str, str]:
-        """Return extra environment variables for opencode sessions."""
-        return {}
-
-    def subagent_type_map(self) -> dict[str, str]:
-        """Return mapping from canonical subagent types to opencode names."""
-        return {"general-purpose": "general", "explore": "explore", "plan": "plan"}
-
-
-class GeminiCLIBackend:
-    """Gemini CLI assistant backend — invokes the ``gemini`` CLI."""
-
-    @property
-    def name(self) -> str:
-        return "Gemini CLI"
-
-    @property
-    def cli_command(self) -> str:
-        return "gemini"
-
-    @property
-    def install_hint(self) -> str:
-        return "https://github.com/google/gemini-cli"
-
-    def build_command(
-        self, skill_name: str, cwd: Path, model: str | None = None
-    ) -> list[str]:
-        """Return subprocess argv for a Gemini CLI session with *skill_name*."""
-        prompt = f"Activate the {skill_name} skill and follow its instructions."
-        cmd = [self.cli_command, "--approval-mode=yolo", prompt]
-        if model is not None:
-            cmd.extend(["--model", model])
-        return cmd
-
-    def sync_skills(self) -> None:
-        """Symlink bundled skills into Gemini CLI's discovery directory."""
-        from prothon.skills import sync_skills
-
-        sync_skills(target=Path.home() / ".gemini" / "skills")
-
-    def env_overrides(self) -> dict[str, str]:
-        """Return extra environment variables for Gemini CLI sessions."""
-        return {}
-
-    def subagent_type_map(self) -> dict[str, str]:
-        """Return mapping from canonical subagent types to Gemini CLI names."""
-        return {
+        },
+        prompt_builder="slash",
+    ),
+    "opencode": BackendConfig(
+        name="opencode",
+        cli_command="opencode",
+        install_hint="https://opencode.ai",
+        skills_target="opencode/skills",
+        subagent_map={
+            "general-purpose": "general",
+            "explore": "explore",
+            "plan": "plan",
+        },
+        prompt_builder="flag",
+    ),
+    "gemini": BackendConfig(
+        name="Gemini CLI",
+        cli_command="gemini",
+        install_hint="https://github.com/google/gemini-cli",
+        skills_target=".gemini/skills",
+        subagent_map={
             "general-purpose": "generalist_agent",
             "explore": "codebase_investigator",
             "plan": "generalist_agent",
-        }
+        },
+        prompt_builder="sentence",
+    ),
+    "ob1": BackendConfig(
+        name="OB1",
+        cli_command="ob1",
+        install_hint="https://www.openblocklabs.com/manual",
+        skills_target=".ob1/skills",
+        subagent_map={
+            "general-purpose": "general",
+            "explore": "explore",
+            "plan": "plan",
+        },
+        prompt_builder="sentence",
+    ),
+}
 
 
-class OB1Backend:
-    """OB1 assistant backend — invokes the ``ob1`` CLI."""
+class _GenericBackend:
+    """Data-driven backend that delegates all behaviour to a BackendConfig."""
+
+    def __init__(self, config: BackendConfig) -> None:
+        self._config = config
 
     @property
     def name(self) -> str:
-        return "OB1"
+        return self._config.name
 
     @property
     def cli_command(self) -> str:
-        return "ob1"
+        return self._config.cli_command
 
     @property
     def install_hint(self) -> str:
-        return "https://www.openblocklabs.com/manual"
+        return self._config.install_hint
 
     def build_command(
         self, skill_name: str, cwd: Path, model: str | None = None
     ) -> list[str]:
-        """Return subprocess argv for an OB1 session with *skill_name*."""
-        cmd = [self.cli_command, f"Use the {skill_name} skill."]
+        cfg = self._config
+        if cfg.prompt_builder == "slash":
+            return [
+                cfg.cli_command,
+                "--dangerously-skip-permissions",
+                f"/{skill_name}",
+            ]
+        if cfg.prompt_builder == "flag":
+            cmd = [cfg.cli_command, "--prompt", f"/{skill_name}"]
+            if model is not None:
+                cmd.extend(["--model", model])
+            return cmd
+        if cfg.name == "Gemini CLI":
+            prompt = f"Activate the {skill_name} skill and follow its instructions."
+            cmd = [cfg.cli_command, "--approval-mode=yolo", prompt]
+        else:
+            cmd = [cfg.cli_command, f"Use the {skill_name} skill."]
         if model is not None:
             cmd.extend(["--model", model])
         return cmd
 
     def sync_skills(self) -> None:
-        """Symlink bundled skills into OB1's discovery directory."""
+        from prothon.fs import xdg_config_home
         from prothon.skills import sync_skills
 
-        sync_skills(target=Path.home() / ".ob1" / "skills")
+        cfg = self._config
+        if cfg.skills_target.startswith("."):
+            target = Path.home() / cfg.skills_target
+        else:
+            target = xdg_config_home() / cfg.skills_target
+        sync_skills(target=target)
 
     def env_overrides(self) -> dict[str, str]:
-        """Return extra environment variables for OB1 sessions."""
         return {}
 
     def subagent_type_map(self) -> dict[str, str]:
-        """Return mapping from canonical subagent types to OB1 names."""
-        return {"general-purpose": "general", "explore": "explore", "plan": "plan"}
+        return dict(self._config.subagent_map)
+
+
+class ClaudeCodeBackend(_GenericBackend):
+    def __init__(self) -> None:
+        super().__init__(_CONFIGS["claude-code"])
+
+
+class OpenCodeBackend(_GenericBackend):
+    def __init__(self) -> None:
+        super().__init__(_CONFIGS["opencode"])
+
+
+class GeminiCLIBackend(_GenericBackend):
+    def __init__(self) -> None:
+        super().__init__(_CONFIGS["gemini"])
+
+
+class OB1Backend(_GenericBackend):
+    def __init__(self) -> None:
+        super().__init__(_CONFIGS["ob1"])
 
 
 _BACKENDS: dict[str, type[AssistantBackend]] = {

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from prothon.checks.utils import check_path_exists
 from prothon.compliance import (
     CheckResult,
     CheckStatus,
@@ -31,18 +32,11 @@ def check_tech_researcher(root: Path) -> list[CheckResult]:
 
 
 def _check_tech_researcher_skill_existence(root: Path, r43: Requirement) -> CheckResult:
-    skill_path = (
-        root / "src" / "prothon" / "skills" / "prothon-tech-researcher" / "SKILL.md"
-    )
-    if skill_path.exists():
-        return CheckResult(
-            requirement=r43, status=CheckStatus.PASS, evidence=str(skill_path)
-        )
-    return CheckResult(
-        requirement=r43,
-        status=CheckStatus.FAIL,
-        evidence=str(skill_path),
-        rationale="Missing prothon-tech-researcher skill.",
+    return check_path_exists(
+        root,
+        "src/prothon/skills/prothon-tech-researcher/SKILL.md",
+        r43,
+        fail_rationale="Missing prothon-tech-researcher skill.",
     )
 
 

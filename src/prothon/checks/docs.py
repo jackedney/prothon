@@ -164,8 +164,6 @@ def check_progressive_disclosure(root: Path) -> list[CheckResult]:
                 rationale="Referenced modules.md missing.",
             )
         )
-    for ref_file in sorted(refs_dir.glob("*.md")):
-        _check_r25_r26(ref_file, results)
     return results
 
 

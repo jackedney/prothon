@@ -82,18 +82,6 @@ _CONFIGS: dict[str, BackendConfig] = {
         },
         prompt_builder="yolo",
     ),
-    "ob1": BackendConfig(
-        name="OB1",
-        cli_command="ob1",
-        install_hint="https://www.openblocklabs.com/manual",
-        skills_target=".ob1/skills",
-        subagent_map={
-            "general-purpose": "general",
-            "explore": "explore",
-            "plan": "plan",
-        },
-        prompt_builder="sentence",
-    ),
 }
 
 
@@ -136,14 +124,8 @@ class _GenericBackend:
             if model is not None:
                 cmd.extend(["--model", model])
             return cmd
-        if cfg.prompt_builder == "sentence":
-            cmd = [cfg.cli_command, f"Use the {skill_name} skill."]
-        else:
-            msg = f"Unknown prompt_builder: {cfg.prompt_builder!r}"
-            raise ValueError(msg)
-        if model is not None:
-            cmd.extend(["--model", model])
-        return cmd
+        msg = f"Unknown prompt_builder: {cfg.prompt_builder!r}"
+        raise ValueError(msg)
 
     def sync_skills(self) -> None:
         from prothon.fs import xdg_config_home
@@ -178,16 +160,10 @@ class GeminiCLIBackend(_GenericBackend):
         super().__init__(_CONFIGS["gemini"])
 
 
-class OB1Backend(_GenericBackend):
-    def __init__(self) -> None:
-        super().__init__(_CONFIGS["ob1"])
-
-
 _BACKENDS: dict[str, type[AssistantBackend]] = {
     "claude-code": ClaudeCodeBackend,
     "opencode": OpenCodeBackend,
     "gemini": GeminiCLIBackend,
-    "ob1": OB1Backend,
 }
 
 

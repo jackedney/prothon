@@ -131,17 +131,17 @@ version-bump:
       tag_msg = f"release {new_version}"
       tag_name = f"v{new_version}"
       tag_check = subprocess.run(
-          ["git", "rev-parse", f"refs/tags/{tag_name}"],
+          ["git", "ls-remote", "--tags", "origin", tag_name],
           capture_output=True, text=True
       )
-      tag_pushed = tag_check.returncode == 0
-      if not tag_pushed:
+      tag_exists_remote = bool(tag_check.stdout.strip())
+      if not tag_exists_remote:
           subprocess.run(["git", "tag", "-a", tag_name, "-m", tag_msg], check=True)
 
       # Push changes and tag
       push_branch = f"HEAD:{os.environ['CI_COMMIT_BRANCH']}"
       subprocess.run(["git", "push", "origin", push_branch], check=True)
-      if not tag_pushed:
+      if not tag_exists_remote:
           subprocess.run(["git", "push", "origin", tag_name], check=True)
 
       msg = (

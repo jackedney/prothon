@@ -115,14 +115,7 @@ def _task_to_dict(task: Task) -> dict:
 
 
 def load_promise(path: Path = PROMISE_PATH) -> Promise:
-    """Load a change promise from a TOML file.
-
-    Args:
-        path: Path to the promise TOML file.
-
-    Returns:
-        A Promise dataclass populated from the file.
-    """
+    """Load a change promise from a TOML file, backfilling missing task_ids."""
     try:
         doc = tomlkit.parse(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -146,12 +139,6 @@ def load_promise(path: Path = PROMISE_PATH) -> Promise:
 
 
 def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
-    """Serialize a Promise dataclass to TOML and write to disk.
-
-    Args:
-        promise: The Promise to save.
-        path: Path to write the TOML file.
-    """
     doc = tomlkit.document()
 
     meta = tomlkit.table()
@@ -180,22 +167,7 @@ def complete_task(
     diff: GitDiffProvider | None = None,
     path: Path = PROMISE_PATH,
 ) -> None:
-    """Mark a task as completed after verifying its promises pass.
-
-    Runs ``check_task`` first and refuses to mark the task complete if
-    any check fails (SPEC R34: compliance mandatory before completion).
-
-    The persisted ``attempts`` counter (incremented by ``record_attempt``)
-    is preserved as-is — this function does not overwrite it.
-
-    Args:
-        task_index: Zero-based index of the task to mark complete.
-        diff: Git diff data source; defaults to SubprocessGitDiff().
-        path: Path to the promise TOML file.
-
-    Raises:
-        PromiseError: If task_index is out of range or checks fail.
-    """
+    """Mark task complete after ``check_task`` passes; preserves ``attempts``."""
     from prothon.promise_verify import check_task
 
     report = check_task(task_index, diff=diff, path=path)
@@ -251,15 +223,6 @@ def record_attempt(
     *,
     path: Path = PROMISE_PATH,
 ) -> None:
-    """Increment the attempt counter for a task.
-
-    Args:
-        task_index: Zero-based index of the task.
-        path: Path to the promise TOML file.
-
-    Raises:
-        PromiseError: If task_index is out of range or attempts is not an integer.
-    """
     with _lock_promise(path):
         promise = load_promise(path)
         if task_index < 0 or task_index >= len(promise.tasks):

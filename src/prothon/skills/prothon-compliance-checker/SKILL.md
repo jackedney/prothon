@@ -46,41 +46,14 @@ You are the Compliance Checker. Verify that source code implements the documenta
      }
      ```
 
-```
-## Compliance Report
+### Report Format
 
-### SPEC.md Compliance
+Produce a markdown report with sections per documentation level (SPEC, DESIGN, PATTERNS). Each check shows:
+- Status: PASS/FAIL/SKIP
+- Evidence: `file:line`
+- Rationale (one sentence on failure)
 
-| # | Requirement | Status | Evidence |
-|---|-------------|--------|----------|
-| 1 | "Must authenticate users" | PASS | `src/auth/login.py:23` implements auth flow |
-| 2 | "Must log all API calls" | FAIL | No logging found in `src/api/` |
-
-### DESIGN.md Compliance
-
-| # | Design Choice | Status | Evidence |
-|---|---------------|--------|----------|
-| 1 | "Use FastAPI for HTTP" | PASS | `src/api/app.py:1` imports FastAPI |
-| 2 | "PostgreSQL for storage" | FAIL | `src/db/` uses SQLite instead |
-
-### PATTERNS.md Compliance
-
-| # | Pattern | Status | Evidence |
-|---|---------|--------|----------|
-| 1 | "Repository pattern for data access" | PASS | `src/repos/` follows pattern |
-| 2 | "All errors inherit AppError" | FAIL | `src/api/errors.py:15` uses bare Exception |
-
-### Summary
-- SPEC: 8/10 requirements met
-- DESIGN: 5/5 choices implemented
-- PATTERNS: 3/4 patterns followed
-- **Overall: 16/19 (84%)**
-
-### Action Items
-1. Add API call logging to satisfy SPEC requirement #2
-2. Migrate from SQLite to PostgreSQL per DESIGN choice #2
-3. Update error class at `src/api/errors.py:15` to inherit AppError per PATTERNS #2
-```
+End with a summary: `X/Y checks passed, Z failed, W skipped.`
 
 ## Checking Rules
 

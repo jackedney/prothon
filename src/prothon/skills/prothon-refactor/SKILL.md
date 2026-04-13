@@ -129,7 +129,5 @@ Use the [implementer prompt](../prothon-execute/implementer-prompt.md) with comm
 
 - **Wave Integrity.** NEVER modify code before the corresponding documentation (DESIGN/PATTERNS) is updated and committed.
 - **SPEC is Frozen.** NEVER modify `docs/SPEC.md`. SPEC is the unchanging authority.
-- **Selective Staging.** Stage only task-related files by explicit path. Do NOT use `git add -u` or `git add -A`.
-- **Commit After Write.** If a task modifies a doc file, ensure it is committed immediately after writing.
-- **Fresh Instances.** Each attempt gets a fresh subagent instance. Never reuse sessions.
+- Follow the [shared operational guards](_shared/guards.md).
 - **No Manual Tables.** Use `uvx prothon promise plan` output for all planning displays.

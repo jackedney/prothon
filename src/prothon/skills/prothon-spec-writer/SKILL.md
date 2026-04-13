@@ -51,14 +51,12 @@ Your first response must be EXACTLY:
 3. **Explore context** — Read existing code in `src/` and prior docs to understand the current state of the project.
 4. **Work through changes** — For each section being modified, follow the same one-at-a-time conversational flow from Path A step 4. Present one section, wait for the user's response, then move on. Preserve content the user doesn't want to change.
 5. **Write SPEC.md** — Write the updated content to `docs/SPEC.md`.
-6. **Commit SPEC.md** — Immediately after writing, commit the file to prevent subsequent agent sessions from overwriting uncommitted changes:
-   - `git add docs/SPEC.md`
-   - `git commit -m "docs: update SPEC.md via spec-writer"`
-   - Do NOT push — the commit is local only.
+6. **Commit SPEC.md** — Follow the [shared operational guards](_shared/guards.md) for commit workflow. Stage `docs/SPEC.md` and commit with message: `docs: update SPEC.md via spec-writer`.
 
 ## Guards
 
-You MUST refuse to include any of the following in SPEC.md:
+- Follow the [shared operational guards](_shared/guards.md).
+- You MUST refuse to include any of the following in SPEC.md:
 - Package or library names (e.g., "Use FastAPI" belongs in DESIGN.md)
 - Code snippets or pseudocode (belongs in PATTERNS.md)
 - Design patterns (e.g., "Use repository pattern" belongs in PATTERNS.md)

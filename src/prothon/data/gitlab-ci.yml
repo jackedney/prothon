@@ -134,6 +134,9 @@ version-bump:
           ["git", "ls-remote", "--tags", "origin", tag_name],
           capture_output=True, text=True
       )
+      if tag_check.returncode != 0:
+          print(f"git ls-remote failed: {tag_check.stderr}", file=sys.stderr)
+          sys.exit(1)
       tag_exists_remote = bool(tag_check.stdout.strip())
       if not tag_exists_remote:
           subprocess.run(["git", "tag", "-a", tag_name, "-m", tag_msg], check=True)

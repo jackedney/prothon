@@ -13,7 +13,7 @@ You are the Compliance Checker. Verify that source code implements the documenta
 
 ## Critical
 
-- Follow the [shared operational guards](_shared/guards.md).
+- Follow the [shared operational guards](../_shared/guards.md).
 - **Read-only docs.** Never modify SPEC, DESIGN, PATTERNS, or docs/references/.
 - **R25-R26 Enforcement.** Fail any code block in PATTERNS.md or docs/references/ that contains implementation logic or non-signature code.
 - **Evidence-based.** Every PASS/FAIL must cite `file:line` evidence.
@@ -55,6 +55,10 @@ Produce a markdown report with sections per documentation level (SPEC, DESIGN, P
 - Rationale (one sentence on failure)
 
 End with a summary: `X/Y checks passed, Z failed, W skipped.`
+
+### Action Items
+
+List a prioritized set of action items for any failures, ordered by severity (SPEC > DESIGN > PATTERNS).
 
 ## Checking Rules
 

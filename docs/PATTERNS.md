@@ -35,7 +35,7 @@ To maintain context efficiency for AI assistants, all projects follow a three-le
 Compliance verification uses a hybrid strategy: static analysis (AST/Regex) handles structural rules like method signatures, while semantic analysis (LLM subagents) verifies high-level behavioral requirements. Every check produces a report with a tri-state status (`PASS`, `FAIL`, `SKIP`), a `file:line` evidence citation, and a brief rationale.
 
 ### Pluggable Assistant Backend Pattern
-To support multiple AI assistants (Claude Code, opencode, Gemini CLI) with identical behavior, the system uses a data-driven backend architecture. Each backend is a `BackendConfig` record (name, CLI command, install hint, skill sync target path, subagent type map, prompt builder) consumed by a single shared `AssistantBackend` implementation. No per-backend class hierarchy is needed.
+To support multiple AI assistants (Claude Code, opencode, Gemini CLI) with identical behavior, the system uses a data-driven backend architecture. Each backend implementation satisfies the `AssistantBackend` protocol using data from a `BackendConfig` record (name, CLI command, install hint, skill sync target path, subagent type map, prompt builder), enabling multiple concrete backends without a class-hierarchy duplication.
 
 ```python
 class AssistantBackend(Protocol):
@@ -63,12 +63,12 @@ def _run_session_command(cmd: Callable[..., int | None], agent: str | None, mode
 Session and promise subcommands follow identical structures differing only in the target function and error message. A factory generates these wrappers to eliminate boilerplate, using `typer.command()` registration with a shared try/except boundary.
 
 ```python
-def _register_session_command(app: typer.Typer, name: str, cmd: Callable, *args: Any) -> None: ...
-def _register_promise_command(app: typer.Typer, name: str, cmd: Callable, *args: Any) -> None: ...
+def _register_session_command(app: typer.Typer, name: str, cmd: Callable, help_text: str) -> None: ...
+def _register_promise_command(app: typer.Typer, name: str, cmd: Callable, help_text: str) -> None: ...
 ```
 
 ### Shared Utility Extraction Pattern
-When the same logic appears in three or more modules, extract it to a shared utility. Key shared utilities: `safe_parse_py()` (AST parse with error guard), `xdg_config_home()` (XDG directory resolution), `atomic_write()` (file I/O), `create_agent_symlinks()` (agent link setup), and `check_file_exists()` (compliance check helper).
+When the same logic appears in three or more modules, extract it to a shared utility. Key shared utilities: `safe_parse_py()` (AST parse with error guard), `xdg_config_home()` (XDG directory resolution), `atomic_write()` (file I/O), `create_agent_symlinks()` (agent link setup), and `check_path_exists()` (compliance check helper).
 
 ```python
 def safe_parse_py(path: Path) -> ast.Module | None: ...
@@ -102,7 +102,7 @@ def collect_module_metrics(root: Path) -> list[ModuleMetrics]: ...
 ```
 
 ### Terminal Failure Pattern
-When a subagent reaches its `max_attempts` for a task without passing verification, it reports a terminal failure. The orchestrator records this state and prompts the user for a decision (skip, retry, or abort), preventing infinite loops.
+When a subagent reaches its `max_attempts` for a task without passing verification, it reports a terminal failure. The Python layer records attempt counts via `record_attempt()`, but the orchestration skill consumes `Task.max_attempts` to determine when to prompt the user for intervention (skip, retry, or abort), preventing infinite loops.
 
 ```python
 def record_attempt(task_index: int, path: Path = PROMISE_PATH) -> None: ...

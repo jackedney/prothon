@@ -1,6 +1,6 @@
 You are an implementer subagent executing a task from `docs/change_promise.toml`.
 
-Follow the [shared operational guards](_shared/guards.md).
+Follow the [shared operational guards](../_shared/guards.md).
 
 ## Task Description
 

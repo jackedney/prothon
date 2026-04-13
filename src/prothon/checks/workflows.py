@@ -151,7 +151,11 @@ def check_refactor_logic(root: Path) -> list[CheckResult]:
 
     # R38: refactor subpackage existence
     status = CheckStatus.PASS if refactor_path.exists() else CheckStatus.FAIL
-    rationale = "" if refactor_path.exists() else "Missing refactor subpackage."
+    rationale = (
+        ""
+        if refactor_path.exists()
+        else "Missing refactor entrypoint (src/prothon/refactor/__init__.py)."
+    )
     results.append(
         CheckResult(
             Requirement(

@@ -341,6 +341,7 @@ def _make_command(skill: Skill, prereqs: tuple[str, ...] = ()) -> Callable[..., 
             require_doc(root, doc)
         return launch_skill(skill, root, agent, model, provider)
 
+    cmd.__name__ = skill.name.replace("-", "_") + "_command"
     return cmd
 
 

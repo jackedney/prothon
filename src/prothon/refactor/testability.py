@@ -12,9 +12,10 @@ def _has_testable_logic(py_file: Path) -> bool:
         _is_method_in_non_testable_class,
     )
 
-    tree = safe_parse_py(py_file)
-    if tree is None:
+    result = safe_parse_py(py_file)
+    if result is None:
         return False
+    tree, _source = result
 
     parent_map = _get_parent_map(tree)
 

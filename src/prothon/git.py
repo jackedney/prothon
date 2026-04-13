@@ -90,16 +90,21 @@ def run_pre_commit(paths: list[str], cwd: Path | None = None) -> tuple[int, str]
     if not paths:
         return 0, ""
 
-    # Use 'uv run pre-commit' if in a uv-managed project, otherwise 'pre-commit'
-    cmd = ["pre-commit", "run", "--files", *paths]
-    if (cwd or Path.cwd() / "uv.lock").exists():
-        cmd = ["uv", "run", "pre-commit", "run", "--files", *paths]
-
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        env=os.environ,
+    use_uv = ((cwd or Path.cwd()) / "uv.lock").exists()
+    cmd = (
+        ["uv", "run", "pre-commit", "run", "--files", *paths]
+        if use_uv
+        else ["pre-commit", "run", "--files", *paths]
     )
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            env=os.environ,
+        )
+    except OSError:
+        return 1, f"Failed to run pre-commit: {cmd[0]} not found"
     return result.returncode, result.stdout + result.stderr

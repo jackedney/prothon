@@ -80,7 +80,7 @@ _CONFIGS: dict[str, BackendConfig] = {
             "explore": "codebase_investigator",
             "plan": "generalist_agent",
         },
-        prompt_builder="sentence",
+        prompt_builder="yolo",
     ),
     "ob1": BackendConfig(
         name="OB1",
@@ -130,11 +130,17 @@ class _GenericBackend:
             if model is not None:
                 cmd.extend(["--model", model])
             return cmd
-        if cfg.name == "Gemini CLI":
+        if cfg.prompt_builder == "yolo":
             prompt = f"Activate the {skill_name} skill and follow its instructions."
             cmd = [cfg.cli_command, "--approval-mode=yolo", prompt]
-        else:
+            if model is not None:
+                cmd.extend(["--model", model])
+            return cmd
+        if cfg.prompt_builder == "sentence":
             cmd = [cfg.cli_command, f"Use the {skill_name} skill."]
+        else:
+            msg = f"Unknown prompt_builder: {cfg.prompt_builder!r}"
+            raise ValueError(msg)
         if model is not None:
             cmd.extend(["--model", model])
         return cmd

@@ -51,17 +51,17 @@ Your first response must be EXACTLY:
 3. **Explore context** — Read existing code in `src/` and prior docs to understand the current state of the project.
 4. **Work through changes** — For each section being modified, follow the same one-at-a-time conversational flow from Path A step 4. Present one section, wait for the user's response, then move on. Preserve content the user doesn't want to change.
 5. **Write SPEC.md** — Write the updated content to `docs/SPEC.md`.
-6. **Commit SPEC.md** — Follow the [shared operational guards](_shared/guards.md) for commit workflow. Stage `docs/SPEC.md` and commit with message: `docs: update SPEC.md via spec-writer`.
+6. **Commit SPEC.md** — Follow the [shared operational guards](../_shared/guards.md) for commit workflow. Stage `docs/SPEC.md` and commit with message: `docs: update SPEC.md via spec-writer`.
 
 ## Guards
 
-- Follow the [shared operational guards](_shared/guards.md).
+- Follow the [shared operational guards](../_shared/guards.md).
 - You MUST refuse to include any of the following in SPEC.md:
-- Package or library names (e.g., "Use FastAPI" belongs in DESIGN.md)
-- Code snippets or pseudocode (belongs in PATTERNS.md)
-- Design patterns (e.g., "Use repository pattern" belongs in PATTERNS.md)
-- Architecture opinions (e.g., "Use microservices" belongs in DESIGN.md)
-- Interface definitions (belongs in DESIGN.md)
+  - Package or library names (e.g., "Use FastAPI" belongs in DESIGN.md)
+  - Code snippets or pseudocode (belongs in PATTERNS.md)
+  - Design patterns (e.g., "Use repository pattern" belongs in PATTERNS.md)
+  - Architecture opinions (e.g., "Use microservices" belongs in DESIGN.md)
+  - Interface definitions (belongs in DESIGN.md)
 
 If the user insists on including these, explain that they belong in DESIGN.md or PATTERNS.md and offer to note them for later.
 

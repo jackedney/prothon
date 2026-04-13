@@ -42,9 +42,10 @@ def analyze_python_file(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"imports": set(), "base_classes": {}}
 
-    tree = safe_parse_py(path)
-    if tree is None:
+    result = safe_parse_py(path)
+    if result is None:
         return {"imports": set(), "base_classes": {}}
+    tree, _source = result
 
     results: dict[str, Any] = {
         "imports": set(),

@@ -10,7 +10,7 @@ permissions:
 jobs:
   tag:
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.message, 'chore: automatic version bump')
+    if: "contains(github.event.head_commit.message, 'chore: automatic version bump')"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,8 +32,9 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create Tag
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
         run: |
-          VERSION="${{ steps.get_version.outputs.version }}"
           TAG="v${VERSION}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists, skipping."

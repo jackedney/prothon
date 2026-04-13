@@ -14,11 +14,14 @@ def atomic_write(path: Path, data: bytes) -> None:
         while written < len(data):
             written += os.write(fd, data[written:])
         os.fsync(fd)
-    except BaseException:
         os.close(fd)
+    except BaseException:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
         os.unlink(tmp)
         raise
-    os.close(fd)
     try:
         os.replace(tmp, path)
     except BaseException:
@@ -26,9 +29,10 @@ def atomic_write(path: Path, data: bytes) -> None:
         raise
 
 
-def safe_parse_py(path: Path) -> ast.Module | None:
+def safe_parse_py(path: Path) -> tuple[ast.Module, str] | None:
     try:
-        return ast.parse(path.read_text(encoding="utf-8"))
+        source = path.read_text(encoding="utf-8")
+        return ast.parse(source), source
     except (OSError, UnicodeDecodeError, SyntaxError):
         return None
 

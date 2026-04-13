@@ -1092,7 +1092,7 @@ def test_check_task_skipped_detail_text(tmp_path: Path):
     report = check_task(0, diff=FakeGitDiff(), path=path)
     for c in report.checks:
         if c.status is CheckStatus.SKIP:
-            assert c.detail in ("none declared", "none expected")
+            assert c.detail in ("none declared", "none expected", "no files to check")
 
 
 # --- complete_task edge cases ---

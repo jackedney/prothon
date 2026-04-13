@@ -1,6 +1,6 @@
 # Skill File Templates
 
-### Technology template
+## Technology template
 
 `.agents/skills/tech-{package-name}/SKILL.md`:
 
@@ -42,7 +42,7 @@ user-invocable: false
 <Anti-patterns to avoid and their idiomatic alternatives.>
 ```
 
-### Codestyle template
+## Codestyle template
 
 `.agents/skills/style-{language}/SKILL.md`:
 
@@ -85,7 +85,7 @@ user-invocable: false
 <Note which rules are auto-enforced by tooling vs. must be followed manually.>
 ```
 
-### Optimisation template
+## Optimisation template
 
 `.agents/skills/optim-{topic}/SKILL.md`:
 
@@ -128,7 +128,7 @@ user-invocable: false
 <Performance mistakes that are easy to make and hard to spot.>
 ```
 
-### Domain template
+## Domain template
 
 `.agents/skills/domain-{topic}/SKILL.md`:
 

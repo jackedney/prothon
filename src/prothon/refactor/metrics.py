@@ -30,10 +30,10 @@ def collect_module_metrics(root: Path) -> list[ModuleMetrics]:
 
 
 def _parse_module_metrics(py_file: Path) -> ModuleMetrics | None:
-    tree = safe_parse_py(py_file)
-    if tree is None:
+    result = safe_parse_py(py_file)
+    if result is None:
         return None
-    source = py_file.read_text(encoding="utf-8")
+    tree, source = result
 
     lines = source.splitlines()
     public_funcs = sum(
@@ -76,9 +76,10 @@ def _build_fqn_map(
 def _extract_import_targets(
     py_file: Path, src_dir: Path, fqn_to_path: dict[str, Path]
 ) -> set[Path]:
-    tree = safe_parse_py(py_file)
-    if tree is None:
+    result = safe_parse_py(py_file)
+    if result is None:
         return set()
+    tree, _source = result
 
     rel = py_file.relative_to(src_dir)
     importer_parts = list(rel.with_suffix("").parts)
@@ -140,9 +141,10 @@ def collect_pattern_usage(root: Path) -> list[PatternOccurrence]:
     for py_file in src_dir.rglob("*.py"):
         if py_file.name == "__init__.py":
             continue
-        tree = safe_parse_py(py_file)
-        if tree is None:
+        result = safe_parse_py(py_file)
+        if result is None:
             continue
+        tree, _source = result
 
         occurrences.extend(_scan_file_patterns(tree, py_file))
 
@@ -250,9 +252,10 @@ def _canonical_params(args: ast.arguments) -> list[str]:
 
 
 def _extract_public_signatures(py_file: Path) -> list[SimilarityGroup]:
-    tree = safe_parse_py(py_file)
-    if tree is None:
+    result = safe_parse_py(py_file)
+    if result is None:
         return []
+    tree, _source = result
 
     entries: list[SimilarityGroup] = []
     for node in ast.iter_child_nodes(tree):

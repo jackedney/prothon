@@ -129,5 +129,5 @@ Use the [implementer prompt](../prothon-execute/implementer-prompt.md) with comm
 
 - **Wave Integrity.** NEVER modify code before the corresponding documentation (DESIGN/PATTERNS) is updated and committed.
 - **SPEC is Frozen.** NEVER modify `docs/SPEC.md`. SPEC is the unchanging authority.
-- Follow the [shared operational guards](_shared/guards.md).
+- Follow the [shared operational guards](../_shared/guards.md).
 - **No Manual Tables.** Use `uvx prothon promise plan` output for all planning displays.

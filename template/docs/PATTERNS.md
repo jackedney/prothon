@@ -11,7 +11,7 @@ Prefer a flat structure — one module per subsystem, except where a logical sub
 
 | Element | Convention | Example |
 |---------|-----------|---------|
-| Files | lowercase, singular nouns | `service.py`, `models.py`, `config.py` |
+| Files | lowercase nouns | `service.py`, `models.py`, `config.py` |
 | Functions | `verb_noun` | `calculate_total()`, `format_report()` |
 | Private helpers | `_verb_noun` | `_validate_input()`, `_parse_config()` |
 | Classes | PascalCase, no suffix noise | `UserRecord`, `Transaction`, `Config` |

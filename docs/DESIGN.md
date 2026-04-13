@@ -23,7 +23,7 @@ src/prothon/
         docs.py         # Document-related checks (R24-R26, R44)
         structure.py    # Package structure checks (R3-R5, R15)
         workflows.py    # Execute/refactor workflow checks (R27-R42)
-        research.py     # Tech researcher and versioning checks (R43-C55)
+        research.py     # Tech researcher and versioning checks (R43-R55)
         adoption.py     # Adoption intelligence check (R13)
     compliance.py       # Compliance data types (CheckResult, CheckStatus, ComplianceReport)
     exceptions.py       # Custom exception hierarchy
@@ -50,8 +50,7 @@ src/prothon/
         prothon-refactor/   # References _shared/ for guards, shares subagent prompt with execute
         prothon-tech-researcher/  # Output templates offloaded to references/templates.md
 
-template/               # Bundled Copier project template (Jinja2), at project root
-template/               # Also houses CI workflow templates loaded by adoption_templates.py
+template/               # Bundled Copier project template (Jinja2) and CI workflow templates loaded by adoption_templates.py
 ```
 
 ### Refactor Wave Logic (R38-42)

@@ -38,11 +38,11 @@ Each command launches a separate assistant session. Do NOT invoke `/spec-writer`
 
 Doc harmonization and tech-researcher are handled automatically by the design-writer and patterns-writer skills as subagent quality gates. You do not need to trigger them manually.
 
-### 5. Implement
+### 3. Implement
 
 Write the code changes.
 
-### 6. Verify Compliance (Automatic)
+### 4. Verify Compliance (Automatic)
 
 **This is an always-on quality gate.** Before claiming any implementation work is complete, you MUST spawn a dedicated subagent (type: general-purpose, fresh context) to verify code matches documentation. Do not perform this check inline — spawn a fresh subagent: "Activate prothon-compliance-checker and produce a report." This ensures it gets a clean context focused solely on compliance verification. Report the subagent's findings to the user.
 

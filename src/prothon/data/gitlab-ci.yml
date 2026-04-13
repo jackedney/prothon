@@ -10,6 +10,7 @@ version-bump:
     - pip install tomlkit
     - git config user.email "ci@gitlab"
     - git config user.name "GitLab CI"
+    - git config credential.helper '!f() { echo "password=$GITLAB_TOKEN"; }; f'
   script:
     - |
       python - <<'PYEOF'
@@ -105,19 +106,22 @@ version-bump:
               print(f"Updated {init_path}")
 
       # Commit and tag
-      git_add = ["git", "add", "pyproject.toml"] + [str(p) for p in init_files]
-      subprocess.run(git_add, check=True)
+      files_to_add = ["pyproject.toml"]
+      for p in init_files:
+          r = subprocess.run(
+              ["git", "status", "--porcelain", str(p)],
+              capture_output=True, text=True
+          )
+          if r.stdout.strip():
+              files_to_add.append(str(p))
+      if files_to_add:
+          subprocess.run(["git", "add"] + files_to_add, check=True)
       commit_msg = f"chore: bump version to {new_version} [skip ci]"
       subprocess.run(["git", "commit", "-m", commit_msg], check=True)
       tag_msg = f"release {new_version}"
       subprocess.run(["git", "tag", "-a", f"v{new_version}", "-m", tag_msg], check=True)
 
       # Push changes and tag
-      server = os.environ['CI_SERVER_HOST']
-      project = os.environ['CI_PROJECT_PATH']
-      token = os.environ['GITLAB_TOKEN']
-      remote_url = f"https://gitlab-ci-token:{token}@{server}/{project}.git"
-      subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
       push_branch = f"HEAD:{os.environ['CI_COMMIT_BRANCH']}"
       subprocess.run(["git", "push", "origin", push_branch], check=True)
       subprocess.run(["git", "push", "origin", f"v{new_version}"], check=True)

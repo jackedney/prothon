@@ -2,24 +2,23 @@
 
 from __future__ import annotations
 
-import os
-import shutil
 from pathlib import Path
 
 import tomlkit
 
 from prothon.adoption_templates import (
-    _AGENTS_CONTENT,
     _DESIGN_SCAFFOLD,
-    _GITLAB_VERSION_BUMP,
     _PATTERNS_SCAFFOLD,
     _REFERENCES_MODULES_HEADER,
     _SPEC_SCAFFOLD,
-    _VERSION_BUMP_WORKFLOW,
-    _VERSION_TAG_WORKFLOW,
+    get_agents_content,
+    get_gitlab_version_bump,
+    get_version_bump_workflow,
+    get_version_tag_workflow,
 )
 from prothon.ast_miner import ASTPatternMiner
 from prothon.exceptions import GitError, ProjectAlreadyInitError, ProthonError
+from prothon.fs import create_agent_symlinks
 from prothon.git import run_git
 from prothon.scaffold import get_template_dir
 
@@ -152,17 +151,10 @@ def _create_agents_and_links(root: Path) -> list[Path]:
     created = []
     agents_path = root / "AGENTS.md"
     if not agents_path.exists():
-        agents_path.write_text(_AGENTS_CONTENT)
+        agents_path.write_text(get_agents_content())
         created.append(agents_path)
 
-    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
-        link = root / name
-        if not link.exists():
-            try:
-                os.symlink("AGENTS.md", link)
-            except OSError:
-                shutil.copyfile(agents_path, link)
-            created.append(link)
+    created.extend(create_agent_symlinks(root, agents_path))
 
     skills_dir = root / ".agents" / "skills"
     if not skills_dir.exists():
@@ -179,17 +171,17 @@ def _create_workflows(root: Path) -> list[Path]:
 
     bump_path = workflows_dir / "version-bump.yml"
     if not bump_path.exists():
-        bump_path.write_text(_VERSION_BUMP_WORKFLOW)
+        bump_path.write_text(get_version_bump_workflow())
         created.append(bump_path)
 
     tag_path = workflows_dir / "version-tag.yml"
     if not tag_path.exists():
-        tag_path.write_text(_VERSION_TAG_WORKFLOW)
+        tag_path.write_text(get_version_tag_workflow())
         created.append(tag_path)
 
     gitlab_path = root / ".gitlab-ci.yml"
     if not gitlab_path.exists():
-        gitlab_path.write_text(_GITLAB_VERSION_BUMP)
+        gitlab_path.write_text(get_gitlab_version_bump())
         created.append(gitlab_path)
     return created
 

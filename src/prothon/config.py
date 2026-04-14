@@ -10,6 +10,7 @@ import tomlkit
 import tomlkit.exceptions
 
 from prothon.exceptions import ProthonError
+from prothon.fs import xdg_config_home
 from prothon.project import find_project_root
 
 
@@ -90,12 +91,7 @@ def resolve_agent(cli_value: str | None = None) -> str:
         pass  # No project root found — fall through
 
     # Level 4: global config ~/.config/prothon/config.toml
-    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
-    xdg = (
-        Path(raw_xdg)
-        if raw_xdg and Path(raw_xdg).is_absolute()
-        else Path.home() / ".config"
-    )
+    xdg = xdg_config_home()
     val = nested_get(read_toml(xdg / "prothon" / "config.toml"), "agent")
     if val:
         return val
@@ -124,12 +120,7 @@ def _resolve_config_value(
             return val
     except ProthonError:
         pass
-    raw_xdg = os.environ.get("XDG_CONFIG_HOME")
-    xdg = (
-        Path(raw_xdg)
-        if raw_xdg and Path(raw_xdg).is_absolute()
-        else Path.home() / ".config"
-    )
+    xdg = xdg_config_home()
     val = nested_get(read_toml(xdg / "prothon" / "config.toml"), config_key)
     if val:
         return val

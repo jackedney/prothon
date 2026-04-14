@@ -65,11 +65,7 @@ All documents are consistent.
    ```
 6. **Wait for explicit user approval** — Ask the user to approve or reject each proposed amendment. Do NOT write to any documentation file until the user has explicitly approved the change. This applies whether the harmonizer is running standalone or as a subagent invoked by design-writer or patterns-writer — the parent session is interactive and the user must confirm.
 7. **Write approved amendments** — Only after receiving explicit approval, apply the approved edits to the lower-authority document(s).
-8. **Commit each amended file** — Immediately after writing an amended documentation file, commit it:
-   - Stage the file: `git add docs/<FILENAME>`
-   - Commit with message: `docs: update <FILENAME> via doc-harmonizer`
-   - Do NOT push — the commit is local only.
-   - If multiple files are amended, commit each file separately with its own commit message.
+8. **Commit each amended file** — Follow the [shared operational guards](_shared/guards.md) for commit workflow. Stage (`git add docs/<FILENAME>`) and commit with message: `docs: update <FILENAME> via doc-harmonizer`. Commit each file separately.
 9. **Tech-researcher follow-up** — The prothon CLI triggers the tech-researcher automatically after this skill if it was invoked following a design-writer session. You do not need to spawn it manually. Report whether the **Technology Choices** or **Key Decisions** tables were amended so the CLI can determine if the tech-researcher is needed.
 
 ## What Counts as a Conflict

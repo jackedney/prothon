@@ -10,6 +10,22 @@ from prothon import adoption, scaffold
 from prothon.exceptions import GitError, ProthonError
 
 
+def _prompt_email(field: str = "Author email", default: str = "") -> str:
+    value = typer.prompt(field, default=default)
+    while value and "@" not in value:
+        typer.echo("Must be a valid email address (e.g. user@example.com)")
+        value = typer.prompt(field, default=default)
+    return value
+
+
+def _prompt_choice(field: str, choices: tuple[str, ...], default: str) -> str:
+    value = typer.prompt(field, default=default)
+    while value not in choices:
+        typer.echo(f"Must be {', '.join(choices)}")
+        value = typer.prompt(field, default=default)
+    return value
+
+
 def new_project(destination: str = ".") -> None:
     """Interactively collect project details and generate a new project."""
     dest = Path(destination).resolve()
@@ -21,20 +37,14 @@ def new_project(destination: str = ".") -> None:
     )
     description = typer.prompt("Description", default="A Python project")
     author_name = typer.prompt("Author name", default="")
-    author_email = typer.prompt("Author email", default="")
-    while author_email and "@" not in author_email:
-        typer.echo("Must be a valid email address (e.g. user@example.com)")
-        author_email = typer.prompt("Author email", default="")
+    author_email = _prompt_email()
 
-    python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
-    while python_version not in ("3.11", "3.12", "3.13"):
-        typer.echo("Must be 3.11, 3.12, or 3.13")
-        python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
-
-    license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
-    while license_choice not in ("MIT", "Apache-2.0", "None"):
-        typer.echo("Must be MIT, Apache-2.0, or None")
-        license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
+    python_version = _prompt_choice(
+        "Python version (3.11/3.12/3.13)", ("3.11", "3.12", "3.13"), "3.13"
+    )
+    license_choice = _prompt_choice(
+        "License (MIT/Apache-2.0/None)", ("MIT", "Apache-2.0", "None"), "MIT"
+    )
 
     data = {
         "project_name": project_name,
@@ -93,30 +103,18 @@ def init_project(cwd: Path | None = None) -> None:
 
 
 def _collect_project_details() -> dict[str, str]:
-    """Collect project details interactively using Typer prompts.
-
-    Returns:
-        Dict with module_name, description, author_name, author_email,
-        python_version, and license.
-    """
+    """Collect project details interactively using Typer prompts."""
     module_name = typer.prompt("Module name")
     description = typer.prompt("Description")
     author_name = typer.prompt("Author name")
 
-    author_email = typer.prompt("Author email", default="")
-    while author_email and "@" not in author_email:
-        typer.echo("Must be a valid email address (e.g. user@example.com)")
-        author_email = typer.prompt("Author email", default="")
-
-    python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
-    while python_version not in ("3.11", "3.12", "3.13"):
-        typer.echo("Must be 3.11, 3.12, or 3.13")
-        python_version = typer.prompt("Python version (3.11/3.12/3.13)", default="3.13")
-
-    license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
-    while license_choice not in ("MIT", "Apache-2.0", "None"):
-        typer.echo("Must be MIT, Apache-2.0, or None")
-        license_choice = typer.prompt("License (MIT/Apache-2.0/None)", default="MIT")
+    author_email = _prompt_email()
+    python_version = _prompt_choice(
+        "Python version (3.11/3.12/3.13)", ("3.11", "3.12", "3.13"), "3.13"
+    )
+    license_choice = _prompt_choice(
+        "License (MIT/Apache-2.0/None)", ("MIT", "Apache-2.0", "None"), "MIT"
+    )
 
     return {
         "module_name": module_name,

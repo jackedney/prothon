@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 import sys
-import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,6 +11,7 @@ import tomlkit
 import tomlkit.exceptions
 
 from prothon.exceptions import MaxAttemptsExceeded, PromiseError
+from prothon.fs import atomic_write
 from prothon.git import GitDiffProvider
 from prothon.models import PROMISE_PATH, Metadata, Promise, Task, _generate_id
 
@@ -116,14 +115,7 @@ def _task_to_dict(task: Task) -> dict:
 
 
 def load_promise(path: Path = PROMISE_PATH) -> Promise:
-    """Load a change promise from a TOML file.
-
-    Args:
-        path: Path to the promise TOML file.
-
-    Returns:
-        A Promise dataclass populated from the file.
-    """
+    """Load a change promise from a TOML file, backfilling missing task_ids."""
     try:
         doc = tomlkit.parse(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -147,12 +139,6 @@ def load_promise(path: Path = PROMISE_PATH) -> Promise:
 
 
 def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
-    """Serialize a Promise dataclass to TOML and write to disk.
-
-    Args:
-        promise: The Promise to save.
-        path: Path to write the TOML file.
-    """
     doc = tomlkit.document()
 
     meta = tomlkit.table()
@@ -172,22 +158,7 @@ def save_promise(promise: Promise, path: Path = PROMISE_PATH) -> None:
 
     content = tomlkit.dumps(doc)
     data = content.encode("utf-8")
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        written = 0
-        while written < len(data):
-            written += os.write(fd, data[written:])
-        os.fsync(fd)
-    except BaseException:
-        os.close(fd)
-        os.unlink(tmp)
-        raise
-    os.close(fd)
-    try:
-        os.replace(tmp, path)
-    except BaseException:
-        os.unlink(tmp)
-        raise
+    atomic_write(path, data)
 
 
 def complete_task(
@@ -196,22 +167,7 @@ def complete_task(
     diff: GitDiffProvider | None = None,
     path: Path = PROMISE_PATH,
 ) -> None:
-    """Mark a task as completed after verifying its promises pass.
-
-    Runs ``check_task`` first and refuses to mark the task complete if
-    any check fails (SPEC R34: compliance mandatory before completion).
-
-    The persisted ``attempts`` counter (incremented by ``record_attempt``)
-    is preserved as-is — this function does not overwrite it.
-
-    Args:
-        task_index: Zero-based index of the task to mark complete.
-        diff: Git diff data source; defaults to SubprocessGitDiff().
-        path: Path to the promise TOML file.
-
-    Raises:
-        PromiseError: If task_index is out of range or checks fail.
-    """
+    """Mark task complete after ``check_task`` passes; preserves ``attempts``."""
     from prothon.promise_verify import check_task
 
     report = check_task(task_index, diff=diff, path=path)
@@ -259,22 +215,7 @@ def _update_task_fields(path: Path, task_index: int, updates: dict) -> None:
         tasks[task_index][key] = value
     content = tomlkit.dumps(doc)
     data = content.encode("utf-8")
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        written = 0
-        while written < len(data):
-            written += os.write(fd, data[written:])
-        os.fsync(fd)
-    except BaseException:
-        os.close(fd)
-        os.unlink(tmp)
-        raise
-    os.close(fd)
-    try:
-        os.replace(tmp, path)
-    except BaseException:
-        os.unlink(tmp)
-        raise
+    atomic_write(path, data)
 
 
 def record_attempt(
@@ -282,15 +223,6 @@ def record_attempt(
     *,
     path: Path = PROMISE_PATH,
 ) -> None:
-    """Increment the attempt counter for a task.
-
-    Args:
-        task_index: Zero-based index of the task.
-        path: Path to the promise TOML file.
-
-    Raises:
-        PromiseError: If task_index is out of range or attempts is not an integer.
-    """
     with _lock_promise(path):
         promise = load_promise(path)
         if task_index < 0 or task_index >= len(promise.tasks):

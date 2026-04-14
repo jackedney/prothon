@@ -1,0 +1,48 @@
+name: Version Tag
+
+on:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    if: "contains(github.event.head_commit.message, 'chore: automatic version bump')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(python3 - <<'PYEOF'
+          try:
+              import tomllib
+          except ImportError:
+              import tomli as tomllib
+          with open("pyproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          print(data["project"]["version"])
+          PYEOF
+          )
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create Tag
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          TAG="v${VERSION}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" -m "release ${VERSION}"
+          git push origin "$TAG"

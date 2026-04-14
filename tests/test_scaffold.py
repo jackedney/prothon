@@ -9,12 +9,14 @@ from pathlib import Path
 import pytest
 from prothon.adoption import (
     _DESIGN_SCAFFOLD,
-    _GITLAB_VERSION_BUMP,
     _PATTERNS_SCAFFOLD,
     _SPEC_SCAFFOLD,
-    _VERSION_BUMP_WORKFLOW,
-    _VERSION_TAG_WORKFLOW,
     init_existing,
+)
+from prothon.adoption_templates import (
+    get_gitlab_version_bump,
+    get_version_bump_workflow,
+    get_version_tag_workflow,
 )
 from prothon.exceptions import GitError, ProjectAlreadyInitError, ProthonError
 from prothon.git import run_git
@@ -158,11 +160,11 @@ def test_init_existing_adds_ci_workflows(tmp_path: Path) -> None:
 
     assert (
         tmp_path / ".github" / "workflows" / "version-bump.yml"
-    ).read_text() == _VERSION_BUMP_WORKFLOW
+    ).read_text() == get_version_bump_workflow()
     assert (
         tmp_path / ".github" / "workflows" / "version-tag.yml"
-    ).read_text() == _VERSION_TAG_WORKFLOW
-    assert (tmp_path / ".gitlab-ci.yml").read_text() == _GITLAB_VERSION_BUMP
+    ).read_text() == get_version_tag_workflow()
+    assert (tmp_path / ".gitlab-ci.yml").read_text() == get_gitlab_version_bump()
 
 
 def test_init_existing_preserves_existing_workflows(tmp_path: Path) -> None:

@@ -55,16 +55,14 @@ STOP and wait.
 3. **Read SPEC.md and DESIGN.md** — Re-read the current docs to understand any changes since patterns were last written.
 4. **Analyze existing code** — If code exists in `src/`, study its current patterns to understand what's changed.
 5. **Work through changes** — For each section being modified, follow the same one-at-a-time conversational flow from Path A step 4. Present one section, wait for the user's response, then move on. Preserve content the user doesn't want to change.
-6. **Write PATTERNS.md and docs/references/modules.md** — Write the updated content to both files. Then immediately commit:
-   - `git add docs/PATTERNS.md docs/references/modules.md`
-   - `git commit -m "docs: update PATTERNS.md via patterns-writer"`
-   - Do NOT push — local commit only.
+6. **Write PATTERNS.md and docs/references/modules.md** — Write the updated content to both files. Follow the [shared operational guards](../_shared/guards.md) for commit workflow. Stage both files and commit with message: `docs: update PATTERNS.md via patterns-writer`.
 
 ## Guards
 
-You MUST refuse to include anything that contradicts:
-- SPEC.md (highest authority — requirements are non-negotiable)
-- DESIGN.md (medium authority — technology choices are already decided)
+- Follow the [shared operational guards](../_shared/guards.md).
+- You MUST refuse to include anything that contradicts:
+  - SPEC.md (highest authority — requirements are non-negotiable)
+  - DESIGN.md (medium authority — technology choices are already decided)
 
 Every pattern must align with a DESIGN.md choice. If a pattern would work better with a different technology, flag it to the user as a potential DESIGN revision rather than silently deviating.
 

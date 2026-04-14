@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import os
-import shutil
 from pathlib import Path
 
+from prothon.fs import create_agent_symlinks
 from prothon.git import run_git
 
 
@@ -54,15 +53,8 @@ def _post_generate(dest: Path) -> None:
         dest: The generated project root directory.
     """
     # Create symlinks for agent instruction files
-    for name in ("CLAUDE.md", "GEMINI.md", "AGENT.md"):
-        link = dest / name
-        if not link.exists():
-            try:
-                os.symlink("AGENTS.md", link)
-            except OSError:
-                shutil.copyfile(dest / "AGENTS.md", link)
+    create_agent_symlinks(dest, dest / "AGENTS.md")
 
-    # Create .agents/skills for project-specific reference skills
     (dest / ".agents" / "skills").mkdir(parents=True, exist_ok=True)
 
     # Initialize git

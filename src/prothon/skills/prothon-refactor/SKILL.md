@@ -117,39 +117,9 @@ For the selected items, follow the **DESIGN -> PATTERNS -> CODE** Wave:
       - If failed and retries remain: loop back to (a) with a fresh instance.
    d) **Parallelism** — Independent tasks can run in parallel if they touch different files.
 
-### Subagent Implementation Prompt
+### Subagent Prompt
 
-```text
-You are implementing a single refactoring task with fresh context. You MUST close the session on completion.
-
-1. LOAD CONTEXT:
-   - Read these doc sections: {doc_sections}
-   - Activate these reference skills: {reference_skills}
-   - Read these context files: {context_files}
-
-2. IMPLEMENT:
-   - Goal: {goal}
-   - Files: Create {files_to_create}, Modify {files_to_modify}, Remove {files_to_remove}
-   - Success criteria: {success_criteria}
-
-3. VERIFY:
-   a) Stage selectively by explicit path:
-      - Stage modified files: git add {files_to_modify}
-      - Stage new files: git add {files_to_create}
-      - Remove deleted files: git rm {files_to_remove}
-   b) Type checking: Run `uvx ty check src/ tests/` and fix ALL errors and warnings before proceeding. ty errors are NOT optional — they indicate real type safety issues that must be resolved. Do not suppress warnings or skip this step.
-   c) Quality gate: Run `pre-commit run --all-files --show-diff-on-failure`
-   d) If hooks auto-fixed files, re-stage the specific files and re-run pre-commit once. If still failing, EXIT with FAILURE.
-   e) Commit: git commit -m "refactor: {title}"
-   f) Final check: Run `uvx prothon promise check {task_index}`
-
-4. EXIT:
-   - If `promise check` passed:
-     - Run: `uvx prothon promise complete {task_index}`
-     - Report SUCCESS and close session.
-   - If any step failed:
-     - Report FAILURE with context on what went wrong and close session.
-```
+Use the [implementer prompt](../prothon-execute/implementer-prompt.md) with commit prefix `refactor:` instead of `feat:`.
 
 3. **Verify and Clean up** — Once all tasks are complete:
    - The prothon CLI triggers the compliance-checker automatically after this skill completes.
@@ -159,7 +129,5 @@ You are implementing a single refactoring task with fresh context. You MUST clos
 
 - **Wave Integrity.** NEVER modify code before the corresponding documentation (DESIGN/PATTERNS) is updated and committed.
 - **SPEC is Frozen.** NEVER modify `docs/SPEC.md`. SPEC is the unchanging authority.
-- **Selective Staging.** Stage only task-related files by explicit path. Do NOT use `git add -u` or `git add -A`.
-- **Commit After Write.** If a task modifies a doc file, ensure it is committed immediately after writing.
-- **Fresh Instances.** Each attempt gets a fresh subagent instance. Never reuse sessions.
+- Follow the [shared operational guards](../_shared/guards.md).
 - **No Manual Tables.** Use `uvx prothon promise plan` output for all planning displays.

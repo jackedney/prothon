@@ -32,6 +32,15 @@ from prothon.promise_verify import (
 
 from tests.conftest import FakeGitDiff, make_task
 
+
+@pytest.fixture(autouse=True)
+def mock_pre_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock pre-commit execution for all tests to avoid environment dependencies."""
+    monkeypatch.setattr(
+        "prothon.promise_verify.run_pre_commit", lambda _p, **_k: (0, "Passed")
+    )
+
+
 SAMPLE_PROMISE = Promise(
     metadata=Metadata(base_commit="abc1234"),
     tasks=[
@@ -1083,7 +1092,7 @@ def test_check_task_skipped_detail_text(tmp_path: Path):
     report = check_task(0, diff=FakeGitDiff(), path=path)
     for c in report.checks:
         if c.status is CheckStatus.SKIP:
-            assert c.detail in ("none declared", "none expected")
+            assert c.detail in ("none declared", "none expected", "no files to check")
 
 
 # --- complete_task edge cases ---

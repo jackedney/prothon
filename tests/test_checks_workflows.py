@@ -128,11 +128,11 @@ def test_execute_logic_skill_missing_retry_markers(tmp_path: Path) -> None:
 
 def test_refactor_logic_skill_missing_wave_pattern(tmp_path: Path) -> None:
     """R39 FAIL when refactor skill lacks the wave pattern marker."""
-    prothon = tmp_path / "src" / "prothon"
-    prothon.mkdir(parents=True)
-    (prothon / "refactor.py").write_text("# refactor\n")
+    refactor_dir = tmp_path / "src" / "prothon" / "refactor"
+    refactor_dir.mkdir(parents=True)
+    (refactor_dir / "__init__.py").write_text("# refactor\n")
 
-    skill_dir = prothon / "skills" / "prothon-refactor"
+    skill_dir = tmp_path / "src" / "prothon" / "skills" / "prothon-refactor"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
         "# Refactor\n"
@@ -148,11 +148,11 @@ def test_refactor_logic_skill_missing_wave_pattern(tmp_path: Path) -> None:
 
 def test_refactor_logic_skill_missing_discovery_phase(tmp_path: Path) -> None:
     """R40 FAIL when refactor skill lacks discovery phase marker."""
-    prothon = tmp_path / "src" / "prothon"
-    prothon.mkdir(parents=True)
-    (prothon / "refactor.py").write_text("# refactor\n")
+    refactor_dir = tmp_path / "src" / "prothon" / "refactor"
+    refactor_dir.mkdir(parents=True)
+    (refactor_dir / "__init__.py").write_text("# refactor\n")
 
-    skill_dir = prothon / "skills" / "prothon-refactor"
+    skill_dir = tmp_path / "src" / "prothon" / "skills" / "prothon-refactor"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
         "# Refactor\n"
@@ -168,11 +168,11 @@ def test_refactor_logic_skill_missing_discovery_phase(tmp_path: Path) -> None:
 
 def test_refactor_logic_skill_missing_execution_phase(tmp_path: Path) -> None:
     """R41 FAIL when refactor skill lacks 'Phase 2: Execution' (require_all=True)."""
-    prothon = tmp_path / "src" / "prothon"
-    prothon.mkdir(parents=True)
-    (prothon / "refactor.py").write_text("# refactor\n")
+    refactor_dir = tmp_path / "src" / "prothon" / "refactor"
+    refactor_dir.mkdir(parents=True)
+    (refactor_dir / "__init__.py").write_text("# refactor\n")
 
-    skill_dir = prothon / "skills" / "prothon-refactor"
+    skill_dir = tmp_path / "src" / "prothon" / "skills" / "prothon-refactor"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
         "# Refactor\n"
@@ -186,8 +186,8 @@ def test_refactor_logic_skill_missing_execution_phase(tmp_path: Path) -> None:
     assert r41.status == CheckStatus.FAIL
 
 
-def test_refactor_logic_no_refactor_py_no_skill(tmp_path: Path) -> None:
-    """Only R38 FAIL when both refactor.py and skill are absent."""
+def test_refactor_logic_missing_subpackage_no_skill(tmp_path: Path) -> None:
+    """Only R38 FAIL when both refactor subpackage and skill are absent."""
     results = check_refactor_logic(tmp_path)
     assert len(results) == 1
     assert results[0].requirement.requirement_id == "R38"

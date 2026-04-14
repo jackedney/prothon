@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from prothon.fs import safe_parse_py
+
 
 def _has_testable_logic(py_file: Path) -> bool:
     from prothon.refactor.discovery import (
@@ -10,11 +12,10 @@ def _has_testable_logic(py_file: Path) -> bool:
         _is_method_in_non_testable_class,
     )
 
-    try:
-        source = py_file.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-    except (OSError, UnicodeDecodeError, SyntaxError):
+    result = safe_parse_py(py_file)
+    if result is None:
         return False
+    tree, _source = result
 
     parent_map = _get_parent_map(tree)
 

@@ -21,18 +21,6 @@ class GitDiffProvider(Protocol):
 
 
 def run_git(*args: str, cwd: Path | None = None) -> str:
-    """Run a git command and return stdout.
-
-    Args:
-        *args: Git subcommand and arguments (e.g. "diff", "--numstat").
-        cwd: Working directory for the git process.
-
-    Returns:
-        The command's stdout as a string.
-
-    Raises:
-        GitError: If the git command exits with a non-zero return code.
-    """
     result = subprocess.run(
         ["git", *args],
         capture_output=True,
@@ -80,38 +68,45 @@ class SubprocessGitDiff:
 
 
 def rev_parse_head(cwd: Path | None = None) -> str:
-    """Return the full SHA of HEAD.
-
-    Args:
-        cwd: Working directory for the git process.
-
-    Returns:
-        The 40-character hexadecimal SHA of the current HEAD commit.
-
-    Raises:
-        GitError: If the git command fails (e.g. not inside a git repo).
-    """
     return run_git("rev-parse", "HEAD", cwd=cwd).strip()
 
 
 def is_dirty(path: Path, cwd: Path | None = None) -> bool:
-    """Return True if *path* has unstaged or uncommitted changes.
-
-    Args:
-        path: File path to check (relative to cwd).
-        cwd: Working directory for the git process.
-    """
     output = run_git("status", "--porcelain", "--", str(path), cwd=cwd).strip()
     return bool(output)
 
 
 def commit_file(path: Path, message: str, cwd: Path | None = None) -> None:
-    """Stage and commit a single file with *message*.
-
-    Args:
-        path: File path to commit (relative to cwd).
-        message: Commit message.
-        cwd: Working directory for the git process.
-    """
     run_git("add", "--", str(path), cwd=cwd)
     run_git("commit", "-m", message, "--", str(path), cwd=cwd)
+
+
+def run_pre_commit(paths: list[str], cwd: Path | None = None) -> tuple[int, str]:
+    """Run pre-commit hooks on a specific set of files.
+
+    Returns:
+        A tuple of (returncode, combined_output).
+    """
+    if not paths:
+        return 0, ""
+
+    use_uv = ((cwd or Path.cwd()) / "uv.lock").exists()
+    cmd = (
+        ["uv", "run", "pre-commit", "run", "--files", *paths]
+        if use_uv
+        else ["pre-commit", "run", "--files", *paths]
+    )
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            env=os.environ,
+        )
+    except FileNotFoundError:
+        return 1, f"Failed to run pre-commit: {cmd[0]} not found"
+    except OSError as exc:
+        return 1, f"Failed to run pre-commit: {exc}"
+    return result.returncode, result.stdout + result.stderr

@@ -65,10 +65,7 @@ STOP and wait.
 3. **Read SPEC.md** — Re-read the current spec to understand any changes since the design was last written.
 4. **Work through changes** — For each section being modified, follow the same one-at-a-time conversational flow from Path A step 4. Present one decision, wait for the user's response, then move on. Preserve content the user doesn't want to change.
 5. **Summarize changes** — Present all revised decisions for final confirmation.
-6. **Write DESIGN.md** — Write the updated content to `docs/DESIGN.md`. Immediately after writing, commit the file:
-   - `git add docs/DESIGN.md`
-   - `git commit -m "docs: update DESIGN.md via design-writer"`
-   - Do NOT push — local commit only.
+6. **Write DESIGN.md** — Write the updated content to `docs/DESIGN.md`. Follow the [shared operational guards](../_shared/guards.md) for commit workflow. Stage `docs/DESIGN.md` and commit with message: `docs: update DESIGN.md via design-writer`.
 
 ## Sections to Populate
 
@@ -92,10 +89,11 @@ STOP and wait.
 
 ## Guards
 
-You MUST refuse to include any of the following in DESIGN.md:
-- Code snippets or implementation details (belongs in PATTERNS.md)
-- Design patterns (e.g., "Use factory pattern" belongs in PATTERNS.md)
-- Anything that contradicts SPEC.md (SPEC has higher authority)
+- Follow the [shared operational guards](../_shared/guards.md).
+- You MUST refuse to include any of the following in DESIGN.md:
+  - Code snippets or implementation details (belongs in PATTERNS.md)
+  - Design patterns (e.g., "Use factory pattern" belongs in PATTERNS.md)
+  - Anything that contradicts SPEC.md (SPEC has higher authority)
 
 If a SPEC requirement seems impossible to fulfill with available technology, flag it to the user rather than silently ignoring it.
 

@@ -5,19 +5,91 @@ from pathlib import Path
 
 from prothon.checks import check_patterns_doc
 from prothon.compliance import CheckStatus
+from prothon.refactor.metrics import (
+    collect_cross_module_similarities,
+    collect_module_metrics,
+)
 from prothon.refactor.models import DriftCategory, DriftFinding, Severity
 from prothon.refactor.testability import _has_testable_logic, _is_testable_class
 from prothon.ui import console
 
 LARGE_FILE_LINE_THRESHOLD = 500
+HIGH_INBOUND_THRESHOLD = 10
 
 
 def discover_drift(root: Path) -> list[DriftFinding]:
     findings = []
+    # Wave 0: Doc Quality
+    findings.extend(_check_design_quality(root))
+    findings.extend(_check_pattern_quality(root))
+
+    # Wave 1: Code Drift
     findings.extend(_check_docs_hierarchy(root))
     findings.extend(_check_patterns_compliance(root))
     findings.extend(_check_large_files(root))
     findings.extend(_check_missing_tests(root))
+    return findings
+
+
+def _check_design_quality(root: Path) -> list[DriftFinding]:
+    """Flag high inbound dependency counts (potential subpackages)."""
+    findings = []
+    try:
+        metrics = collect_module_metrics(root)
+    except Exception as exc:
+        console.print(
+            f"Warning: Failed to collect module metrics: {exc}", style="yellow"
+        )
+        return findings
+
+    for m in metrics:
+        if m.imported_by_count > HIGH_INBOUND_THRESHOLD:
+            findings.append(
+                DriftFinding(
+                    title=f"High inbound dependency: {m.path.name}",
+                    rationale=f"{m.path.relative_to(root)} is imported by {m.imported_by_count} modules. "
+                    "Consider refactoring into a subpackage to improve architectural separation.",
+                    category=DriftCategory.DESIGN_QUALITY,
+                    severity=Severity.LOW,
+                    doc_sections=["DESIGN.md#Architecture"],
+                    files_affected=[m.path],
+                    evidence=[f"Imported by: {m.imported_by_count} modules"],
+                )
+            )
+    return findings
+
+
+def _check_pattern_quality(root: Path) -> list[DriftFinding]:
+    """Flag duplicate public signatures across modules."""
+    findings = []
+    try:
+        similarities = collect_cross_module_similarities(root)
+    except Exception as exc:
+        console.print(
+            f"Warning: Failed to collect cross-module similarities: {exc}",
+            style="yellow",
+        )
+        return findings
+
+    # Group by function name for concise findings
+    grouped: dict[str, list[Path]] = {}
+    for s in similarities:
+        grouped.setdefault(s.function_name, []).append(s.file_path)
+
+    for func_name, paths in grouped.items():
+        rel_paths = [str(p.relative_to(root)) for p in paths]
+        findings.append(
+            DriftFinding(
+                title=f"Duplicate public signature: {func_name}",
+                rationale=f"Function '{func_name}' appears with identical name in multiple modules. "
+                "Consider defining a shared base class or utility pattern.",
+                category=DriftCategory.PATTERN_QUALITY,
+                severity=Severity.LOW,
+                doc_sections=["PATTERNS.md#Design Patterns"],
+                files_affected=paths,
+                evidence=[f"Found in: {', '.join(rel_paths)}"],
+            )
+        )
     return findings
 
 

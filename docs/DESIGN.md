@@ -13,11 +13,11 @@ Mostly flat module layout under `src/prothon/`, with two subpackages (`checks/` 
 - `cli.py` — Typer app, factory-generated command definitions
 - `commands.py` — Session orchestration: Skill enum, SKILL_DOC_MAP, launch lifecycle, promise subcommand handlers
 - `ui.py` — Rich-based terminal UI, tables, and status reporting
-- `config.py` — Multi-level configuration resolution (CLI, env, toml), shared XDG helper
+- `config.py` — Multi-level configuration resolution (CLI, env, toml); imports `xdg_config_home` from `fs.py`
 - `checks/` — Static compliance checks subpackage (`__init__.py` re-exports; `utils.py`, `docs.py`, `structure.py`, `workflows.py`, `research.py`, `adoption.py`)
 - `compliance.py` — Compliance data types (`CheckResult`, `CheckStatus`, `ComplianceReport`)
 - `exceptions.py` — Custom exception hierarchy
-- `fs.py` — Shared filesystem utilities (`atomic_write`, `create_agent_symlinks`)
+- `fs.py` — Shared filesystem utilities (`atomic_write`, `create_agent_symlinks`, `xdg_config_home`)
 - `git.py` — Thin typed wrapper around git CLI via subprocess
 - `models.py` — Shared data models (`Task`, `Metadata`, `Promise`)
 - `promise.py` — Promise TOML I/O and lifecycle management
@@ -29,9 +29,9 @@ Mostly flat module layout under `src/prothon/`, with two subpackages (`checks/` 
 - `skills.py` — Skill discovery, symlink management
 - `versioning.py` — Semantic version detection, bumping, git tagging, CI orchestration
 - `skills/` — Bundled skill assets (non-Python), with `_shared/` guards and per-skill directories
-- `template/` — Bundled Copier project template (Jinja2) and CI workflow templates loaded by `adoption_templates.py`
+- `data/` — Bundled runtime assets loaded by `adoption_templates.py` (CI workflow YAMLs, `agents.md`)
 
-Two non-Python asset directories are bundled: `skills/` (included automatically as part of the package) and `template/` (included via `[tool.hatch.build.targets.wheel.force-include]` since it lives outside the package root).
+Two non-Python asset directories are bundled: `skills/` and `data/` (both under `src/prothon/`, included automatically as part of the package). The project-root `template/` directory is a separate Copier project template for `prothon new`, included via `[tool.hatch.build.targets.wheel.force-include]`.
 
 Inter-module dependency graph: see `docs/references/module-dependencies.md`.
 
@@ -178,7 +178,7 @@ Triggered by heading-level hash comparison of Technology Choices and Key Decisio
 
 ### Adoption Template Contract (R13, D1)
 
-`adoption_templates.py` loads CI workflow YAML and doc scaffold content from bundled template files at runtime rather than maintaining inline string copies. The adoption path reuses the same Jinja templates and external YAML files that `template/` provides, eliminating duplicate content.
+`adoption_templates.py` loads CI workflow YAML and doc scaffold content from bundled data files in `data/` at runtime rather than maintaining inline string copies. Jinja templates for the Copier scaffold live in the project-root `template/` directory and are separate from the adoption data assets.
 
 ### Skill Discovery and Authoring (R59)
 
@@ -205,7 +205,7 @@ See `docs/references/contracts.md` → Content Contracts for allowed/forbidden e
 | Mutation Testing CI | Non-blocking job | Provides feedback (continue-on-error) without slowing the main dev loop. |
 | Retry Configuration | Two-level resolution | Project defaults with per-task overrides in `change_promise.toml`. |
 | Backend Definitions | Data-driven `BackendConfig` | Each backend is a config record, not a class hierarchy. Reduces boilerplate from ~40 lines per backend to ~5. |
-| CI Templates | External files loaded at runtime | Eliminates inline YAML strings; single source of truth in `template/` directory. |
+| CI Templates | External files loaded at runtime | Eliminates inline YAML strings; single source of truth in `data/` directory. |
 | Skill Token Efficiency | Shared guards + progressive disclosure | Operational rules (staging, fresh instances) in `_shared/` referenced by all skills; output templates offloaded to `references/`. |
 
 Full decision record with alternatives: see `docs/references/key-decisions.md`.

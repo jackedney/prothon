@@ -61,7 +61,7 @@ versioning.py
   └── ui.console
 
 fs.py
-  └── (stdlib only: pathlib, tempfile, os)
+  └── (stdlib only: pathlib, tempfile, os, ast, shutil)
 
 config.py
   ├── fs.xdg_config_home()

@@ -118,7 +118,7 @@ When the resolved agent is `opencode`, the user can configure which model and pr
 
 - Both `--model` and `--provider` options are per-command, defined on each session command (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`) alongside `--agent`, via shared `ModelOption` and `ProviderOption` annotated types.
 - If both model and provider resolve to values, prothon joins them as `provider/model` and passes `--model provider/model` to opencode's `build_command`.
-- If `--model` already contains a `/` (e.g. `--model z-ai/glm-5`), it is treated as a complete `provider/model` specifier and `--provider` is ignored.
+- If `--model` already contains a `/` (e.g. `--model z-ai/glm-5`), it is treated as a complete `provider/model` specifier. If `--provider` is also set, prothon verifies the providers match and raises `ProthonError` on conflict (e.g. `--model z-ai/glm-5 --provider openai`). If they match, `--provider` is silently accepted.
 - If only one of model or provider resolves to a value (and the model value does not contain `/`), prothon exits with an error: `--provider requires --model (and vice versa). Use provider/model format or set both.`
 - If neither resolves to a value, opencode is invoked without `--model`, deferring to opencode's own configuration and defaults.
 - When the resolved agent is `claude-code` or `gemini`, both options are silently ignored — these backends do not support model selection via prothon.

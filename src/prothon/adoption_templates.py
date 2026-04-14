@@ -409,3 +409,19 @@ When creating new skills, place them in \
 
 Run `poe check` before committing to verify all quality checks pass.
 """
+
+
+def get_version_bump_workflow() -> str:
+    return _VERSION_BUMP_WORKFLOW
+
+
+def get_version_tag_workflow() -> str:
+    return _VERSION_TAG_WORKFLOW
+
+
+def get_gitlab_version_bump() -> str:
+    return _GITLAB_VERSION_BUMP
+
+
+def get_agents_content() -> str:
+    return _AGENTS_CONTENT

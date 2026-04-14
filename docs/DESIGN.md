@@ -14,18 +14,19 @@ src/prothon/
     ast_miner.py        # AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
     assistant.py        # Backend registry, protocol, and launch lifecycle for AI assistants
     cli.py              # Typer app and command definitions
-    commands.py         # Session orchestration: Skill enum, SKILL_DOC_MAP, launch lifecycle, promise subcommand handlers
+    commands.py         # Session orchestration hub: Skill enum, SKILL_DOC_MAP, launch lifecycle, promise subcommand handlers, and compliance pipeline coordination
     ui.py               # Rich-based terminal UI, tables, and status reporting
-    config.py           # Multi-level configuration resolution (CLI, env, toml)
+    config.py           # Multi-level configuration resolution (CLI, env, toml); imports `xdg_config_home` from `fs.py`
+    fs.py               # Shared filesystem utilities (`atomic_write`, `create_agent_symlinks`, `xdg_config_home`, `file_hash`, `safe_parse_py`)
     checks/             # Static compliance checks subpackage
         __init__.py     # Re-exports all public check functions
-        utils.py        # AST analysis, signature helpers
+        utils.py        # AST analysis, signature helpers, `check_path_exists`
         docs.py         # Document-related checks (R24-R26, R44)
         structure.py    # Package structure checks (R3-R5, R15)
         workflows.py    # Execute/refactor workflow checks (R27-R42)
         research.py     # Tech researcher and versioning checks (R43-R55)
         adoption.py     # Adoption intelligence check (R13)
-    compliance.py       # Compliance data types (CheckResult, CheckStatus, ComplianceReport)
+    compliance.py       # Compliance data types (`CheckResult`, `CheckStatus`, `ComplianceReport`, `CheckType`, `Requirement`)
     exceptions.py       # Custom exception hierarchy
     git.py              # Thin typed wrapper around git CLI via subprocess
     models.py           # Shared data models (Task, Metadata, Promise)
@@ -34,7 +35,7 @@ src/prothon/
     project.py          # Project root detection, shared project context
     refactor/              # Drift discovery and refactor promise generation subpackage
         __init__.py        # Re-exports all public functions
-        models.py          # DriftCategory, Severity, PatternType, DriftFinding, ModuleMetrics, etc.
+        models.py          # DriftCategory, Severity, PatternType, DriftFinding, ModuleMetrics, PatternOccurrence, SimilarityGroup
         metrics.py         # collect_module_metrics(), collect_pattern_usage(), etc.
         discovery.py       # discover_drift() and Wave 1 category checkers
         testability.py     # Testable logic detection heuristics (AST-based)

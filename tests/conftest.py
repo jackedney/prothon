@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
+import pytest
 from prothon.git import DiffStat
+from prothon.scaffold import generate
 
 
 class FakeGitDiff:
@@ -31,6 +34,33 @@ class FakeGitDiff:
         if not paths:
             return self._stats
         return {k: v for k, v in self._stats.items() if k in paths}
+
+
+@pytest.fixture(scope="module")
+def shared_project(tmp_path_factory):
+    """Generate a Copier project once, copy for tests that only need a valid root."""
+    dest = tmp_path_factory.mktemp("shared") / "test-project"
+    generate(
+        dest,
+        {
+            "project_name": "test-project",
+            "module_name": "test_project",
+            "description": "A test project",
+            "author_name": "Test Author",
+            "author_email": "test@example.com",
+            "python_version": "3.13",
+            "license": "MIT",
+        },
+    )
+    return dest
+
+
+@pytest.fixture
+def project_copy(shared_project, tmp_path):
+    """Fast per-test copy of the shared generated project."""
+    dest = tmp_path / "test-project"
+    shutil.copytree(shared_project, dest, symlinks=True)
+    return dest
 
 
 def make_task(

@@ -6,52 +6,30 @@
 
 Mostly flat module layout under `src/prothon/`, with two subpackages (`checks/` and `refactor/`) grouping related functionality. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
 
-```text
-src/prothon/
-    __init__.py
-    adoption.py         # Project adoption: overlaying docs-first workflow onto existing projects
-    adoption_templates.py  # Template file loading for project adoption (CI workflows, doc scaffolds)
-    ast_miner.py        # AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
-    assistant.py        # Backend registry, data-driven BackendConfig, and launch lifecycle for AI assistants
-    cli.py              # Typer app, factory-generated command definitions
-    commands.py         # Session orchestration: Skill enum, SKILL_DOC_MAP, launch lifecycle, promise subcommand handlers
-    ui.py               # Rich-based terminal UI, tables, and status reporting
-    config.py           # Multi-level configuration resolution (CLI, env, toml), shared XDG helper
-    checks/             # Static compliance checks subpackage
-        __init__.py     # Re-exports all public check functions
-        utils.py        # AST analysis, signature helpers, shared safe_parse_py()
-        docs.py         # Document-related checks (R24-R26, R44)
-        structure.py    # Package structure checks (R3-R5, R15)
-        workflows.py    # Execute/refactor workflow checks (R27-R42)
-        research.py     # Tech researcher and versioning checks (R43-R55)
-        adoption.py     # Adoption intelligence check (R13)
-    compliance.py       # Compliance data types (CheckResult, CheckStatus, ComplianceReport)
-    exceptions.py       # Custom exception hierarchy
-    fs.py               # Shared filesystem utilities (atomic_write, create_agent_symlinks)
-    git.py              # Thin typed wrapper around git CLI via subprocess
-    models.py           # Shared data models (Task, Metadata, Promise)
-    promise.py          # Promise TOML I/O and lifecycle management
-    promise_verify.py   # Git diff analysis and task verification logic
-    project.py          # Project root detection, shared project context
-    refactor/              # Drift discovery and refactor promise generation subpackage
-        __init__.py        # Re-exports all public functions
-        models.py          # DriftCategory, Severity, PatternType, DriftFinding, ModuleMetrics, etc.
-        metrics.py         # collect_module_metrics(), collect_pattern_usage(), etc.
-        discovery.py       # discover_drift() and Wave 1 category checkers
-        testability.py     # Testable logic detection heuristics (AST-based)
-        promise_gen.py     # generate_refactor_promise()
-    scaffold.py         # Template rendering, copier answers
-    scaffold_cli.py     # Scaffolding-specific CLI commands
-    skills.py           # Skill discovery, symlink management
-    versioning.py       # Semantic version detection, bumping, git tagging, CI orchestration
-    skills/             # Bundled skill assets (non-Python)
-        _shared/            # Shared operational guards referenced by all skills
-        prothon-execute/    # References _shared/ for guards, uses external prompt files
-        prothon-refactor/   # References _shared/ for guards, shares subagent prompt with execute
-        prothon-tech-researcher/  # Output templates offloaded to references/templates.md
-
-template/               # Bundled Copier project template (Jinja2) and CI workflow templates loaded by adoption_templates.py
-```
+- `adoption.py` — Project adoption: overlaying docs-first workflow onto existing projects
+- `adoption_templates.py` — Template file loading for project adoption (CI workflows, doc scaffolds)
+- `ast_miner.py` — AST pattern mining and library idiom recognition (FastAPI, Typer, Pydantic)
+- `assistant.py` — Backend registry, data-driven `BackendConfig`, and launch lifecycle for AI assistants
+- `cli.py` — Typer app, factory-generated command definitions
+- `commands.py` — Session orchestration: Skill enum, SKILL_DOC_MAP, launch lifecycle, promise subcommand handlers
+- `ui.py` — Rich-based terminal UI, tables, and status reporting
+- `config.py` — Multi-level configuration resolution (CLI, env, toml), shared XDG helper
+- `checks/` — Static compliance checks subpackage (`__init__.py` re-exports; `utils.py`, `docs.py`, `structure.py`, `workflows.py`, `research.py`, `adoption.py`)
+- `compliance.py` — Compliance data types (`CheckResult`, `CheckStatus`, `ComplianceReport`)
+- `exceptions.py` — Custom exception hierarchy
+- `fs.py` — Shared filesystem utilities (`atomic_write`, `create_agent_symlinks`)
+- `git.py` — Thin typed wrapper around git CLI via subprocess
+- `models.py` — Shared data models (`Task`, `Metadata`, `Promise`)
+- `promise.py` — Promise TOML I/O and lifecycle management
+- `promise_verify.py` — Git diff analysis and task verification logic
+- `project.py` — Project root detection, shared project context
+- `refactor/` — Drift discovery and refactor promise generation subpackage (`models.py`, `metrics.py`, `discovery.py`, `testability.py`, `promise_gen.py`)
+- `scaffold.py` — Template rendering, copier answers
+- `scaffold_cli.py` — Scaffolding-specific CLI commands
+- `skills.py` — Skill discovery, symlink management
+- `versioning.py` — Semantic version detection, bumping, git tagging, CI orchestration
+- `skills/` — Bundled skill assets (non-Python), with `_shared/` guards and per-skill directories
+- `template/` — Bundled Copier project template (Jinja2) and CI workflow templates loaded by `adoption_templates.py`
 
 ### Refactor Wave Logic (R38-42)
 
@@ -91,14 +69,7 @@ The compliance checker uses a **Hybrid Evidence Strategy** to verify that code m
 
 ### Assistant Backend Contract (R57, R61)
 
-Every assistant backend satisfies the `AssistantBackend` protocol. Backends are data-driven via `BackendConfig`:
-
-```python
-class AssistantBackend(Protocol):
-    def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]: ...
-    def sync_skills(self) -> None: ...
-    def subagent_type_map(self) -> dict[str, str]: ...
-```
+Every assistant backend satisfies the `AssistantBackend` protocol (defined in `assistant.py`). Backends are data-driven via `BackendConfig`:
 
 | Key | Assistant | Binary | Skill Sync Target |
 |-----|-----------|--------|-------------------|

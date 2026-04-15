@@ -21,7 +21,7 @@ def test_generate_creates_src_layout(tmp_path):
     assert (tmp_path / "src" / "mylib" / "__init__.py").exists()
 ```
 
-Run with `pytest tests/` or `poe test`. Tests are discovered automatically by filename (`test_*.py`) and function name (`test_*`).
+Run with `uv run pytest tests/` or `uv run poe test`. Tests are discovered automatically by filename (`test_*.py`) and function name (`test_*`).
 
 ## Common Patterns
 

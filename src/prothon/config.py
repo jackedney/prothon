@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 from pathlib import Path
 
@@ -12,14 +11,6 @@ import tomlkit.exceptions
 from prothon.exceptions import ProthonError
 from prothon.fs import xdg_config_home
 from prothon.project import find_project_root
-
-
-def file_hash(path: Path) -> str | None:
-    """Return SHA-256 hex digest of a file, or None if unreadable."""
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
-        return None
 
 
 def find_init_path(root: Path, project_name: str, module_name: str) -> Path | None:

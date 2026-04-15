@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import os
 import shutil
 import tempfile
 from pathlib import Path
+
+
+def file_hash(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
 
 
 def atomic_write(path: Path, data: bytes) -> None:

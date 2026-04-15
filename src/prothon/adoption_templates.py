@@ -14,6 +14,9 @@ def _load_template(name: str) -> str:
 _SPEC_SCAFFOLD = """\
 # Project Specification
 
+<!-- Group related requirements under descriptive subheadings (e.g., ### Authentication).
+     This lets AI agents focus on the group relevant to their current task. -->
+
 ## Purpose
 
 ## Requirements
@@ -25,6 +28,9 @@ _SPEC_SCAFFOLD = """\
 
 _DESIGN_SCAFFOLD = """\
 # Design Document
+
+<!-- Start each section with a one-line summary so agents can decide whether to
+     read the full section. Keep sections self-contained. -->
 
 ## Architecture
 

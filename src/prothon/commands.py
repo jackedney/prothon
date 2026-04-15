@@ -11,10 +11,10 @@ from pathlib import Path
 from prothon import promise, promise_verify
 from prothon.assistant import get_backend, launch
 from prothon.config import (
-    file_hash,
     resolve_agent,
     resolve_model,
 )
+from prothon.fs import file_hash
 from prothon.exceptions import ProthonError
 from prothon.git import commit_file, is_dirty
 from prothon.models import PROMISE_PATH

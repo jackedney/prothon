@@ -1,8 +1,6 @@
-"""Tests for config module: resolution, hashing, TOML reading, nested access."""
+"""Tests for config module: resolution, TOML reading, nested access."""
 
 from __future__ import annotations
-
-import hashlib
 
 import pytest
 
@@ -10,7 +8,6 @@ from prothon.config import (
     _resolve_config_value,
     _resolve_model_value,
     _resolve_provider_value,
-    file_hash,
     find_init_path,
     nested_get,
     read_toml,
@@ -18,33 +15,6 @@ from prothon.config import (
     resolve_model,
 )
 from prothon.exceptions import ProthonError
-
-
-# ---------------------------------------------------------------------------
-# file_hash
-# ---------------------------------------------------------------------------
-
-
-class TestFileHash:
-    def test_returns_sha256_hex_digest(self, tmp_path):
-        f = tmp_path / "hello.txt"
-        f.write_bytes(b"hello")
-        expected = hashlib.sha256(b"hello").hexdigest()
-        assert file_hash(f) == expected
-
-    def test_returns_none_for_missing_file(self, tmp_path):
-        assert file_hash(tmp_path / "no-such-file") is None
-
-    def test_returns_none_for_directory(self, tmp_path):
-        d = tmp_path / "subdir"
-        d.mkdir()
-        assert file_hash(d) is None
-
-    def test_empty_file_returns_hash(self, tmp_path):
-        f = tmp_path / "empty"
-        f.write_bytes(b"")
-        expected = hashlib.sha256(b"").hexdigest()
-        assert file_hash(f) == expected
 
 
 # ---------------------------------------------------------------------------

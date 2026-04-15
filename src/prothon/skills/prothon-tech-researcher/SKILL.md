@@ -87,6 +87,8 @@ List all generated skill files grouped by category. Flag any topics where resear
 
 Output templates are in [references/templates.md](references/templates.md). Use the appropriate template based on the category determined during analysis.
 
+> **How to use this skill:** Each template category (Technology, Codestyle, Optimisation, Domain) includes a navigation note explaining which sections to read first. See `references/templates.md` for the full templates.
+
 ## Guards
 
 - **Read-only docs.** Do NOT modify SPEC, DESIGN, or PATTERNS.

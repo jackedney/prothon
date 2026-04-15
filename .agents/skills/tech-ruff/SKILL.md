@@ -26,7 +26,7 @@ ruff format src/ tests/
 ruff format --check src/ tests/
 ```
 
-In this project, all checks run via `poe check` and are enforced by pre-commit hooks.
+In this project, all checks run via `uv run poe check` and are enforced by pre-commit hooks.
 
 ## Common Patterns
 

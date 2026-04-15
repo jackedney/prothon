@@ -132,7 +132,7 @@ def check_task(
 **Ruff lint rules in this project:**
 - `ruff check src/ tests/` runs linting
 - `ruff format --check src/ tests/` checks formatting
-- All checks run via `poe check` and pre-commit hooks
+- All checks run via `uv run poe check` and pre-commit hooks
 - Bandit security checks skip `B404` (subprocess import), `B603` (subprocess call), `B607` (partial executable path), `B701` (Jinja2 autoescape) -- these are intentional patterns in this codebase
 
 **Manual conventions:**

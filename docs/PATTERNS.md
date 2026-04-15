@@ -29,10 +29,10 @@ Each module exposes a minimal public API. Internal helpers use the `_` prefix. F
 ## Design Patterns
 
 ### Progressive Disclosure Documentation Pattern
-All documentation follows a three-level hierarchy for context efficiency: Level 1 (YAML frontmatter or metadata headers) for discovery, Level 2 (main markdown files like this one) for core rationale and conventions, Level 3 (`docs/references/` subdirectory) for detailed specifications and examples. Author new content at the lowest level that suffices — reference Level 3 files from Level 2 with a brief summary rather than duplicating.
+All documentation follows a three-level hierarchy for context efficiency: Level 1 (YAML frontmatter or metadata headers) for discovery, Level 2 (main markdown files like this one) for core rationale and conventions, Level 3 (`docs/references/` subdirectory) for detailed specifications and examples. Author new content at the lowest level that suffices -- reference Level 3 files from Level 2 with a brief summary rather than duplicating.
 
 ### Tiered Compliance Evidence Pattern
-When writing compliance or verification code, use a hybrid strategy: deterministic static analysis (AST) for structural rules that can be proven mechanically, and LLM-based semantic analysis for requirements that require judgment. Every check produces a tri-state result (`PASS`, `FAIL`, `SKIP`) with `file:line` evidence. See DESIGN.md → Compliance Checker for architecture.
+When writing compliance or verification code, use a hybrid strategy: deterministic static analysis (AST) for structural rules that can be proven mechanically, and LLM-based semantic analysis for requirements that require judgment. Every check produces a tri-state result (`PASS`, `FAIL`, `SKIP`) with `file:line` evidence. See DESIGN.md -> Compliance Checker for architecture.
 
 ### Pluggable Assistant Backend Pattern
 When adding a new assistant backend, create a `BackendConfig` record and register it. Each backend satisfies the `AssistantBackend` protocol defined in `assistant.py`:
@@ -44,7 +44,7 @@ class AssistantBackend(Protocol):
     def subagent_type_map(self) -> dict[str, str]: ...
 ```
 
-See DESIGN.md → Assistant Abstraction and `docs/references/contracts.md` → Assistant Backend Contract for the full 7-member protocol and command construction details.
+See DESIGN.md -> Assistant Abstraction and `docs/references/contracts.md` -> Assistant Backend Contract for the full 7-member protocol and command construction details.
 
 ### Heuristic-based Logic Detection Pattern
 Following the "Test Value Over Test Count" philosophy, the system uses AST heuristics to identify "testable logic" (e.g., non-trivial branching or calculations). This allows automated tools to detect missing tests only for modules that truly require them, avoiding redundant coverage of trivial pass-through code.
@@ -104,14 +104,14 @@ def collect_module_metrics(root: Path) -> list[ModuleMetrics]: ...
 ```
 
 ### Terminal Failure Pattern
-When a subagent reaches its `max_attempts` for a task without passing verification, it reports a terminal failure. The Python layer records attempt counts via `record_attempt()`, which raises `MaxAttemptsExceeded` when the limit is reached — a programmatic backstop independent of skill-prompt compliance. The orchestration skill then prompts the user for intervention (skip, retry, or abort).
+When a subagent reaches its `max_attempts` for a task without passing verification, it reports a terminal failure. The Python layer records attempt counts via `record_attempt()`, which raises `MaxAttemptsExceeded` when the limit is reached -- a programmatic backstop independent of skill-prompt compliance. The orchestration skill then prompts the user for intervention (skip, retry, or abort).
 
 ```python
 def record_attempt(task_index: int, path: Path = PROMISE_PATH) -> None: ...
 ```
 
 ### Parallel Refactor Execution Pattern
-Because independent tasks can run in parallel, `complete_task()` uses platform-specific exclusive file locking on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load → modify → save cycle.
+Because independent tasks can run in parallel, `complete_task()` uses platform-specific exclusive file locking on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load -> modify -> save cycle.
 
 ## Testing Patterns
 

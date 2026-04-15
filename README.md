@@ -176,7 +176,7 @@ vulture        dead code detection
 complexipy     complexity analysis
 ```
 
-`poe check` runs everything. Pre-commit hooks ensure nothing bypasses them.
+`uv run poe check` runs everything. Pre-commit hooks ensure nothing bypasses them.
 
 ---
 

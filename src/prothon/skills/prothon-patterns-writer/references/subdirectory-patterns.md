@@ -6,7 +6,7 @@ Guidance for splitting PATTERNS.md when it grows too large.
 
 If PATTERNS.md exceeds roughly 300 lines, propose splitting into subdirectory-specific files:
 
-```
+```text
 docs/
 ├── PATTERNS.md              <- shared/global patterns
 ├── references/

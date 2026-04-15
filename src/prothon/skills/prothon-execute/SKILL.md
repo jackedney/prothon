@@ -32,8 +32,8 @@ You are stateless between invocations. Determine "what to do next" by inspecting
 6. **Inventory reference docs** — List all files in `docs/references/`. These are progressive disclosure documents containing per-module API signatures and topic-specific reference material.
 7. **Get HEAD SHA** — Run: `git rev-parse HEAD`.
 8. **Write `docs/change_promise.toml`** — Create this file covering ONLY the selected phase. See `references/promise-format.md` for the full TOML schema and field guidelines. Key rules: bite-sized tasks (2-5 minutes each), DRY/YAGNI/TDD, every `[[tasks]]` entry includes all fields.
-8. **Pretty-print the plan** — Run: `uvx prothon promise plan` and show its output.
-9. **Get approval** — Wait for user approval before proceeding.
+9. **Pretty-print the plan** — Run: `uvx prothon promise plan` and show its output.
+10. **Get approval** — Wait for user approval before proceeding.
 
 ---
 

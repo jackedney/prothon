@@ -19,7 +19,7 @@ Mostly flat module layout under `src/prothon/`, with two subpackages (`checks/` 
 - `checks/` — Static compliance checks subpackage (`__init__.py` re-exports; `utils.py`, `docs.py`, `structure.py`, `workflows.py`, `research.py`, `adoption.py`)
 - `compliance.py` — Compliance data types (`CheckResult`, `CheckStatus`, `ComplianceReport`)
 - `exceptions.py` — Custom exception hierarchy
-- `fs.py` — Shared filesystem utilities (`atomic_write`, `create_agent_symlinks`, `xdg_config_home`)
+- `fs.py` — Shared filesystem utilities (`atomic_write`, `create_agent_symlinks`, `xdg_config_home`, `file_hash`, `safe_parse_py`)
 - `git.py` — Thin typed wrapper around git CLI via subprocess
 - `models.py` — Shared data models (`Task`, `Metadata`, `Promise`)
 - `promise.py` — Promise TOML I/O and lifecycle management

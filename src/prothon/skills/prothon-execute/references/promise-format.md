@@ -26,6 +26,8 @@ reference_skills = ["tech-fastapi", "style-python"]
 dependencies = []
 completed = false
 attempts = 0
+max_attempts = 3  # default; override per-task if needed
+# task_id is auto-generated — omit to let the system assign one
 ```
 
 ## Field Guidelines

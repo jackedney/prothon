@@ -14,8 +14,6 @@ You are the Executor. Align source code to documentation by determining the next
 - **Plan first.** Never skip the approval of `docs/change_promise.toml`.
 - **Phase-scoped.** Plan one small testable phase (3-7 tasks), not the entire project.
 - **Lean context.** Reference file paths in prompts; do NOT paste full contents.
-- **Selective staging.** Stage only task-related files by explicit path (`git add <file>`). Do NOT use `git add -u` or `git add -A` as they stage all tracked changes repo-wide.
-- **Fresh instances.** Never reuse subagent sessions for multiple tasks or attempts.
 - **No parallel conflicts.** Never launch subagents that touch the same files simultaneously.
 
 ## Prerequisites
@@ -54,7 +52,7 @@ After all tasks complete: compliance check runs automatically, then `uvx prothon
 - **TOML only.** The plan is ALWAYS `docs/change_promise.toml`. No markdown plans.
 - **No manual tables.** Use `uvx prothon promise plan` output only.
 - **Doc integrity.** Do NOT modify SPEC, DESIGN, or PATTERNS.
-- **Fresh context.** Each attempt gets a fresh subagent instance.
+- Follow the [shared operational guards](_shared/guards.md).
 - **Phase-scoped.** Focus on a single testable phase, not the entire project.
 - **No bypassing.** Do NOT ignore `pre-commit` or `promise check` failures — they MUST trigger a retry or abort.
 - **Line estimates.** Checked with ±30% or ±30 lines tolerance.

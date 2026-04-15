@@ -5,6 +5,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        exclude: ^src/prothon/data/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.1

@@ -5,6 +5,30 @@ import re
 from pathlib import Path
 from typing import Any
 
+from prothon.compliance import CheckResult, CheckStatus, Requirement
+from prothon.fs import safe_parse_py
+
+
+def check_path_exists(
+    root: Path,
+    rel_path: str,
+    req: Requirement,
+    *,
+    is_dir: bool = False,
+    pass_evidence: str | None = None,
+    fail_rationale: str | None = None,
+) -> CheckResult:
+    target = root / rel_path
+    found = target.is_dir() if is_dir else target.is_file()
+    if found:
+        return CheckResult(req, CheckStatus.PASS, evidence=pass_evidence or str(target))
+    return CheckResult(
+        req,
+        CheckStatus.FAIL,
+        evidence=rel_path,
+        rationale=fail_rationale or f"Missing {rel_path}.",
+    )
+
 
 def analyze_python_file(path: Path) -> dict[str, Any]:
     """Analyze a Python file for imports and base classes using AST.
@@ -18,10 +42,10 @@ def analyze_python_file(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"imports": set(), "base_classes": {}}
 
-    try:
-        tree = ast.parse(path.read_text())
-    except (SyntaxError, UnicodeDecodeError):
+    result = safe_parse_py(path)
+    if result is None:
         return {"imports": set(), "base_classes": {}}
+    tree, _source = result
 
     results: dict[str, Any] = {
         "imports": set(),

@@ -2,7 +2,7 @@
 
 Per-module public API signatures for the prothon package. Loaded by subagents via `context_files` entries in `change_promise.toml` as needed, following the progressive disclosure architecture described in DESIGN.md.
 
-Modules whose data models are fully specified in DESIGN.md interface contracts are noted with a cross-reference rather than duplicated here.
+Modules whose data models are fully specified in interface contracts are noted with a cross-reference rather than duplicated here. See `docs/references/contracts.md` for those definitions.
 
 ## cli.py
 
@@ -111,7 +111,7 @@ def init_project(cwd: Path | None = None) -> None: ...
 
 ## git.py
 
-See DESIGN.md -> Promise Verification Contract for `DiffStat`, `GitDiffProvider`, `SubprocessGitDiff`, `FileCheckDetail`, `CheckResult`, and `TaskCheckReport` contract definitions.
+See `docs/references/contracts.md` -> Promise Verification Contract for `DiffStat`, `GitDiffProvider`, `SubprocessGitDiff`, `FileCheckDetail`, `CheckResult`, and `TaskCheckReport` contract definitions.
 
 ```python
 def run_git(*args: str, cwd: Path | None = None) -> str: ...
@@ -150,7 +150,7 @@ def ci_detect_command(root: Path, before_sha: str, after_sha: str = "HEAD") -> N
 
 ## promise_verify.py
 
-See DESIGN.md -> Promise Verification Contract for `FileCheckDetail`, `CheckResult`, and `TaskCheckReport` contract definitions.
+See `docs/references/contracts.md` -> Promise Verification Contract for `FileCheckDetail`, `CheckResult`, and `TaskCheckReport` contract definitions.
 
 ```python
 def check_task(task_index: int, *, diff: GitDiffProvider | None = None, path: Path | None = None, promise: Promise | None = None) -> TaskCheckReport: ...
@@ -220,8 +220,8 @@ def sync_skills(target: Path | None = None) -> None: ...
 
 ## compliance.py
 
-See DESIGN.md -> Compliance Report Contract for `CheckResult`, `CheckStatus`, `CheckType`, and `ComplianceReport` contract definitions.
+See `docs/references/contracts.md` -> Compliance Report Contract for `CheckResult`, `CheckStatus`, `CheckType`, and `ComplianceReport` contract definitions.
 
 ## models.py
 
-See DESIGN.md -> Promise Contract Format for `Task`, `Metadata`, `Promise`, and `PROMISE_PATH` contract definitions.
+See `docs/references/contracts.md` -> Promise Contract Format for `Task`, `Metadata`, `Promise`, and `PROMISE_PATH` contract definitions.

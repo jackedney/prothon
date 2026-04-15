@@ -49,13 +49,39 @@ The CLI command (`prothon refactor`) requires all three docs (`SPEC.md`, `DESIGN
 
 Follow the **DESIGN -> PATTERNS -> CODE** wave order. Wave 0 (doc quality) executes first if selected, followed by doc-harmonizer, then Wave 1 (code drift).
 
-For each task: generate `docs/change_promise.toml` → get user approval → execute via fresh subagent loops (record attempt → implement → verify → commit) → compliance check runs automatically → `uvx prothon promise cleanup`.
+> **Detail:** See `references/execution-detail.md` for the full Wave 0/1 execution procedures, subagent prompt template, and post-execution cleanup.
+
+### Wave 1 Execution
+
+For the selected items, follow the **DESIGN -> PATTERNS -> CODE** Wave:
+
+1. **Generate `docs/change_promise.toml`** -- Create a phase-scoped promise file containing tasks for the selected refactoring items.
+   - **Task Order:** Order tasks by Wave level (DESIGN tasks first, then PATTERNS, then CODE).
+   - **Doc Tasks:** For doc changes, the task should specify updating the relevant `.md` file in `docs/`.
+   - **Code Tasks:** CODE tasks must reference the specific documentation heading they are aligning with.
+   - Run: `uvx prothon promise plan` and show the output.
+   - Get user approval before proceeding.
+
+2. **Execute Tasks** -- For each task (respecting dependency order):
+   a) **Record attempt** -- Run: `uvx prothon promise record-attempt {task_index}`.
+   b) **Launch subagent** -- Spawn a **fresh** subagent with the prompt template below.
+   c) **Monitor result**:
+      - If succeeded (task marked complete): proceed to next task.
+      - If failed and `attempts >= max_attempts`: report to user, ask skip/retry/abort.
+      - If failed and retries remain: loop back to (a) with a fresh instance.
+   d) **Parallelism** -- Independent tasks can run in parallel if they touch different files.
+
+### Subagent Prompt
+
+Use the [implementer prompt](../prothon-execute/implementer-prompt.md) with commit prefix `refactor:` instead of `feat:`.
+
+3. **Verify and Clean up** -- Once all tasks are complete:
+   - The prothon CLI triggers the compliance-checker automatically after this skill completes.
+   - Run: `uvx prothon promise cleanup`.
 
 ## Guards
 
 - **Wave Integrity.** NEVER modify code before the corresponding documentation (DESIGN/PATTERNS) is updated and committed.
 - **SPEC is Frozen.** NEVER modify `docs/SPEC.md`. SPEC is the unchanging authority.
-- **Selective Staging.** Stage only task-related files by explicit path. Do NOT use `git add -u` or `git add -A`.
-- **Commit After Write.** If a task modifies a doc file, ensure it is committed immediately after writing.
-- **Fresh Instances.** Each attempt gets a fresh subagent instance. Never reuse sessions.
+- Follow the [shared operational guards](../_shared/guards.md).
 - **No Manual Tables.** Use `uvx prothon promise plan` output for all planning displays.

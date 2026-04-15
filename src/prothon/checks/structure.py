@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from prothon.checks.utils import analyze_python_file
+from prothon.checks.utils import analyze_python_file, check_path_exists
 from prothon.compliance import (
     CheckResult,
     CheckStatus,
@@ -65,48 +65,37 @@ def check_package_structure(root: Path) -> list[CheckResult]:
 
 def check_pre_commit(root: Path) -> list[CheckResult]:
     """Verify pre-commit hooks existence (SPEC R5)."""
-    results = []
     req = Requirement(
         source="SPEC",
         requirement_id="R5",
         statement="Project must include pre-commit hooks configuration.",
     )
-    pc_path = root / ".pre-commit-config.yaml"
-    if pc_path.is_file():
-        results.append(CheckResult(req, CheckStatus.PASS, evidence=str(pc_path)))
-    else:
-        results.append(
-            CheckResult(
-                req,
-                CheckStatus.FAIL,
-                evidence=".pre-commit-config.yaml",
-                rationale="Missing pre-commit config.",
-            )
+    return [
+        check_path_exists(
+            root,
+            ".pre-commit-config.yaml",
+            req,
+            fail_rationale="Missing pre-commit config.",
         )
-    return results
+    ]
 
 
 def check_skills_dir(root: Path) -> list[CheckResult]:
     """Verify project-specific skills directory existence (SPEC R15)."""
-    results = []
     req = Requirement(
         source="SPEC",
         requirement_id="R15",
         statement="Project must have a .agents/skills/ directory for project-specific reference skills.",
     )
-    skills_dir = root / ".agents" / "skills"
-    if skills_dir.is_dir():
-        results.append(CheckResult(req, CheckStatus.PASS, evidence=str(skills_dir)))
-    else:
-        results.append(
-            CheckResult(
-                req,
-                CheckStatus.FAIL,
-                evidence=".agents/skills/",
-                rationale="Missing project skills directory.",
-            )
+    return [
+        check_path_exists(
+            root,
+            ".agents/skills",
+            req,
+            is_dir=True,
+            fail_rationale="Missing project skills directory.",
         )
-    return results
+    ]
 
 
 def check_agent_files(root: Path) -> list[CheckResult]:

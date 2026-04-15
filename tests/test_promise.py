@@ -1,4 +1,4 @@
-"""Tests for the change promise checker — core check_task and verification primitives."""
+"""Tests for the change promise checker."""
 
 from __future__ import annotations
 
@@ -6,8 +6,16 @@ from pathlib import Path
 
 import pytest
 from prothon.compliance import CheckStatus
+from prothon.exceptions import PromiseError
 from prothon.models import Metadata, Promise, Task
-from prothon.promise import load_promise, save_promise
+from prothon.promise import (
+    _format_task_plan,
+    complete_task,
+    load_promise,
+    plan,
+    save_promise,
+    status,
+)
 from prothon.promise_verify import (
     CheckResult,
     TaskCheckReport,
@@ -21,6 +29,7 @@ from tests.conftest import FakeGitDiff, make_task
 
 @pytest.fixture(autouse=True)
 def mock_pre_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mock pre-commit execution for all tests to avoid environment dependencies."""
     monkeypatch.setattr(
         "prothon.promise_verify.run_pre_commit", lambda _p, **_k: (0, "Passed")
     )
@@ -239,16 +248,6 @@ def test_check_line_count_fail_has_tolerance_detail():
     assert "tolerance" in result.detail
 
 
-def test_check_line_count_fail_detail_has_em_dash():
-    result = _check_line_count("lines_added", 100, 200)
-    assert " \u2014 outside " in result.detail
-
-
-def test_check_line_count_fail_detail_no_xx():
-    result = _check_line_count("lines_added", 100, 200)
-    assert "XX" not in result.detail
-
-
 # --- _check_line_counts ---
 
 
@@ -358,57 +357,6 @@ def test_check_line_counts_only_remove_files_no_modify():
     assert removed.status is CheckStatus.PASS
 
 
-# --- Mutant-killing tests ---
-
-
-def test_check_line_counts_expected_one_is_not_skipped():
-    task = Task(
-        title="T",
-        files_to_create=["f.py"],
-        expected_lines_added=1,
-    )
-    diff = FakeGitDiff(stats={"f.py": (1, 0)})
-    results = _check_line_counts(task, diff, "HEAD")
-    added = next(r for r in results if r.name == "lines_added")
-    assert added.status is not CheckStatus.SKIP
-
-
-def test_check_line_counts_expected_one_removed_is_not_skipped():
-    task = Task(
-        title="T",
-        files_to_remove=["f.py"],
-        expected_lines_removed=1,
-    )
-    diff = FakeGitDiff(stats={"f.py": (0, 1)})
-    results = _check_line_counts(task, diff, "HEAD")
-    removed = next(r for r in results if r.name == "lines_removed")
-    assert removed.status is not CheckStatus.SKIP
-
-
-def test_check_line_counts_missing_file_adds_zero_not_one():
-    task = Task(
-        title="T",
-        files_to_create=["missing.py"],
-        expected_lines_added=1,
-    )
-    diff = FakeGitDiff(stats={})
-    results = _check_line_counts(task, diff, "HEAD")
-    added = next(r for r in results if r.name == "lines_added")
-    assert "actual 0" in added.detail
-
-
-def test_check_line_counts_missing_file_removed_zero():
-    task = Task(
-        title="T",
-        files_to_remove=["missing.py"],
-        expected_lines_removed=1,
-    )
-    diff = FakeGitDiff(stats={})
-    results = _check_line_counts(task, diff, "HEAD")
-    removed = next(r for r in results if r.name == "lines_removed")
-    assert "actual 0" in removed.detail
-
-
 # --- check_task detail assertions ---
 
 
@@ -423,6 +371,451 @@ def test_check_task_report_has_correct_title_and_index(tmp_path: Path):
 
     assert isinstance(report.task_id, str)
     assert re.fullmatch(r"[0-9a-f]{8}", report.task_id)
+
+
+def test_check_task_files_to_create_detail(tmp_path: Path):
+    (tmp_path / "a.py").write_text("x")
+    p = Promise(
+        metadata=Metadata(),
+        tasks=[
+            Task(
+                title="T",
+                files_to_create=[str(tmp_path / "a.py"), str(tmp_path / "b.py")],
+            )
+        ],
+    )
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    report = check_task(0, diff=FakeGitDiff(), path=path)
+    create_check = next(c for c in report.checks if c.name == "files_to_create")
+    assert "1/2" in create_check.detail
+    assert create_check.status is CheckStatus.FAIL
+
+
+def test_check_task_files_to_create_all_exist(tmp_path: Path):
+    (tmp_path / "a.py").write_text("x")
+    (tmp_path / "b.py").write_text("y")
+    p = Promise(
+        metadata=Metadata(),
+        tasks=[
+            Task(
+                title="T",
+                files_to_create=[str(tmp_path / "a.py"), str(tmp_path / "b.py")],
+            )
+        ],
+    )
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    report = check_task(0, diff=FakeGitDiff(), path=path)
+    create_check = next(c for c in report.checks if c.name == "files_to_create")
+    assert "2/2" in create_check.detail
+    assert create_check.status is CheckStatus.PASS
+
+
+def test_check_task_files_to_modify_detail(tmp_path: Path):
+    p = Promise(
+        metadata=Metadata(),
+        tasks=[Task(title="T", files_to_modify=["a.py", "b.py"])],
+    )
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    report = check_task(0, diff=FakeGitDiff(names={"a.py"}), path=path)
+    modify_check = next(c for c in report.checks if c.name == "files_to_modify")
+    assert "1/2" in modify_check.detail
+    assert modify_check.status is CheckStatus.FAIL
+
+
+def test_check_task_files_to_remove_detail(tmp_path: Path):
+    (tmp_path / "a.py").write_text("x")
+    p = Promise(
+        metadata=Metadata(),
+        tasks=[
+            Task(
+                title="T",
+                files_to_remove=[str(tmp_path / "a.py"), "gone.py"],
+            )
+        ],
+    )
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    report = check_task(0, diff=FakeGitDiff(), path=path)
+    remove_check = next(c for c in report.checks if c.name == "files_to_remove")
+    assert "1/2" in remove_check.detail
+    assert remove_check.status is CheckStatus.FAIL
+
+
+def test_check_task_skipped_detail_text(tmp_path: Path):
+    p = Promise(metadata=Metadata(), tasks=[Task(title="T")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    report = check_task(0, diff=FakeGitDiff(), path=path)
+    for c in report.checks:
+        if c.status is CheckStatus.SKIP:
+            assert c.detail in ("none declared", "none expected", "no files to check")
+
+
+# --- complete_task edge cases ---
+
+
+def test_complete_task_out_of_range_empty_message(tmp_path: Path):
+    p = Promise(tasks=[])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    with pytest.raises(PromiseError, match="no tasks"):
+        complete_task(0, diff=FakeGitDiff(), path=path)
+
+
+def test_complete_task_out_of_range_shows_range(tmp_path: Path):
+    p = Promise(tasks=[Task(title="T1"), Task(title="T2")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    with pytest.raises(PromiseError, match="0-1"):
+        complete_task(5, diff=FakeGitDiff(), path=path)
+
+
+def test_complete_task_negative_index_rejected(tmp_path: Path):
+    p = Promise(tasks=[Task(title="T")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    with pytest.raises(PromiseError):
+        complete_task(-1, diff=FakeGitDiff(), path=path)
+
+
+def test_complete_task_parallel_no_lost_updates(tmp_path: Path):
+    """Concurrent completions must not overwrite each other (GH-17)."""
+    import concurrent.futures
+
+    p = Promise(
+        metadata=Metadata(base_commit="abc1234"),
+        tasks=[Task(title="T0"), Task(title="T1"), Task(title="T2")],
+    )
+    path = tmp_path / "promise.toml"
+    save_promise(p, path)
+    fake = FakeGitDiff()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        futures = [
+            pool.submit(complete_task, i, diff=fake, path=path) for i in range(3)
+        ]
+        for f in futures:
+            f.result()
+
+    result = load_promise(path)
+    assert all(t.completed for t in result.tasks), (
+        f"Expected all tasks completed, got: {[t.completed for t in result.tasks]}"
+    )
+
+
+# --- status detail ---
+
+
+def test_status_uses_checkmark_for_completed(tmp_path: Path):
+    p = Promise(tasks=[Task(title="Done", completed=True)])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = status(path)
+    assert "\u2713" in output
+
+
+def test_status_uses_cross_for_incomplete(tmp_path: Path):
+    p = Promise(tasks=[Task(title="Todo", completed=False)])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = status(path)
+    assert "\u2717" in output
+
+
+def test_status_shows_task_indices(tmp_path: Path):
+    p = Promise(tasks=[Task(title="First"), Task(title="Second")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = status(path)
+    assert "0: First" in output
+    assert "1: Second" in output
+
+
+# --- _format_task_plan ---
+
+
+def test_format_task_plan_basic():
+    task = Task(
+        title="My Task",
+        goal="My Goal",
+        expected_lines_added=100,
+        expected_lines_removed=20,
+    )
+    lines = _format_task_plan(0, task)
+    text = "\n".join(lines)
+    assert "Task 0: My Task" in text
+    assert "Goal:   My Goal" in text
+    assert "+100 / -20" in text
+    assert "Deps:   none" in text
+
+
+def test_format_task_plan_with_all_file_lists():
+    task = Task(
+        title="T",
+        files_to_create=["a.py"],
+        files_to_modify=["b.py"],
+        files_to_remove=["c.py"],
+        context_files=["ctx.py"],
+        reference_skills=["tech-x"],
+        doc_sections=["SPEC.md#API"],
+    )
+    lines = _format_task_plan(0, task)
+    text = "\n".join(lines)
+    assert "Create:" in text
+    assert "a.py" in text
+    assert "Modify:" in text
+    assert "b.py" in text
+    assert "Remove:" in text
+    assert "c.py" in text
+    assert "Reads:" in text
+    assert "ctx.py" in text
+    assert "Skills:" in text
+    assert "tech-x" in text
+    assert "Docs:" in text
+    assert "SPEC.md#API" in text
+
+
+def test_format_task_plan_with_deps():
+    task = Task(title="T", dependencies=["H0", "H1"])
+    lines = _format_task_plan(2, task)
+    text = "\n".join(lines)
+    assert "Deps:   H0, H1" in text
+    assert "Deps:   none" not in text
+
+
+def test_format_task_plan_no_goal_omits_line():
+    task = Task(title="T")
+    lines = _format_task_plan(0, task)
+    text = "\n".join(lines)
+    assert "Goal:" not in text
+
+
+def test_format_task_plan_empty_file_lists_omitted():
+    task = Task(title="T")
+    lines = _format_task_plan(0, task)
+    text = "\n".join(lines)
+    assert "Create:" not in text
+    assert "Modify:" not in text
+    assert "Remove:" not in text
+    assert "Reads:" not in text
+    assert "Skills:" not in text
+    assert "Docs:" not in text
+
+
+def test_format_task_plan_ends_with_empty_line():
+    task = Task(title="T")
+    lines = _format_task_plan(0, task)
+    assert lines[-1] == ""
+
+
+def test_format_task_plan_index_in_title():
+    task = Task(title="T")
+    lines3 = _format_task_plan(3, task)
+    assert lines3[0] == "Task 3: T"
+
+
+# --- plan edge cases ---
+
+
+def test_plan_singular_task_word(tmp_path: Path):
+    p = Promise(metadata=Metadata(base_commit="abc"), tasks=[Task(title="T")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = plan(path)
+    assert "1 task " in output or "1 task\n" in output or output.endswith("1 task")
+    assert "1 tasks" not in output
+
+
+def test_plan_plural_tasks_word(tmp_path: Path):
+    p = Promise(
+        metadata=Metadata(base_commit="abc"),
+        tasks=[Task(title="T1"), Task(title="T2")],
+    )
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = plan(path)
+    assert "2 tasks" in output
+
+
+def test_plan_unknown_base_when_empty(tmp_path: Path):
+    p = Promise(metadata=Metadata(base_commit=""), tasks=[Task(title="T")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = plan(path)
+    assert "unknown" in output
+
+
+def test_plan_no_deps_shows_none(tmp_path: Path):
+    p = Promise(
+        metadata=Metadata(base_commit="abc"),
+        tasks=[Task(title="No deps task")],
+    )
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = plan(path)
+    assert "Deps:   none" in output
+
+
+# --- Tests targeting specific surviving mutants ---
+
+
+def test_check_line_counts_expected_one_is_not_skipped():
+    """expected_lines_added=1 should NOT be skipped (kills <= 0 -> <= 1)."""
+    task = Task(
+        title="T",
+        files_to_create=["f.py"],
+        expected_lines_added=1,
+    )
+    diff = FakeGitDiff(stats={"f.py": (1, 0)})
+    results = _check_line_counts(task, diff, "HEAD")
+    added = next(r for r in results if r.name == "lines_added")
+    assert added.status is not CheckStatus.SKIP
+
+
+def test_check_line_counts_expected_one_removed_is_not_skipped():
+    """expected_lines_removed=1 should NOT be skipped (kills <= 0 -> <= 1)."""
+    task = Task(
+        title="T",
+        files_to_remove=["f.py"],
+        expected_lines_removed=1,
+    )
+    diff = FakeGitDiff(stats={"f.py": (0, 1)})
+    results = _check_line_counts(task, diff, "HEAD")
+    removed = next(r for r in results if r.name == "lines_removed")
+    assert removed.status is not CheckStatus.SKIP
+
+
+def test_check_line_counts_missing_file_adds_zero_not_one():
+    """Default for missing file is (0,0) not (1,0) or (0,1)
+    -- kills default tuple mutations.
+    """
+    task = Task(
+        title="T",
+        files_to_create=["missing.py"],
+        expected_lines_added=1,
+    )
+    # missing.py is NOT in stats, so default (0,0) should be used
+    # with expected=1 and actual=0, within tolerance (abs tolerance 30) -> PASS
+    diff = FakeGitDiff(stats={})
+    results = _check_line_counts(task, diff, "HEAD")
+    added = next(r for r in results if r.name == "lines_added")
+    assert "actual 0" in added.detail
+
+
+def test_check_line_counts_missing_file_removed_zero():
+    """Default for missing file removed count is 0."""
+    task = Task(
+        title="T",
+        files_to_remove=["missing.py"],
+        expected_lines_removed=1,
+    )
+    diff = FakeGitDiff(stats={})
+    results = _check_line_counts(task, diff, "HEAD")
+    removed = next(r for r in results if r.name == "lines_removed")
+    assert "actual 0" in removed.detail
+
+
+def test_check_task_skipped_files_to_create_check_name(tmp_path: Path):
+    """When files_to_create is empty, the SKIPPED check is named
+    exactly 'files_to_create'.
+    """
+    p = Promise(metadata=Metadata(), tasks=[Task(title="T")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    report = check_task(0, diff=FakeGitDiff(), path=path)
+    create_check = report.checks[0]
+    assert create_check.name == "files_to_create"
+    assert create_check.status is CheckStatus.SKIP
+
+
+def test_status_exact_mark_format(tmp_path: Path):
+    """Status output uses exact checkmark and cross brackets."""
+    p = Promise(tasks=[Task(title="Done", completed=True), Task(title="Todo")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = status(path)
+    assert "[\u2713]" in output
+    assert "[\u2717]" in output
+
+
+def test_status_lines_joined_with_newline(tmp_path: Path):
+    """Status output uses plain newline joiner, not a mutated one."""
+    p = Promise(tasks=[Task(title="A"), Task(title="B")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = status(path)
+    assert "XX" not in output
+    lines = output.split("\n")
+    assert len(lines) >= 3
+
+
+def test_plan_lines_joined_with_newline(tmp_path: Path):
+    """Plan output uses plain newline joiner."""
+    p = Promise(metadata=Metadata(base_commit="abc"), tasks=[Task(title="T")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = plan(path)
+    assert "XX" not in output
+
+
+def test_plan_has_blank_line_after_header(tmp_path: Path):
+    """Second line of plan output is blank (empty string)."""
+    p = Promise(metadata=Metadata(base_commit="abc"), tasks=[Task(title="T")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = plan(path)
+    lines = output.split("\n")
+    assert lines[1] == ""
+
+
+def test_plan_exact_unknown_string(tmp_path: Path):
+    """Plan uses exactly 'unknown' for missing base_commit."""
+    p = Promise(metadata=Metadata(base_commit=""), tasks=[Task(title="T")])
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    output = plan(path)
+    assert "(base: unknown)" in output
+
+
+def test_format_task_plan_comma_separator():
+    """Multiple items are joined with ', ' not a mutated separator."""
+    task = Task(title="T", files_to_create=["a.py", "b.py"])
+    lines = _format_task_plan(0, task)
+    text = "\n".join(lines)
+    assert "a.py, b.py" in text
+
+
+def test_format_task_plan_deps_none_exact_indent():
+    """Deps none line has exact format with correct indentation."""
+    task = Task(title="T")
+    lines = _format_task_plan(0, task)
+    assert "  Deps:   none" in lines
+
+
+def test_check_line_count_fail_detail_has_em_dash():
+    """Failed line count detail includes the em-dash separator."""
+    result = _check_line_count("lines_added", 100, 200)
+    assert " \u2014 outside " in result.detail
+
+
+def test_save_promise_created_at_key_name(tmp_path: Path):
+    """created_at is serialized with exact key name 'created_at'."""
+    p = Promise(metadata=Metadata(base_commit="abc", created_at="2025-01-01"))
+    path = tmp_path / "p.toml"
+    save_promise(p, path)
+    content = path.read_text()
+    assert "created_at" in content
+    reloaded = load_promise(path)
+    assert reloaded.metadata.created_at == "2025-01-01"
+
+
+def test_check_line_count_fail_detail_no_xx():
+    """Failed tolerance detail must not have 'XX' padding (kills string mutation)."""
+    result = _check_line_count("lines_added", 100, 200)
+    assert "XX" not in result.detail
 
 
 def test_check_task_default_diff_is_subprocess(tmp_path: Path):

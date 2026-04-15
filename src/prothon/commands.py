@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 
@@ -329,56 +330,25 @@ def promise_cleanup_command(root: Path) -> None:
     console.print("Promise file removed.")
 
 
-def spec_command(
-    root: Path,
-    agent: str | None = None,
-    model: str | None = None,
-    provider: str | None = None,
-) -> int:
-    """Write or revise SPEC.md."""
-    return launch_skill(Skill.SPEC_WRITER, root, agent, model, provider)
+def _make_command(skill: Skill, prereqs: tuple[str, ...] = ()) -> Callable[..., int]:
+    def cmd(
+        root: Path,
+        agent: str | None = None,
+        model: str | None = None,
+        provider: str | None = None,
+    ) -> int:
+        for doc in prereqs:
+            require_doc(root, doc)
+        return launch_skill(skill, root, agent, model, provider)
+
+    cmd.__name__ = skill.name.replace("-", "_") + "_command"
+    return cmd
 
 
-def design_command(
-    root: Path,
-    agent: str | None = None,
-    model: str | None = None,
-    provider: str | None = None,
-) -> int:
-    """Write or revise DESIGN.md."""
-    require_doc(root, "SPEC.md")
-    return launch_skill(Skill.DESIGN_WRITER, root, agent, model, provider)
-
-
-def patterns_command(
-    root: Path,
-    agent: str | None = None,
-    model: str | None = None,
-    provider: str | None = None,
-) -> int:
-    """Write or revise PATTERNS.md."""
-    require_doc(root, "DESIGN.md")
-    return launch_skill(Skill.PATTERNS_WRITER, root, agent, model, provider)
-
-
-def execute_command(
-    root: Path,
-    agent: str | None = None,
-    model: str | None = None,
-    provider: str | None = None,
-) -> int:
-    """Align source code to documentation."""
-    return launch_skill(Skill.EXECUTE, root, agent, model, provider)
-
-
-def refactor_command(
-    root: Path,
-    agent: str | None = None,
-    model: str | None = None,
-    provider: str | None = None,
-) -> int:
-    """Perform documentation-driven full-stack refactoring."""
-    require_doc(root, "SPEC.md")
-    require_doc(root, "DESIGN.md")
-    require_doc(root, "PATTERNS.md")
-    return launch_skill(Skill.REFACTOR, root, agent, model, provider)
+spec_command = _make_command(Skill.SPEC_WRITER)
+design_command = _make_command(Skill.DESIGN_WRITER, ("SPEC.md",))
+patterns_command = _make_command(Skill.PATTERNS_WRITER, ("DESIGN.md",))
+execute_command = _make_command(Skill.EXECUTE)
+refactor_command = _make_command(
+    Skill.REFACTOR, ("SPEC.md", "DESIGN.md", "PATTERNS.md")
+)

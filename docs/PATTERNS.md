@@ -1,6 +1,6 @@
 # Implementation Patterns
 
-> **Progressive disclosure:** Per-module API signatures live in `docs/references/modules.md` and are loaded as needed via `context_files` entries in `change_promise.toml`. This file focuses on patterns, conventions, and rationale — not inline module signatures.
+> **Progressive disclosure:** Per-module API signatures live in `docs/references/modules.md`. Detailed interface contracts (backend protocol, promise schema, config resolution, doc safety) live in `docs/references/contracts.md`. The task lifecycle is in `docs/references/task-lifecycle.md`. Full key decisions and tech rationale are in their respective reference files. All are loaded as needed via `context_files` entries in `change_promise.toml`. This file focuses on patterns, conventions, and rationale.
 
 ## Code Organization
 
@@ -29,43 +29,58 @@ Each module exposes a minimal public API. Internal helpers use the `_` prefix. F
 ## Design Patterns
 
 ### Progressive Disclosure Documentation Pattern
-To maintain context efficiency for AI assistants, all projects follow a three-level documentation hierarchy. **Level 1** (YAML/Metadata) provides high-level discovery and triggering. **Level 2** (Main Markdown files) contains core instructions, rationale, and behavioral logic. **Level 3** (`docs/references/` subdirectory) holds detailed API specifications and complex examples. This ensures assistants only load heavy context when specifically relevant to their current task.
+All documentation follows a three-level hierarchy for context efficiency: Level 1 (YAML frontmatter or metadata headers) for discovery, Level 2 (main markdown files like this one) for core rationale and conventions, Level 3 (`docs/references/` subdirectory) for detailed specifications and examples. Author new content at the lowest level that suffices -- reference Level 3 files from Level 2 with a brief summary rather than duplicating.
 
 ### Tiered Compliance Evidence Pattern
-Compliance verification uses a hybrid strategy: static analysis (AST/Regex) handles structural rules like method signatures, while semantic analysis (LLM subagents) verifies high-level behavioral requirements. Every check produces a report with a tri-state status (`PASS`, `FAIL`, `SKIP`), a `file:line` evidence citation, and a brief rationale.
+When writing compliance or verification code, use a hybrid strategy: deterministic static analysis (AST) for structural rules that can be proven mechanically, and LLM-based semantic analysis for requirements that require judgment. Every check produces a tri-state result (`PASS`, `FAIL`, `SKIP`) with `file:line` evidence. See DESIGN.md -> Compliance Checker for architecture.
 
 ### Pluggable Assistant Backend Pattern
-To support multiple AI assistants (Claude Code, opencode, Gemini CLI) with identical behavior, the system uses a pluggable backend architecture defined by the `AssistantBackend` protocol. Each backend handles its own CLI command construction and skill synchronization.
+When adding a new assistant backend, create a `BackendConfig` record and register it. Each backend satisfies the `AssistantBackend` protocol defined in `assistant.py`:
 
 ```python
 class AssistantBackend(Protocol):
-    @property
-    def name(self) -> str: ...
-    @property
-    def cli_command(self) -> str: ...
-    @property
-    def install_hint(self) -> str: ...
     def build_command(self, skill_name: str, cwd: Path, model: str | None = None) -> list[str]: ...
     def sync_skills(self) -> None: ...
-    def env_overrides(self) -> dict[str, str]: ...
     def subagent_type_map(self) -> dict[str, str]: ...
 ```
+
+See DESIGN.md -> Assistant Abstraction and `docs/references/contracts.md` -> Assistant Backend Contract for the full 7-member protocol and command construction details.
 
 ### Heuristic-based Logic Detection Pattern
 Following the "Test Value Over Test Count" philosophy, the system uses AST heuristics to identify "testable logic" (e.g., non-trivial branching or calculations). This allows automated tools to detect missing tests only for modules that truly require them, avoiding redundant coverage of trivial pass-through code.
 
 ```python
-def _is_trivial_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool: ...
-def _is_testable_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool: ...
+def _has_testable_logic(path: Path) -> bool: ...
 def _is_testable_class(node: ast.ClassDef) -> bool: ...
 ```
 
 ### Session Command Wrapper Pattern
-To ensure consistent error handling across all six CLI session commands (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`), the system uses a centralized wrapper to catch domain-specific errors and present them via `typer.echo(str(exc), err=True)`.
+To ensure consistent error handling across all six CLI session commands (`spec`, `design`, `patterns`, `execute`, `compliance`, `refactor`), the system uses a centralized wrapper to catch domain-specific errors and present them uniformly through the terminal UI.
 
 ```python
 def _run_session_command(cmd: Callable[..., int | None], agent: str | None, model: str | None, provider: str | None) -> None: ...
 ```
+
+### CLI Factory Pattern
+Session and promise subcommands follow identical structures differing only in the target function and error message. A factory generates these wrappers to eliminate boilerplate, using `typer.command()` registration with a shared try/except boundary.
+
+```python
+def _register_session_command(app: typer.Typer, name: str, help_text: str, cmd: Callable[..., int | None]) -> None: ...
+def _register_promise_command(app: typer.Typer, name: str, help_text: str, cmd: Callable[..., None], has_task_index: bool = False) -> None: ...
+```
+
+### Shared Utility Extraction Pattern
+When the same logic appears in three or more modules, extract it to a shared utility. Key shared utilities: `safe_parse_py()` (AST parse with error guard), `xdg_config_home()` (XDG directory resolution), `atomic_write()` (file I/O), `create_agent_symlinks()` (agent link setup), and `check_path_exists()` (compliance check helper).
+
+```python
+def safe_parse_py(path: Path) -> ast.Module | None: ...
+def xdg_config_home() -> Path: ...
+def atomic_write(path: Path, data: bytes) -> None: ...
+def create_agent_symlinks(root: Path, agents_path: Path) -> None: ...
+```
+
+### Skill Token Efficiency Pattern
+Bundled skill files minimize token cost through two strategies: (1) shared operational guards in `skills/_shared/guards.md` referenced by all skills instead of duplicated per-file, and (2) output templates and verbose examples offloaded to `references/` files following the same progressive disclosure pattern the project advocates. Each skill's `SKILL.md` stays focused on instructions, not reference data.
 
 ## Error Handling
 
@@ -84,23 +99,19 @@ def init_project(cwd: Path | None = None) -> None: ...
 File operations that scan large directory trees or load non-essential configuration use a "silently degrade" pattern. By catching `OSError` and returning a safe default (like an empty list or string), the system maintains stability during batch operations.
 
 ```python
-# fs.py utilities
 def file_hash(path: Path) -> str | None: ...
-def safe_parse_py(path: Path) -> tuple[ast.Module, str] | None: ...
-def atomic_write(target: Path, data: bytes) -> None: ...
-def create_agent_symlinks(root: Path, agents_path: Path) -> list[Path]: ...
-def xdg_config_home() -> Path: ...
-
-# checks/utils.py utilities
-def analyze_python_file(path: Path) -> dict[str, Any]: ...
+def collect_module_metrics(root: Path) -> list[ModuleMetrics]: ...
 ```
 
 ### Terminal Failure Pattern
-When a subagent reaches its `max_attempts` for a task without passing verification, it reports a terminal failure. The orchestrator records this state and prompts the user for a decision (skip, retry, or abort), preventing infinite loops.
+When a subagent reaches its `max_attempts` for a task without passing verification, it reports a terminal failure. The Python layer records attempt counts via `record_attempt()`, which raises `MaxAttemptsExceeded` when the limit is reached -- a programmatic backstop independent of skill-prompt compliance. The orchestration skill then prompts the user for intervention (skip, retry, or abort).
 
 ```python
 def record_attempt(task_index: int, path: Path = PROMISE_PATH) -> None: ...
 ```
+
+### Parallel Refactor Execution Pattern
+Because independent tasks can run in parallel, `complete_task()` uses platform-specific exclusive file locking on a sibling `.toml.lock` file to prevent lost updates when concurrent subagents mark tasks complete simultaneously. The lock covers the load -> modify -> save cycle.
 
 ## Testing Patterns
 

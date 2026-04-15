@@ -187,10 +187,20 @@ def check_task(
 
     # SPEC R32: Run pre-commit hooks
     all_files = sorted({*task.files_to_create, *task.files_to_modify})
-    if all_files:
+    if not all_files:
+        report.checks.append(
+            CheckResult(
+                name="pre-commit", status=CheckStatus.SKIP, detail="no files to check"
+            )
+        )
+    else:
         rc, output = run_pre_commit(all_files, cwd=base_path)
+        if rc == 0:
+            detail = "all hooks passed"
+        else:
+            excerpt = output[:500] + ("..." if len(output) > 500 else "")
+            detail = f"some hooks failed: {excerpt}"
         status = CheckStatus.PASS if rc == 0 else CheckStatus.FAIL
-        detail = "all hooks passed" if rc == 0 else "some hooks failed"
         report.checks.append(
             CheckResult(name="pre-commit", status=status, detail=detail)
         )

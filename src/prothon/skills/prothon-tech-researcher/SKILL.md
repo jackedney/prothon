@@ -98,6 +98,8 @@ user-invocable: false
 
 # {Package Name}
 
+> **How to use this skill:** Quick Start gets you going. Common Patterns covers 80% of usage. Consult Gotchas before debugging unexpected behavior. For detailed API specs, see `references/`.
+
 ## Critical
 
 - Before writing implementation, consult `references/` for detailed API specs
@@ -139,6 +141,8 @@ user-invocable: false
 ---
 
 # {Language} Code Style
+
+> **How to use this skill:** Naming Conventions and Formatting Rules are the most frequently needed sections. Consult `references/` for complex layout examples.
 
 ## Critical
 
@@ -183,6 +187,8 @@ user-invocable: false
 
 # {Topic} Optimisation
 
+> **How to use this skill:** Key Principles first for the mental model. Recommended Patterns for concrete implementations. See `references/benchmarks.md` before optimising — measure first.
+
 ## Critical
 
 - Before premature optimisation, consult `references/benchmarks.md`
@@ -225,6 +231,8 @@ user-invocable: false
 ---
 
 # {Topic}
+
+> **How to use this skill:** Core Concepts gives you the vocabulary. Mental Models tells you how to think about the domain. Check Edge Cases before implementing boundary logic. See `references/glossary.md` for terminology.
 
 ## Critical
 

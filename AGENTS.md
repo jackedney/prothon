@@ -1,8 +1,6 @@
 # prothon
 
-## Documentation Hierarchy
-
-This project uses a three-level documentation hierarchy. Documents are listed in order of authority — higher documents override lower ones when in conflict.
+## Quick Reference
 
 | Level | Document | Contains | Authority |
 |-------|----------|----------|-----------|
@@ -10,12 +8,15 @@ This project uses a three-level documentation hierarchy. Documents are listed in
 | 2 | `docs/DESIGN.md` | Architecture, packages, interfaces | Medium |
 | 3 | `docs/PATTERNS.md` | Code patterns, conventions, testing | Lowest |
 
-**Rules:**
-- SPEC.md must exist before DESIGN.md can be written
-- DESIGN.md must exist before PATTERNS.md can be written
-- When documents conflict, the higher-level document wins and lower documents must be amended
+**For code-only changes with no doc impact:** skip straight to implementation, then verify compliance (step 6 below).
 
-## Mandatory Development Workflow
+**For changes that affect docs:** identify the highest affected level, then update docs top-down before implementing (see Workflow Details below).
+
+Run `uv run poe check` before committing.
+
+---
+
+## Workflow Details
 
 All code changes — features, bug fixes, refactors — MUST follow this workflow:
 

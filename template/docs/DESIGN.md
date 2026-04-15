@@ -2,7 +2,14 @@
 
 <!-- Requires: docs/SPEC.md must be populated first -->
 
+<!-- WRITING GUIDANCE: Start each major section with a one-line summary so agents
+     can decide whether to read the full section. Keep sections self-contained —
+     an agent working on one component shouldn't need to read sections about
+     unrelated components. Use the Architecture section as a map that points
+     agents to the right section for their task. -->
+
 ## Architecture
+<!-- Start with a one-line summary of the overall architecture style -->
 <!-- High-level system structure. Components and how they connect. -->
 <!-- Reference which SPEC requirements drive these architectural choices. -->
 

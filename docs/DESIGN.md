@@ -2,6 +2,8 @@
 
 ## Architecture
 
+> Flat module layout with two subpackages. Covers: module structure, refactor waves, assistant abstraction, and compliance checking.
+
 ### Module Structure
 
 Mostly flat module layout under `src/prothon/`, with two subpackages (`checks/` and `refactor/`) grouping related functionality. CLI definitions and logic are distributed across dedicated modules for commands, UI, and configuration.
@@ -51,6 +53,8 @@ template/               # Bundled Copier project template (Jinja2), at project r
 
 ### Refactor Wave Logic (R38-42)
 
+> Three-layer wavefront (DESIGN -> PATTERNS -> CODE) with programmatic evidence gathering. Only relevant if working on refactor functionality.
+
 The Refactor Workflow is a specialized orchestrator that follows a three-layer wavefront: **DESIGN -> PATTERNS -> CODE**. Architectural shifts must be documented before code is modified.
 
 - **Wave 0 (Documentation Quality):** Evaluates if `DESIGN.md` and `PATTERNS.md` are still optimal. Uses programmatic evidence (module metrics, pattern usage, similarity detection) to fuel LLM-driven analysis. Findings in `design_quality` and `pattern_quality` categories produce documentation updates.
@@ -58,6 +62,8 @@ The Refactor Workflow is a specialized orchestrator that follows a three-layer w
 - **Execution:** Orchestrates implementation tasks using self-correcting subagent loops. Every task references the specific documentation heading or requirement it aligns with (R42).
 
 ### Assistant Abstraction (R56-61)
+
+> Pluggable backend system for Claude Code, opencode, and Gemini CLI. Only relevant if working on assistant integration.
 
 A pluggable backend system enables identical behavior across supported AI assistants. A shared `launch()` lifecycle handles binary detection, skill syncing, and subprocess execution.
 
@@ -67,12 +73,16 @@ AI coding CLIs fall into two structural categories:
 
 ### Compliance Checker (R34-37)
 
+> Hybrid AST + LLM evidence strategy producing tri-state reports. Only relevant if working on compliance verification.
+
 The compliance checker uses a **Hybrid Evidence Strategy** to verify that code matches documentation:
 - **Static Analysis (AST):** Deterministic checks for structural rules, such as the "signature-only" constraint in `PATTERNS.md` (R25-R26). Uses `ast.parse` to ensure no implementation logic exists in code blocks.
 - **Semantic Analysis (LLM):** Targeted subagents verify high-level requirements that cannot be proven through static analysis.
 - **Evidence Mapping:** Produces a `CheckResult` with a tri-state status (PASS, FAIL, SKIP) and `file:line` evidence.
 
 ## Technology Choices
+
+> Six core dependencies. Consult this table when adding or changing a dependency.
 
 | Package | Purpose | Serves Requirement | Alternatives Considered |
 |---------|---------|-------------------|------------------------|
@@ -84,6 +94,8 @@ The compliance checker uses a **Hybrid Evidence Strategy** to verify that code m
 | jinja2 (>=3.1) | Template rendering for adoption scaffolds | R13-R16: project adoption | string.Template |
 
 ## Interfaces
+
+> Protocol definitions and data contracts. Read the subsection relevant to the component you're modifying.
 
 ### Assistant Backend Contract (R57, R61)
 
@@ -123,6 +135,8 @@ The tech-researcher generates skills using a **Progressive Disclosure** structur
 `prothon init` intelligently pre-populates the documentation hierarchy. It uses the `ASTPatternMiner` to extract signature-only conventions (R25-R26) from existing code, placing them in `docs/references/modules.md` (Level 3) which is linked from the `PATTERNS.md` scaffold (Level 2).
 
 ## Key Decisions
+
+> Architectural trade-offs and their rationale. Reference when proposing changes that might conflict with prior decisions.
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|

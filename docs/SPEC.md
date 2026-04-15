@@ -1,5 +1,7 @@
 # Project Specification
 
+> **Navigation:** Requirements are grouped by subsystem. If you're working on a specific area, focus on the relevant group: Scaffolding (R1-R9), Adoption (R10-R17), Doc Hierarchy (R18-R26), Execution (R27-R33), Compliance (R34-R37), Refactor (R38-R42), Tech Research (R43-R46), Versioning (R47-R55), CLI/Agent Integration (R56-R61).
+
 ## Purpose
 
 Prothon is a CLI tool that scaffolds opinionated Python projects and provides a structured documentation-driven workflow for keeping AI coding assistants aligned with project intent across sessions. It solves two problems: repetitive project setup (by generating a ready-to-use project with a fixed dev toolchain and pre-commit hooks), and AI drift (by establishing a three-level documentation hierarchy that serves as a durable source of truth for AI agents, with automated verification that code matches documented intent). For existing Python projects, prothon can overlay just the documentation-driven workflow without touching the project's existing code, configuration, or toolchain.
